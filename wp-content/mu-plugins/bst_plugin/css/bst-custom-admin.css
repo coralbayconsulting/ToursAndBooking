@@ -1,0 +1,1646 @@
+/* BST Plugin Admin Styles - Updated for cache busting - Tour Dates Layout Optimization */
+/* Ensure the table layout is fixed */
+.acf-repeater .acf-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+/* Tour Dates Meta Box Styles */
+#tour-dates-container {
+    margin-top: 20px;
+    overflow-x: auto; /* Enable horizontal scrolling if needed */
+}
+
+#tour-dates-container table {
+    width: 100% !important;
+    max-width: none !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important; /* Ensure the table layout is fixed */
+    min-width: 800px !important; /* Adjusted to match our optimized column widths */
+}
+
+#tour-dates-container th,
+#tour-dates-container td {
+    padding: 6px 4px !important;
+    border: 1px solid #ddd !important;
+    text-align: left !important;
+    vertical-align: middle !important;
+    white-space: nowrap !important; /* Prevent text wrapping */
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-size: 11px !important; /* Slightly smaller font for better fit */
+}
+
+#tour-dates-container th {
+    background-color: #f4f4f4 !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    line-height: 1.3 !important;
+}
+
+/* Column-specific widths - optimized to prevent wrapping */
+#tour-dates-container th.id-column,
+#tour-dates-container td.id-column {
+    width: 50px !important;
+    min-width: 50px !important;
+    text-align: center !important;
+}
+
+#tour-dates-container th.date-column,
+#tour-dates-container td.date-column {
+    width: 85px !important;
+    min-width: 85px !important;
+    font-size: 10px !important;
+}
+
+#tour-dates-container th.max-slots-column,
+#tour-dates-container td.max-slots-column {
+    width: 45px !important;
+    min-width: 45px !important;
+    text-align: center !important;
+}
+
+#tour-dates-container th.sold-slots-column,
+#tour-dates-container td.sold-slots-column {
+    width: 45px !important;
+    min-width: 45px !important;
+    text-align: center !important;
+}
+
+#tour-dates-container th.offline-sold-slots-column,
+#tour-dates-container td.offline-sold-slots-column {
+    width: 55px !important;
+    min-width: 55px !important;
+    text-align: center !important;
+}
+
+#tour-dates-container th.reserved-slots-column,
+#tour-dates-container td.reserved-slots-column {
+    width: 65px !important;
+    min-width: 65px !important;
+    text-align: center !important;
+}
+
+#tour-dates-container th.available-slots-column,
+#tour-dates-container td.available-slots-column {
+    width: 65px !important;
+    min-width: 65px !important;
+    text-align: center !important;
+}
+
+#tour-dates-container th.status-column,
+#tour-dates-container td.status-column {
+    width: 70px !important;
+    min-width: 70px !important;
+    text-align: center !important;
+}
+
+#tour-dates-container th.ext-column,
+#tour-dates-container td.ext-column {
+    width: 40px !important;
+    min-width: 40px !important;
+    text-align: center !important;
+}
+
+#tour-dates-container th.actions-column,
+#tour-dates-container td.actions-column {
+    width: 110px !important;
+    min-width: 110px !important;
+    text-align: center !important;
+}
+
+.tour-date-item input[type="date"] {
+    width: 80px;
+    font-size: 10px;
+    padding: 2px;
+}
+
+.tour-date-item input.small-input {
+    width: 40px;
+    text-align: center;
+    font-size: 11px;
+    padding: 2px;
+}
+
+.tour-date-item select {
+    width: 100%; /* Ensure the dropdown fits within the column */
+    font-size: 11px;
+    padding: 2px;
+}
+
+.tour-date-item button {
+    padding: 2px 6px;
+    font-size: 10px;
+    margin: 1px;
+}
+
+/* Actions column button styling */
+#tour-dates-container td.actions-column .button {
+    margin: 1px;
+    padding: 2px 6px;
+    font-size: 10px;
+    line-height: 1.2;
+    min-height: auto;
+}
+
+#tour-dates-container td.actions-column .button.button-small {
+    padding: 1px 4px;
+    font-size: 9px;
+}
+
+/* Ensure buttons stack vertically in narrow columns if needed */
+#tour-dates-container td.actions-column {
+    white-space: nowrap;
+}
+
+#add-tour-date {
+    margin-top: 10px;
+}
+
+/* General wp-list-table layout */
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped {
+    table-layout: auto !important;
+    width: 100% !important;
+}
+
+.wp-list-table.widefat.fixed.striped {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.wp-list-table.widefat.fixed.striped th,
+.wp-list-table.widefat.fixed.striped td {
+    padding: 8px;
+    text-align: left;
+}
+
+/* Tour Bookings List Table - Use specific page context to avoid conflicts */
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.id-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.id-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.booking-id-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.booking-id-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.finalization-id-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.finalization-id-column {
+    width: 40px !important;
+    max-width: 40px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.booking-date-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.booking-date-column {
+    width: 85px !important;
+    max-width: 85px;
+    white-space: nowrap;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.name-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.name-column {
+    width: 180px !important;
+    max-width: 180px;
+    white-space: nowrap;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.tour-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.tour-column {
+    width: auto !important;
+    min-width: 200px;
+    white-space: nowrap;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.tour-price-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.tour-price-column {
+    width: 50px !important;
+    max-width: 50px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.coupon-amount-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.coupon-amount-column {
+    width: 65px !important;
+    max-width: 65px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.price-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.price-column {
+    width: 75px !important;
+    max-width: 75px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.additional-charge-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.additional-charge-column {
+    width: 45px !important;
+    max-width: 45px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.total-paid-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.total-paid-column {
+    width: 65px !important;
+    max-width: 65px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.balance-due-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.balance-due-column {
+    width: 75px !important;
+    max-width: 75px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.currency-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.currency-column {
+    width: 35px !important;
+    max-width: 35px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.status-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.status-column {
+    width: 70px !important;
+    max-width: 70px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped th.actions-column,
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped td.actions-column {
+    width: 50px !important;
+    max-width: 50px;
+    white-space: nowrap;
+    text-align: center;
+    vertical-align: middle;
+    padding: 1px 2px;
+}
+
+/* Customer List Table Custom Widths - Responsive percentage-based layout with combined name field */
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped th.id-column,
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped td.id-column {
+    width: 4% !important;
+    min-width: 35px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped th.name-column,
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped td.name-column {
+    width: 20% !important;
+    min-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped th.email-column,
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped td.email-column {
+    width: 30% !important;
+    min-width: 180px;
+    word-break: break-all;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped th.phone-column,
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped td.phone-column {
+    width: 15% !important;
+    min-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped th.source-column,
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped td.source-column {
+    width: 16% !important;
+    min-width: 120px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped th.credit-column,
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped td.credit-column {
+    width: 5% !important;
+    min-width: 50px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
+
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped th.actions-column,
+body.admin_page_bst-customers .wrap .wp-list-table.widefat.fixed.striped td.actions-column {
+    width: 10% !important;
+    min-width: 80px;
+    white-space: nowrap;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Header styling now uses WordPress default .wp-heading-inline class for consistency */
+
+/* Sortable column headers */
+.wp-list-table.widefat.fixed.striped th a {
+    color: inherit;
+    text-decoration: none;
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 8px;
+    margin: -8px;
+    cursor: pointer;
+    position: relative;
+}
+
+.wp-list-table.widefat.fixed.striped th a:hover {
+    color: #0073aa;
+    background-color: rgba(0, 115, 170, 0.1);
+}
+
+.wp-list-table.widefat.fixed.striped th a:focus {
+    outline: 1px solid #0073aa;
+}
+
+/* Add a subtle visual hint that headers are sortable */
+.wp-list-table.widefat.fixed.striped th a:after {
+    content: "⇅";
+    opacity: 0.3;
+    font-size: 10px;
+    position: absolute;
+    right: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.wp-list-table.widefat.fixed.striped th a:hover:after {
+    opacity: 0.7;
+}
+
+/* Tour Bookings View button styling with page-specific context */
+body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped .view-booking {
+    font-size: 11px !important;
+    padding: 3px 6px !important;
+    line-height: 1.3 !important;
+    height: auto !important;
+    min-height: 0 !important;
+}
+
+/* Operations Table Styles */
+.bst-operations-table {
+    margin-top: 2em;
+    max-width: none !important;
+    width: 100%;
+    table-layout: fixed;
+    min-width: 1000px;
+}
+
+.bst-operations-table th {
+    width: 20%;
+    padding: 10px;
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 2px solid #ccc;
+    min-width: 200px;
+}
+
+.bst-operations-row {
+    padding: 15px 10px;
+    vertical-align: top;
+    width: 20%;
+    min-width: 200px;
+}
+
+.bst-operations-row-border {
+    border-bottom: 2px solid #ccc !important;
+}
+
+/* Button Styles for Operations */
+.bst-import-button {
+    background: #00a32a !important;
+    border-color: #00a32a !important;
+    color: white !important;
+    width: 100%;
+    min-width: 160px;
+    max-width: 220px;
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.3;
+    margin: 3px 0;
+    white-space: normal;
+    word-wrap: break-word;
+    text-align: center;
+    border-radius: 3px;
+}
+
+.bst-export-button {
+    background: #00a32a !important;
+    border-color: #00a32a !important;
+    color: white !important;
+    width: 100%;
+    min-width: 160px;
+    max-width: 220px;
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.3;
+    margin: 3px 0;
+    white-space: normal;
+    word-wrap: break-word;
+    text-align: center;
+    border-radius: 3px;
+}
+
+.bst-process-button,
+.bst-sync-button {
+    background: #007cba !important;
+    border-color: #007cba !important;
+    color: white !important;
+    width: 100%;
+    min-width: 160px;
+    max-width: 220px;
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.3;
+    margin: 3px 0;
+    white-space: normal;
+    word-wrap: break-word;
+    text-align: center;
+    border-radius: 3px;
+}
+
+.bst-delete-button {
+    background: #d63638 !important;
+    border-color: #d63638 !important;
+    color: white !important;
+    width: 100%;
+    min-width: 160px;
+    max-width: 220px;
+    padding: 8px 12px;
+    font-size: 13px;
+    line-height: 1.3;
+    margin: 3px 0;
+    white-space: normal;
+    word-wrap: break-word;
+    text-align: center;
+    border-radius: 3px;
+}
+
+.bst-file-input {
+    margin: 3px 0 6px 0;
+    width: 100%;
+    min-width: 160px;
+    max-width: 220px;
+    font-size: 12px;
+    padding: 6px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+.bst-form-margin {
+    margin-bottom: 8px;
+}
+
+/* Readonly Field Styles for Tour Date Fields */
+.readonly-field input[readonly] {
+    background-color: #f9f9f9 !important;
+    color: #666 !important;
+    cursor: not-allowed !important;
+    border-color: #ddd !important;
+}
+
+.readonly-field input[readonly]:focus {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* Style the instructions for readonly fields */
+.readonly-field .acf-field-message {
+    background: #e7f3ff;
+    border-left: 4px solid #0073aa;
+    padding: 8px 12px;
+    margin: 5px 0;
+    font-style: italic;
+    font-size: 12px;
+    color: #0073aa;
+}
+
+/* Make readonly fields more visually distinct */
+.acf-field[data-name="sold_slots"] .acf-input,
+.acf-field[data-name="reserved_slots"] .acf-input,
+.acf-field[data-name="available_slots"] .acf-input {
+    position: relative;
+}
+
+.acf-field[data-name="sold_slots"] input[readonly],
+.acf-field[data-name="reserved_slots"] input[readonly],
+.acf-field[data-name="available_slots"] input[readonly] {
+    background: linear-gradient(135deg, #f9f9f9 0%, #f1f1f1 100%) !important;
+    border: 1px solid #ddd !important;
+    font-weight: 500;
+}
+
+.acf-field[data-name="sold_slots"] input[readonly]:before,
+.acf-field[data-name="reserved_slots"] input[readonly]:before,
+.acf-field[data-name="available_slots"] input[readonly]:before {
+    content: "🔒";
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    opacity: 0.5;
+}
+
+/* Tour dates list readonly field styling */
+#tour-dates-container .tour-date-item input[readonly] {
+    background: linear-gradient(135deg, #f9f9f9 0%, #f1f1f1 100%) !important;
+    border: 1px solid #ddd !important;
+    font-weight: 500;
+    color: #555 !important;
+}
+
+#tour-dates-container .sold-slots-column input[readonly],
+#tour-dates-container .reserved-slots-column input[readonly],
+#tour-dates-container .available-slots-column input[readonly] {
+    text-align: center;
+    cursor: not-allowed;
+}
+
+/* Mobile Responsiveness for Tour Dates Table */
+@media screen and (max-width: 782px) {
+    /* Hide the table and show card layout instead */
+    #tour-dates-container table {
+        display: none;
+    }
+    
+    /* Create card-based layout for mobile */
+    #tour-dates-container .mobile-cards {
+        display: block;
+    }
+    
+    .tour-date-card {
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        padding: 15px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .tour-date-card-header {
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #eee;
+        text-align: center;
+    }
+    
+    .tour-date-card-header .card-title {
+        background: #2271b1;
+        color: white;
+        padding: 6px 16px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: 600;
+        display: inline-block;
+    }
+    
+    .tour-date-card-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        padding: 4px 0;
+    }
+    
+    .tour-date-card-row:last-child {
+        margin-bottom: 0;
+    }
+    
+    .tour-date-card-label {
+        font-weight: 600;
+        color: #1d2327;
+        font-size: 12px;
+        min-width: 80px;
+    }
+    
+    .tour-date-card-value {
+        flex: 1;
+        text-align: right;
+    }
+    
+    .tour-date-card-value input {
+        width: 100%;
+        max-width: 120px;
+        font-size: 12px;
+    }
+    
+    .tour-date-card-value input[type="date"] {
+        max-width: 130px;
+    }
+    
+    .tour-date-card-value input.small-input {
+        max-width: 60px;
+        text-align: center;
+    }
+    
+    .tour-date-card-value select {
+        width: 100%;
+        max-width: 120px;
+        font-size: 12px;
+    }
+    
+    .tour-date-card-actions {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #eee;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    
+    .tour-date-card-actions .button {
+        flex: 1;
+        min-width: 80px;
+        font-size: 11px;
+        padding: 6px 12px;
+        text-align: center;
+    }
+    
+    /* Status indicator */
+    .tour-date-card-status {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .tour-date-card-status.publish {
+        background: #00a32a;
+        color: white;
+    }
+    
+    .tour-date-card-status.draft {
+        background: #dba617;
+        color: white;
+    }
+    
+    .tour-date-card-status.private {
+        background: #d63638;
+        color: white;
+    }
+}
+
+/* Hide mobile cards on desktop */
+@media screen and (min-width: 783px) {
+    #tour-dates-container .mobile-cards {
+        display: none;
+    }
+}
+
+/* Tour Date post type admin list table - optimized column widths */
+.post-type-tour-date .wp-list-table {
+    table-layout: fixed;
+}
+
+.post-type-tour-date .wp-list-table .column-cb {
+    width: 2.2em !important;
+}
+
+.post-type-tour-date .wp-list-table .column-tour {
+    width: 30% !important;
+    min-width: 200px;
+}
+
+.post-type-tour-date .wp-list-table .column-start_date,
+.post-type-tour-date .wp-list-table .column-end_date {
+    width: 85px !important;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.post-type-tour-date .wp-list-table .column-id {
+    width: 50px !important;
+    text-align: center;
+}
+
+.post-type-tour-date .wp-list-table .column-max_slots,
+.post-type-tour-date .wp-list-table .column-sold_slots {
+    width: 55px !important;
+    text-align: center;
+}
+
+.post-type-tour-date .wp-list-table .column-offline_sold_slots {
+    width: 60px !important;
+    text-align: center;
+}
+
+.post-type-tour-date .wp-list-table .column-reserved_slots,
+.post-type-tour-date .wp-list-table .column-available_slots {
+    width: 70px !important;
+    text-align: center;
+}
+
+.post-type-tour-date .wp-list-table .column-actions {
+    width: 90px !important;
+    text-align: center;
+}
+
+/* Ensure text doesn't wrap in columns */
+.post-type-tour-date .wp-list-table td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Allow tour column to wrap if needed */
+.post-type-tour-date .wp-list-table .column-tour {
+    white-space: normal;
+}
+
+/* Style the View button to match tour bookings */
+.post-type-tour-date .wp-list-table .column-actions .view-booking {
+    font-size: 11px !important;
+    padding: 3px 6px !important;
+    line-height: 1.3 !important;
+    height: auto !important;
+    min-height: 0 !important;
+}
+
+/* ==========================================================================
+   Tools page (admin only) – shared with main admin CSS for reuse
+   ========================================================================== */
+
+.bst-tools-section {
+    background: #fff;
+    padding: 20px;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.bst-tools-section h2 {
+    margin-top: 30px;
+}
+
+.bst-tools-section h2:first-child {
+    margin-top: 0;
+}
+
+.bst-tools-cron-table {
+    margin-top: 10px;
+}
+
+.bst-tools-cron-table .cron-actions-cell {
+    white-space: nowrap;
+    min-width: 160px;
+}
+
+.bst-tools-cron-table .cron-actions-cell select {
+    width: 60px !important;
+    margin-right: 2px;
+    font-size: 11px !important;
+}
+
+.bst-tools-cron-table .cron-actions-cell .button-small {
+    padding: 2px 4px !important;
+    font-size: 10px !important;
+}
+
+.bst-tools-cron-table .description-col {
+    white-space: normal !important;
+    word-wrap: break-word;
+}
+
+.bst-tools-cron-table th.col-hook { width: 25%; }
+.bst-tools-cron-table th.col-description { width: 18%; }
+.bst-tools-cron-table th.col-next { width: 15%; }
+.bst-tools-cron-table th.col-frequency { width: 12%; }
+.bst-tools-cron-table th.col-status { width: 10%; }
+.bst-tools-cron-table th.col-actions { width: 20%; }
+
+.bst-tools-cron-table .cron-form-inline {
+    display: inline-block;
+    margin-right: 5px;
+}
+
+.bst-cron-status-overdue { color: #d63638; }
+.bst-cron-status-onetime { color: #dba617; }
+.bst-cron-status-ok { color: #00a32a; }
+
+.bst-tools-error-log-box {
+    background: #ffffff;
+    border: 1px solid #c3c4c7;
+    padding: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+}
+
+.bst-tools-error-log-actions {
+    margin-top: 15px;
+}
+
+.bst-tools-error-log-actions form {
+    display: inline-block;
+}
+
+.bst-tools-error-log-actions .button.refresh {
+    margin-left: 0;
+}
+
+.bst-tools-postbox {
+    margin-top: 20px;
+}
+
+.bst-tools-postbox .hndle {
+    padding: 10px;
+}
+
+.bst-tools-postbox .inside {
+    padding: 15px;
+}
+
+.bst-tools-id-encode-input {
+    width: 200px;
+}
+
+.bst-tools-id-encode-result {
+    width: 200px;
+    background: #f1f1f1;
+}
+
+.bst-tools-copy-message {
+    color: #00a32a;
+    margin-left: 10px;
+}
+
+.bst-tools-commission-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.bst-tools-error-log-actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.bst-tools-postbox .hndle {
+    padding: 12px 16px;
+}
+
+.bst-tools-commission-form-row label {
+    margin: 0;
+}
+
+.bst-tools-commission-year {
+    min-width: 80px;
+}
+
+.bst-tools-commission-form-mb {
+    margin-bottom: 15px;
+}
+
+.bst-tools-hr {
+    margin: 20px 0;
+}
+
+.bst-tools-mb-10 {
+    margin-bottom: 10px;
+}
+
+/* ==========================================================================
+   Customer list & form – shared admin layout
+   ========================================================================== */
+
+.cbc-filter-controls {
+    margin: 10px 0;
+    padding: 8px 0;
+    display: flex;
+    align-items: center;
+}
+
+.cbc-filter-form {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.cbc-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cbc-filter-label {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.cbc-filter-input {
+    width: 300px;
+    padding: 6px 10px;
+}
+
+.cbc-filter-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cbc-filter-right-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cbc-filter-export {
+    /* subtle emphasis without overriding WP button styles too heavily */
+    font-weight: 500;
+}
+
+.cbc-filter-summary {
+    margin: 10px 0;
+    padding: 8px 12px;
+    background: #e7f3ff;
+    border-left: 4px solid #0073aa;
+    color: #333;
+}
+
+.cbc-customer-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.cbc-customer-table .id-column {
+    width: 4%;
+    min-width: 40px;
+    text-align: center;
+}
+
+.cbc-customer-table .name-column {
+    width: 26%;
+    min-width: 210px;
+}
+
+.cbc-customer-table .email-column {
+    width: 28%;
+    min-width: 210px;
+    word-break: break-word;
+}
+
+.cbc-customer-table .phone-column {
+    width: 14%;
+    min-width: 120px;
+}
+
+.cbc-customer-table .source-column {
+    width: 16%;
+    min-width: 130px;
+}
+
+.cbc-customer-table .credit-column {
+    width: 6%;
+    min-width: 60px;
+    text-align: center;
+}
+
+.cbc-customer-table .actions-column {
+    width: 8%;
+    min-width: 70px;
+    text-align: center;
+}
+
+/* ==========================================================================
+   Tour booking edit – tiles, edit forms, date inputs, link tiles
+   (moved from inline <style> in tour-bookings-edit.php)
+   ========================================================================== */
+.tile-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ddd;
+    min-height: 30px;
+}
+
+.tile-title {
+    margin: 0;
+    padding: 0;
+    color: #0073aa;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    height: 24px;
+}
+
+.tile-actions {
+    display: flex;
+    gap: 5px;
+    margin-left: 10px;
+    align-items: center;
+}
+
+.tile-edit-btn,
+.tile-save-btn,
+.tile-cancel-btn {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 4px 6px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #666;
+    transition: all 0.2s;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+}
+
+.tile-edit-btn:hover {
+    background: #f0f0f0;
+    color: #0073aa;
+    border-color: #0073aa;
+}
+
+.tile-save-btn {
+    color: #00a32a;
+    border-color: #00a32a;
+}
+
+.tile-save-btn:hover {
+    background: #00a32a;
+    color: #ffffff;
+}
+
+.tile-cancel-btn {
+    color: #d63638;
+    border-color: #d63638;
+}
+
+.tile-cancel-btn:hover {
+    background: #d63638;
+    color: #ffffff;
+}
+
+.tile-editing {
+    background: #fff9e6 !important;
+    border-color: #ffa500 !important;
+}
+
+.tile-edit-form {
+    display: none;
+    margin-top: 15px;
+}
+
+.tile-view-content {
+    display: block;
+}
+
+.tile-editing .tile-edit-form {
+    display: block;
+}
+
+.tile-editing .tile-view-content {
+    display: none;
+}
+
+.edit-form-section {
+    margin-bottom: 20px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 15px;
+}
+
+.edit-form-section:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.edit-form-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #333;
+    font-weight: 600;
+}
+
+.edit-form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 12px;
+}
+
+.edit-form-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.edit-form-field.full-width {
+    grid-column: 1 / -1;
+}
+
+.edit-form-field label {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 4px;
+    color: #333;
+}
+
+.edit-form-field input,
+.edit-form-field select,
+.edit-form-field textarea {
+    padding: 6px 8px;
+    font-size: 13px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    font-family: inherit;
+}
+
+.edit-form-field textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+@media (max-width: 768px) {
+    .edit-form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .tile-header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: nowrap;
+    }
+
+    .tile-title {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .tile-actions {
+        margin-left: 8px;
+        flex-shrink: 0;
+    }
+
+    .tile-edit-btn,
+    .tile-save-btn,
+    .tile-cancel-btn {
+        font-size: 12px;
+        padding: 6px 10px;
+        height: 28px;
+        min-width: 45px;
+    }
+
+    .payment-invoice-col {
+        display: none;
+    }
+}
+
+.date-picker-input,
+input[type="date"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 100% !important;
+    height: 26px !important;
+    padding: 2px 8px !important;
+    border: 1px solid #ccd0d4 !important;
+    border-radius: 4px !important;
+    font-size: 13px !important;
+    background-color: #fff !important;
+    position: relative;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+    background: transparent;
+    bottom: 0;
+    color: transparent;
+    cursor: pointer;
+    height: auto;
+    left: 0;
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: auto;
+    opacity: 1;
+}
+
+input[type="date"]::-webkit-inner-spin-button {
+    display: none;
+}
+
+input[type="date"]::-webkit-clear-button {
+    display: none;
+}
+
+.edit-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+@media (max-width: 768px) {
+    .edit-form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.view-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 12px;
+}
+
+.view-item {
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.view-item strong {
+    display: inline-block;
+    width: 130px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.links-tile .view-item strong {
+    width: 160px;
+}
+
+.links-tile .view-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.links-tile .link-url {
+    flex: 1;
+    word-break: break-all;
+    font-size: 12px;
+    color: #0073aa;
+    text-decoration: none;
+}
+
+.links-tile .link-url:hover {
+    text-decoration: underline;
+    color: #005a87;
+}
+
+.links-tile .copy-button {
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    border-radius: 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #424242;
+    transition: all 0.15s;
+    width: 24px;
+    height: 24px;
+}
+
+.links-tile .copy-button:hover {
+    background: #e8e8e8;
+    color: #000;
+}
+
+.links-tile .copy-button.copied {
+    background: transparent;
+    color: #107c10;
+}
+
+.links-tile .copy-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.links-tile .copy-text {
+    display: none;
+}
+
+/* Customer form layout (moved from inline <style> in customer-form.php) */
+.form-section {
+    background: #fff;
+    border: 1px solid #ddd;
+    margin: 10px 0 20px 0;
+    padding: 20px;
+    border-radius: 5px;
+}
+.form-section h3 {
+    margin: 0 0 15px 0;
+    padding: 0 0 10px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 18px;
+    color: #333;
+}
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+@media (max-width: 782px) {
+    .form-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px;
+    }
+    
+    .form-section {
+        margin: 10px 0;
+        padding: 15px;
+    }
+    
+    .form-row input,
+    .form-row textarea,
+    .form-row select {
+        padding: 12px 10px;
+        font-size: 16px;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    .form-actions {
+        padding: 15px;
+        text-align: center;
+    }
+    
+    .form-actions .button {
+        width: auto;
+        margin: 5px 5px 5px 0;
+        padding: 8px 16px;
+        font-size: 14px;
+        display: inline-block;
+    }
+    
+    .record-indicator {
+        font-size: 13px !important;
+        text-align: center;
+        margin: 5px 0 !important;
+        display: block !important;
+        color: #666 !important;
+    }
+    
+    .wrap h1 {
+        font-size: 24px !important;
+        margin-bottom: 15px !important;
+    }
+    
+    .wrap {
+        margin: 10px 10px 0 10px !important;
+        max-width: calc(100vw - 20px);
+    }
+}
+.form-row {
+    display: flex;
+    flex-direction: column;
+}
+.form-row label {
+    font-weight: 600;
+    margin-bottom: 3px;
+    color: #333;
+    font-size: 13px;
+}
+.form-row input,
+.form-row textarea,
+.form-row select {
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background: #fff;
+}
+.form-row input:focus,
+.form-row textarea:focus,
+.form-row select:focus {
+    border-color: #007cba;
+    box-shadow: 0 0 0 1px #007cba;
+    outline: none;
+}
+.required {
+    color: #d63638;
+}
+.form-actions {
+    margin-top: 20px;
+    padding: 20px;
+    background: #f9f9f9;
+    border-top: 1px solid #ddd;
+    text-align: left;
+}
+.form-actions .button {
+    margin-right: 10px;
+}
+.form-section:last-child {
+    margin-bottom: 10px;
+}
+
+/* ==========================================================================
+   Booking creation form (moved from inline <style> in tour-bookings-new.php)
+   ========================================================================== */
+.creation-section h3 {
+    color: #23282d;
+    font-size: 16px;
+}
+
+.creation-section input[required] {
+    border-color: #007cba;
+}
+
+#create-booking-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.creation-section .error {
+    border-color: #dc3232 !important;
+    box-shadow: 0 0 2px rgba(220, 50, 50, 0.3);
+}
+
+.error-message {
+    color: #dc3232;
+    font-size: 12px;
+    margin-top: 5px;
+    display: block;
+}
+
+/* Mobile responsiveness for deposit section */
+@media (max-width: 768px) {
+    .creation-section div[style*="grid-template-columns: 100px 130px 1fr"] {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+    }
+    
+    .creation-section div[style*="grid-template-columns: 1fr 1fr"] {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 15px !important;
+    }
+}
+
+/* ==========================================================================
+   Tour bookings list – header, filters, quick actions
+   ========================================================================== */
+.cbc-bookings-header-bar {
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.cbc-bookings-header-tabs {
+    margin-bottom: 0;
+}
+
+.cbc-bookings-header-export {
+    flex-shrink: 0;
+}
+
+.cbc-bookings-filters-wrapper {
+    margin-bottom: 16px;
+}
+
+.cbc-bookings-filters-row,
+.cbc-bookings-search-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.cbc-bookings-filter-group {
+    display: flex;
+    align-items: center;
+}
+
+.cbc-bookings-filter-label {
+    margin-right: 8px;
+}
+
+.cbc-bookings-search-input {
+    width: 300px;
+    padding: 6px 10px;
+}
+
+.cbc-bookings-search-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cbc-bookings-quick-actions {
+    margin-bottom: 16px;
+}
+
+.cbc-bookings-quick-actions-inner {
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 4px;
+    border-left: 4px solid #007cba;
+}
+
+.cbc-bookings-quick-actions-title {
+    margin: 0 0 10px 0;
+    color: #23282d;
+}
+
+.cbc-bookings-quick-actions-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.cbc-bookings-quick-actions-export {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-left: auto;
+}
+
+.cbc-bookings-mark-complete-btn {
+    background-color: #28a745;
+    color: #ffffff;
+    border-color: #28a745;
+}
+
+.cbc-bookings-copy-emails-btn {
+    background-color: #2271b1;
+    color: #ffffff;
+    border-color: #2271b1;
+}
+
+.cbc-bookings-send-email-btn {
+    margin-left: 8px;
+}
+
+.cbc-bookings-quick-actions-help {
+    margin-top: 8px;
+    color: #666666;
+    font-style: italic;
+    font-size: 13px;
+}

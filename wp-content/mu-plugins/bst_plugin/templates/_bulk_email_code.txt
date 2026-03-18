@@ -1,0 +1,552 @@
+// Close Bulk Email Modal
+function closeBulkEmailModal() {
+    jQuery('#bulk-email-modal').fadeOut(200);
+    jQuery('body').css('overflow', '');
+    
+    // Clear form
+    jQuery('#bulk-template-select').val('');
+    jQuery('#bulk-email-subject').val('');
+    jQuery('#bulk-email-cc').val('');
+    jQuery('#bulk-content-preview').html('<em style="color: #999;">Select a template to preview content...</em>');
+    
+    bulkEmailState.bookings = [];
+    bulkEmailState.currentPreviewIndex = 0;
+}
+
+// Update Recipient Display
+function updateRecipientDisplay() {
+    var total = bulkEmailState.bookings.length;
+    var selected = bulkEmailState.selectedBookings.length;
+    
+    if (selected === total) {
+        jQuery('#bulk-recipient-display').text(total + ' booking(s) selected (all)');
+    } else {
+        jQuery('#bulk-recipient-display').text(selected + ' of ' + total + ' booking(s) selected');
+    }
+    
+    // Update send button text
+    var btnText = selected === total ? 'Send to All' : 'Send to Selected';
+    jQuery('#bulk-send-btn-text').text(btnText);
+}
+
+// Open Recipient Selector Modal
+function openRecipientSelector() {
+    var html = '';
+    bulkEmailState.bookings.forEach(function(booking) {
+        var bookingId = parseInt(booking.id);
+        var isChecked = bulkEmailState.selectedBookings.indexOf(bookingId) !== -1 ? 'checked' : '';
+        var guestName = booking.guest1_name + (booking.guest2_name ? ' & ' + booking.guest2_name : '');
+        var guestEmail = booking.guest1_email;
+        
+        html += '<label style="display: flex; align-items: center; gap: 8px; padding: 10px; cursor: pointer; border: 1px solid #ddd; border-radius: 4px; background: white; transition: background 0.2s;" onmouseover="this.style.background=\'#f9f9f9\'" onmouseout="this.style.background=\'white\'">';
+        html += '<input type="checkbox" class="recipient-checkbox" value="' + bookingId + '" ' + isChecked + ' onchange="updateRecipientSelectionCount()" style="cursor: pointer;" />';
+        html += '<div style="flex: 1;">';
+        html += '<div style="font-weight: 600;">' + guestName + '</div>';
+        html += '<div style="font-size: 12px; color: #666;">' + guestEmail + '</div>';
+        html += '</div>';
+        html += '</label>';
+    });
+    
+    jQuery('#recipient-list').html(html);
+    updateRecipientSelectionCount();
+    
+    jQuery('#recipient-selector-modal').fadeIn(200);
+    jQuery('body').css('overflow', 'hidden');
+}
+
+// Close Recipient Selector Modal
+function closeRecipientSelector() {
+    jQuery('#recipient-selector-modal').fadeOut(200);
+}
+
+// Toggle Select All Recipients
+function toggleSelectAllRecipients() {
+    var isChecked = jQuery('#recipient-select-all').is(':checked');
+    jQuery('.recipient-checkbox').prop('checked', isChecked);
+    updateRecipientSelectionCount();
+}
+
+// Update Recipient Selection Count
+function updateRecipientSelectionCount() {
+    var total = bulkEmailState.bookings.length;
+    var selected = jQuery('.recipient-checkbox:checked').length;
+    
+    jQuery('#recipient-selection-count').text(selected + ' of ' + total + ' selected');
+    jQuery('#recipient-select-all').prop('checked', selected === total);
+}
+
+// Apply Recipient Selection
+function applyRecipientSelection() {
+    var selectedIds = [];
+    jQuery('.recipient-checkbox:checked').each(function() {
+        selectedIds.push(parseInt(jQuery(this).val()));
+    });
+    
+    if (selectedIds.length === 0) {
+        alert('Please select at least one recipient.');
+        return;
+    }
+    
+    bulkEmailState.selectedBookings = selectedIds;
+    updateRecipientDisplay();
+    closeRecipientSelector();
+    
+    var currentBooking = bulkEmailState.bookings[bulkEmailState.currentPreviewIndex];
+    if (currentBooking && bulkEmailState.selectedBookings.indexOf(parseInt(currentBooking.id)) === -1) {
+        for (var i = 0; i < bulkEmailState.bookings.length; i++) {
+            if (bulkEmailState.selectedBookings.indexOf(parseInt(bulkEmailState.bookings[i].id)) !== -1) {
+                bulkEmailState.currentPreviewIndex = i;
+                updateBulkPreview();
+                break;
+            }
+        }
+    }
+}
+
+// Get Selected Bookings
+function getSelectedBookings() {
+    return bulkEmailState.bookings.filter(function(b) {
+        var bookingId = parseInt(b.id);
+        return bulkEmailState.selectedBookings.indexOf(bookingId) !== -1;
+    });
+}
+
+// Load Email Templates
+function loadBulkEmailTemplates() {
+    jQuery('#bulk-template-select').html('<option value="">Loading templates...</option>');
+    
+    jQuery.ajax({
+        url: ajaxurl,
+        method: 'POST',
+        data: {
+            action: 'bst_get_manual_email_templates',
+            nonce: '<?php echo wp_create_nonce("bst_tour_bookings_nonce"); ?>'
+        },
+        success: function(response) {
+            if (response.success && response.data) {
+                var html = '<option value="">Select a template...</option>';
+                response.data.forEach(function(template) {
+                    html += '<option value="' + template.id + '" data-type="' + template.type + '">' + 
+                            template.title + '</option>';
+                });
+                jQuery('#bulk-template-select').html(html);
+                
+                jQuery('#bulk-template-select').off('change').on('change', function() {
+                    var templateId = jQuery(this).val();
+                    if (templateId) {
+                        loadBulkTemplateContent(templateId);
+                    }
+                });
+            }
+        },
+        error: function() {
+            jQuery('#bulk-template-select').html('<option value="">Error loading templates</option>');
+        }
+    });
+}
+
+// Load Template Content
+function loadBulkTemplateContent(templateId) {
+    jQuery.ajax({
+        url: ajaxurl,
+        method: 'POST',
+        data: {
+            action: 'bst_get_email_template_content',
+            template_id: templateId,
+            nonce: '<?php echo wp_create_nonce("bst_tour_bookings_nonce"); ?>'
+        },
+        success: function(response) {
+            if (response.success && response.data) {
+                jQuery('#bulk-email-subject').val(response.data.subject || '');
+                updateBulkSubjectCounter();
+                
+                var content = response.data.content || '';
+                jQuery('#bulk-content-preview').html(content);
+                jQuery('#bulk-content-preview a').attr('target', '_blank').attr('rel', 'noopener noreferrer');
+                
+                bulkEmailState.templateContent = content;
+            } else {
+                alert('Error loading template: ' + (response.data || 'Unknown error'));
+            }
+        },
+        error: function() {
+            alert('Error loading template content');
+        }
+    });
+}
+
+// Switch Tabs
+function switchBulkEmailTab(tab) {
+    jQuery('.bst-modal-tab').removeClass('bst-modal-tab-active');
+    jQuery('.bst-modal-tab').css({'background': '#f5f5f5', 'font-weight': 'normal'});
+    jQuery('.bulk-email-tab-content').hide();
+    
+    if (tab === 'compose') {
+        jQuery('.bst-modal-tab').eq(0).addClass('bst-modal-tab-active').css({'background': 'white', 'font-weight': '600'});
+        jQuery('#bulk-compose-tab').show();
+    } else if (tab === 'preview') {
+        jQuery('.bst-modal-tab').eq(1).addClass('bst-modal-tab-active').css({'background': 'white', 'font-weight': '600'});
+        jQuery('#bulk-preview-tab').show();
+        updateBulkPreview();
+    }
+}
+
+// Update Preview
+function updateBulkPreview() {
+    if (bulkEmailState.bookings.length === 0) {
+        jQuery('#bulk-preview-content').html('<p style="text-align: center; color: #d63638;">No bookings to preview</p>');
+        return;
+    }
+    
+    var currentBooking = bulkEmailState.bookings[bulkEmailState.currentPreviewIndex];
+    var subject = jQuery('#bulk-email-subject').val();
+    var content = bulkEmailState.templateContent || '';
+    
+    var selectedBookings = getSelectedBookings();
+    
+    if (selectedBookings.length === 0) {
+        jQuery('#bulk-preview-counter').text('No bookings selected');
+        jQuery('#bulk-preview-content').html('<p style="text-align: center; color: #d63638;">No recipients selected. Please use "Select Recipients..." button.</p>');
+        return;
+    }
+    
+    var currentPosInSelected = -1;
+    for (var i = 0; i < selectedBookings.length; i++) {
+        if (parseInt(selectedBookings[i].id) === parseInt(currentBooking.id)) {
+            currentPosInSelected = i + 1;
+            break;
+        }
+    }
+    
+    if (currentPosInSelected === -1) {
+        currentPosInSelected = 1;
+    }
+    
+    jQuery('#bulk-preview-counter').text('Booking ' + currentPosInSelected + ' of ' + selectedBookings.length);
+    jQuery('#bulk-preview-booking-name').text(currentBooking.guest1_name);
+    
+    if (currentPosInSelected <= 1) {
+        jQuery('button[onclick="previousPreviewBooking()"]').prop('disabled', true).css('opacity', '0.5');
+    } else {
+        jQuery('button[onclick="previousPreviewBooking()"]').prop('disabled', false).css('opacity', '1');
+    }
+    
+    if (currentPosInSelected >= selectedBookings.length) {
+        jQuery('button[onclick="nextPreviewBooking()"]').prop('disabled', true).css('opacity', '0.5');
+    } else {
+        jQuery('button[onclick="nextPreviewBooking()"]').prop('disabled', false).css('opacity', '1');
+    }
+    
+    jQuery('#bulk-preview-content').html('<p style="text-align: center;"><i class="fas fa-spinner fa-spin"></i> Generating preview...</p>');
+    
+    if (!content) {
+        jQuery('#bulk-preview-content').html('<p style="color: #d63638;">No template content. Please select a template in the Compose tab.</p>');
+        jQuery('#bulk-preview-subject').text(subject || '(No subject)');
+        jQuery('#bulk-preview-to').text(currentBooking.guest1_email);
+        return;
+    }
+    
+    jQuery.ajax({
+        url: ajaxurl,
+        method: 'POST',
+        data: {
+            action: 'bst_preview_email_content',
+            booking_id: currentBooking.id,
+            content: content,
+            subject: subject,
+            nonce: '<?php echo wp_create_nonce("bst_tour_bookings_nonce"); ?>'
+        },
+        success: function(response) {
+            if (response.success && response.data) {
+                jQuery('#bulk-preview-content').html(response.data.content);
+                jQuery('#bulk-preview-subject').text(response.data.subject || subject);
+                jQuery('#bulk-preview-to').text(currentBooking.guest1_email);
+                jQuery('#bulk-preview-content a').attr('target', '_blank').attr('rel', 'noopener noreferrer');
+            } else {
+                jQuery('#bulk-preview-content').html('<p style="color: #d63638;">Preview failed</p>');
+            }
+        },
+        error: function() {
+            jQuery('#bulk-preview-content').html('<p style="color: #d63638;">Error generating preview</p>');
+        }
+    });
+}
+
+// Previous Preview Booking
+function previousPreviewBooking() {
+    var selectedBookings = getSelectedBookings();
+    var currentBooking = bulkEmailState.bookings[bulkEmailState.currentPreviewIndex];
+    
+    var currentPosInSelected = -1;
+    for (var i = 0; i < selectedBookings.length; i++) {
+        if (parseInt(selectedBookings[i].id) === parseInt(currentBooking.id)) {
+            currentPosInSelected = i;
+            break;
+        }
+    }
+    
+    if (currentPosInSelected > 0) {
+        var prevSelectedBooking = selectedBookings[currentPosInSelected - 1];
+        for (var j = 0; j < bulkEmailState.bookings.length; j++) {
+            if (parseInt(bulkEmailState.bookings[j].id) === parseInt(prevSelectedBooking.id)) {
+                bulkEmailState.currentPreviewIndex = j;
+                updateBulkPreview();
+                break;
+            }
+        }
+    }
+}
+
+// Next Preview Booking
+function nextPreviewBooking() {
+    var selectedBookings = getSelectedBookings();
+    var currentBooking = bulkEmailState.bookings[bulkEmailState.currentPreviewIndex];
+    
+    var currentPosInSelected = -1;
+    for (var i = 0; i < selectedBookings.length; i++) {
+        if (parseInt(selectedBookings[i].id) === parseInt(currentBooking.id)) {
+            currentPosInSelected = i;
+            break;
+        }
+    }
+    
+    if (currentPosInSelected < selectedBookings.length - 1) {
+        var nextSelectedBooking = selectedBookings[currentPosInSelected + 1];
+        for (var j = 0; j < bulkEmailState.bookings.length; j++) {
+            if (parseInt(bulkEmailState.bookings[j].id) === parseInt(nextSelectedBooking.id)) {
+                bulkEmailState.currentPreviewIndex = j;
+                updateBulkPreview();
+                break;
+            }
+        }
+    }
+}
+
+// Send Test Email
+function sendBulkTestEmail() {
+    if (bulkEmailState.bookings.length === 0) {
+        alert('No bookings loaded');
+        return;
+    }
+    
+    var currentBooking = bulkEmailState.bookings[bulkEmailState.currentPreviewIndex];
+    var subject = jQuery('#bulk-email-subject').val();
+    var cc = jQuery('#bulk-email-cc').val();
+    var content = bulkEmailState.templateContent || '';
+    
+    if (!subject || !content) {
+        alert('Please enter a subject and message');
+        return;
+    }
+    
+    var testEmail = '<?php echo wp_get_current_user()->user_email; ?>';
+    if (!confirm('Send test email to ' + testEmail + ' using data from ' + currentBooking.guest1_name + '?\n\nSubject: [TEST] ' + subject)) {
+        return;
+    }
+    
+    var emailType = jQuery('#bulk-template-select option:selected').data('type') || 'Ad Hoc';
+    
+    jQuery('#bulk-send-test-btn, #bulk-send-all-btn').prop('disabled', true);
+    jQuery('#bulk-send-status').text('Sending test email...').css('color', '#666');
+    
+    jQuery.ajax({
+        url: ajaxurl,
+        method: 'POST',
+        data: {
+            action: 'bst_send_adhoc_email_compose',
+            booking_id: currentBooking.id,
+            email_to: testEmail,
+            email_cc: cc,
+            subject: '[TEST] ' + subject,
+            message: content,
+            email_type: 'Test',
+            nonce: '<?php echo wp_create_nonce("bst_tour_bookings_nonce"); ?>'
+        },
+        success: function(response) {
+            if (response.success) {
+                jQuery('#bulk-send-status').text('Test email sent!').css('color', '#00a32a');
+            } else {
+                jQuery('#bulk-send-status').text('Error: ' + (response.data || 'Failed to send')).css('color', '#d63638');
+            }
+            jQuery('#bulk-send-test-btn, #bulk-send-all-btn').prop('disabled', false);
+        },
+        error: function(xhr, status, error) {
+            jQuery('#bulk-send-status').text('Error sending test email').css('color', '#d63638');
+            jQuery('#bulk-send-test-btn, #bulk-send-all-btn').prop('disabled', false);
+        }
+    });
+}
+
+// Send Email to All Bookings
+function sendBulkEmailToAll() {
+    if (bulkEmailState.bookings.length === 0) {
+        alert('No bookings loaded');
+        return;
+    }
+    
+    var subject = jQuery('#bulk-email-subject').val();
+    var cc = jQuery('#bulk-email-cc').val();
+    var content = bulkEmailState.templateContent || '';
+    
+    if (!subject || !content) {
+        alert('Please select a template and enter a subject');
+        return;
+    }
+    
+    var selectedBookings = getSelectedBookings();
+    
+    if (selectedBookings.length === 0) {
+        alert('Please select at least one recipient.');
+        return;
+    }
+    
+    var confirmMsg = selectedBookings.length === bulkEmailState.bookings.length
+        ? 'Send email to all ' + selectedBookings.length + ' booking(s)?\n\nSubject: ' + subject
+        : 'Send email to ' + selectedBookings.length + ' of ' + bulkEmailState.bookings.length + ' booking(s)?\n\nSubject: ' + subject;
+    
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+    
+    var selectedTemplate = jQuery('#bulk-template-select').find('option:selected');
+    var emailType = selectedTemplate.data('type') || 'Ad Hoc';
+    var templateId = selectedTemplate.val() || null;
+    
+    jQuery('#bulk-send-test-btn, #bulk-send-all-btn').prop('disabled', true);
+    jQuery('#bulk-send-status').text('Preparing batch...').css('color', '#666');
+    
+    jQuery.ajax({
+        url: ajaxurl,
+        method: 'POST',
+        data: {
+            action: 'bst_create_email_batch',
+            email_type: emailType,
+            template_id: templateId,
+            email_subject: subject,
+            cc_emails: cc,
+            tour_date_id: bulkEmailState.tourDateId,
+            total_emails: selectedBookings.length,
+            is_test: 0,
+            notes: '',
+            nonce: '<?php echo wp_create_nonce("bst_tour_bookings_nonce"); ?>'
+        },
+        success: function(response) {
+            if (response.success && response.data.batch_id) {
+                sendBulkEmailsWithBatch(response.data.batch_id, selectedBookings, subject, cc, content, emailType);
+            } else {
+                alert('Failed to create email batch');
+                jQuery('#bulk-send-test-btn, #bulk-send-all-btn').prop('disabled', false);
+                jQuery('#bulk-send-status').text('');
+            }
+        },
+        error: function() {
+            alert('Failed to create email batch');
+            jQuery('#bulk-send-test-btn, #bulk-send-all-btn').prop('disabled', false);
+            jQuery('#bulk-send-status').text('');
+        }
+    });
+}
+
+function sendBulkEmailsWithBatch(batchId, bookings, subject, cc, content, emailType) {
+    jQuery('#bulk-send-status').text('Sending 0 of ' + bookings.length + '...').css('color', '#666');
+    
+    var successCount = 0;
+    var errorCount = 0;
+    var failedBookings = [];
+    var currentIndex = 0;
+    
+    function sendNext() {
+        if (currentIndex >= bookings.length) {
+            jQuery.ajax({
+                url: ajaxurl,
+                method: 'POST',
+                data: {
+                    action: 'bst_update_email_batch',
+                    batch_id: batchId,
+                    successful_emails: successCount,
+                    failed_emails: errorCount,
+                    nonce: '<?php echo wp_create_nonce("bst_tour_bookings_nonce"); ?>'
+                },
+                complete: function() {
+                    var alertMsg = 'Email sending complete!\n\n';
+                    alertMsg += successCount + ' email(s) sent successfully';
+                    
+                    if (errorCount > 0) {
+                        alertMsg += '\n' + errorCount + ' email(s) failed';
+                        alertMsg += '\n\nFailed bookings:';
+                        failedBookings.forEach(function(name) {
+                            alertMsg += '\n\u2022 ' + name;
+                        });
+                    }
+                    
+                    alert(alertMsg);
+                    closeBulkEmailModal();
+                    window.location.reload();
+                }
+            });
+            
+            return;
+        }
+        
+        var booking = bookings[currentIndex];
+        jQuery('#bulk-send-status').text('Sending ' + (currentIndex + 1) + ' of ' + bookings.length + '...').css('color', '#666');
+        
+        jQuery.ajax({
+            url: ajaxurl,
+            method: 'POST',
+            data: {
+                action: 'bst_send_adhoc_email_compose',
+                booking_id: booking.id,
+                email_to: booking.guest1_email,
+                email_cc: cc,
+                subject: subject,
+                message: content,
+                email_type: emailType,
+                batch_id: batchId,
+                nonce: '<?php echo wp_create_nonce("bst_tour_bookings_nonce"); ?>'
+            },
+            success: function(response) {
+                if (response.success) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                    var guestName = booking.guest1_name + (booking.guest2_name ? ' & ' + booking.guest2_name : '');
+                    failedBookings.push(guestName);
+                }
+                currentIndex++;
+                sendNext();
+            },
+            error: function() {
+                errorCount++;
+                var guestName = booking.guest1_name + (booking.guest2_name ? ' & ' + booking.guest2_name : '');
+                failedBookings.push(guestName);
+                currentIndex++;
+                sendNext();
+            }
+        });
+    }
+    
+    sendNext();
+}
+
+// Update Subject Character Counter
+function updateBulkSubjectCounter() {
+    var length = jQuery('#bulk-email-subject').val().length;
+    var counterEl = jQuery('#bulk-subject-counter');
+    counterEl.text(length + '/70');
+    
+    if (length > 70) {
+        counterEl.css('color', '#d63638');
+    } else if (length > 50) {
+        counterEl.css('color', '#dba617');
+    } else {
+        counterEl.css('color', '#666');
+    }
+}
+
+// Attach Send Email button handler
+jQuery(document).ready(function() {
+    jQuery('#send-email-btn').on('click', function() {
+        openBulkEmailModal();
+    });
+});

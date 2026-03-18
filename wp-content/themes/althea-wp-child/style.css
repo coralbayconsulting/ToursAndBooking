@@ -1,0 +1,2528 @@
+/*
+Theme Name: Althea WP Child (for BST customizations)
+Template: althea-wp
+Author: Wayne Wilson, Coral Bay Consulting
+Author URI: http://www.coralbayconsulting.com
+Description: Modified Althea WP theme to add custom post types
+Version: 1.0
+Updated: 2025-01-05 22:40:54
+*/
+
+/* Colors */
+:root {
+    --white: #f4f4f4; 
+    --black: #000;
+    --translucence: rgba(255, 255, 255, 0.6);
+    --darkgray: #333; /* Headers */
+    --lightgray: #666; /* Paragraphs */
+    --yellow: #f9cd02; /* Buttons */
+    --orange: #fc7a23; /* Hover Buttons */
+    --redbadge: #ff4747; /* Badges */
+    --rating-badge: #f39c12; /* Rating badges */
+    --filter-bg: rgba(255, 255, 255, 0.9); /* Filter background */
+    --greenbadge: #4caf50; /* Badges */
+    --red: #ff0000; /* Button Borders */
+    --blue: #007BFF; /* Bullet Points */
+    --darkblue: #0056b3; /* Hover Button */
+}
+
+/* Create the translucent overlay effect */
+.translucent-overlay {
+    position: relative;
+}
+
+.translucent-overlay::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--translucence); 
+    z-index: 1; /* Ensure the overlay is above the background image */
+}
+
+/* Top Banner and Page Name */
+.top-banner-container {
+    position: relative;
+    z-index: 10 !important; /* Reduced from 999999 to avoid menu conflicts */
+    width: 100%;
+    height: 250px;
+    overflow: visible !important; /* Changed from hidden to visible */
+}
+
+/* Fix mobile menu z-index conflict - reduce banner z-index on mobile */
+@media (max-width: 767px) {
+    .top-banner-container {
+        z-index: 10 !important; /* Lower z-index on mobile to allow menu to show above */
+    }
+}
+.top-banner {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 60%;
+}
+.banner-text {
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    color: #f4f4f4 !important;
+    font-size: 3.5rem !important;
+    font-weight: bold !important;
+    text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.7) !important;
+    z-index: 999999 !important;
+    text-align: center !important;
+    pointer-events: none !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    white-space: nowrap !important;
+    width: max-content !important;
+    max-width: 90vw !important;
+}
+
+/* FORCE H1 banner text to be visible */
+h1.banner-text {
+    margin: 0 !important;
+}
+
+/* Also target specifically for archive-tour-type page */
+body.post-type-archive-tour-type h1.banner-text {
+    position: absolute !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    color: #f4f4f4 !important;
+    font-size: 3.5rem !important;
+    font-weight: bold !important;
+    text-shadow: 2px 2px 5px rgba(0, 0, 0, 0.7) !important;
+    z-index: 999999 !important;
+    text-align: center !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    margin: 0 !important;
+}
+
+/* Ensure banner text is visible on archive pages */
+body.post-type-archive-tour-type .banner-text,
+body.archive .banner-text {
+    z-index: 99999 !important;
+    color: #f4f4f4 !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* Ensure top banner container is above translucent overlay but below navigation menus */
+body.post-type-archive-tour-type .top-banner-container,
+body.archive .top-banner-container {
+    z-index: 2 !important;
+}
+
+/* Tours Boxes and Information */
+
+.tour-box {
+    background-color: var(--white);
+    border-radius: 1px;
+    width: 24%; 
+    padding: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    transition: transform 0.3s ease;
+    margin: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center; 
+    position: relative; /* Ensure the tour-box is above the overlay */
+    z-index: 2;
+}
+
+.tour-type-box {
+    background-color: var(--white);
+    border-radius: 1px;
+    width: 32%; 
+    padding: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    transition: transform 0.3s ease;
+    margin: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center; 
+    position: relative; /* Ensure the tour-box is above the overlay */
+    z-index: 2;
+}
+
+.tour-box:hover, .tour-type-box:hover  {
+    transform: scale(1.02); 
+} 
+.tour-box img, .tour-type-box img {
+    width: 100%;
+    height: auto;
+    border-radius: 1px;
+    margin-bottom: 15px; 
+}
+.tour-box p, .tour-type-box p{
+    font-size: 1rem;
+    color: var(--lightgray);
+    margin-bottom: 20px;
+}
+
+.info-button {
+    display: inline-block;
+    border: 1.5px var(--red) solid;
+    margin-top: auto; 
+    padding: 8px 18px;
+    background-color: var(--yellow);
+    color: var(--white);
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: bold;
+    font-size: 1rem;
+    transition: background-color 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.36);
+}
+.info-button:hover {
+    background-color: var(--orange);
+}
+
+/* Book Now and Calendar Box */
+.book-container {
+    width: 98%;
+    margin: 0 auto;
+    background-color: var(--lightgray);
+    border-radius: 1px;
+    padding: 10px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-top: 30px;
+    margin-bottom: 5%;
+    position: relative; 
+    z-index: 10; 
+}
+.book-container h2 {
+    font-size: 1.6rem;
+    font-weight: bold;
+    font-style: italic;
+    color: var(--white);
+    margin-bottom: 15px;
+}
+
+/* Page content wrapper for consistent centering */
+.page-content-wrapper {
+    max-width: 1200px; /* Same as two-column container */
+    margin: 0 auto; /* Center horizontally with equal space on sides */
+    padding: 0 10px; /* Reduced from 20px to 10px for less side space */
+}
+
+/* Two Column Layout */
+.two-column-container {
+    display: flex;
+    margin: 0; /* Remove margin since wrapper handles centering */
+    padding: 2px 0; /* Further reduced from 5px to 2px for minimal vertical space after breadcrumbs */
+    justify-content: space-between; 
+    gap: 20px; 
+}
+.right-column, .left-column {
+    flex: 1; 
+    border-radius: 1px;
+    background-color: var(--white);
+    padding: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    position: relative; /* Ensure the tour-box is above the overlay */
+    z-index: 2;
+}
+.left-column {
+    width: 50%;
+}
+
+/* Reduce vertical space under h4 tags within the left column */
+.left-column h4 {
+    margin-bottom: 1%;
+    text-align: left; 
+}
+/* Reduce vertical space under h4 tags within the right column */
+.right-column h4 {
+    margin-bottom: 1%; 
+    text-align: left; 
+}
+
+.right-column {
+    width: 50%;
+    display: flex;
+    flex-direction: column;
+    position: relative; /* Ensure the tour-box is above the overlay */
+    z-index: 2;
+}
+
+.left-column p, .right-column p {
+    font-size: 1rem;
+    color: var(--darkgray); /* lightgray */
+    line-height: 1.4;
+    margin-bottom: 1%;
+    margin-left: 2%;
+}
+.right-column img {
+    width: 100%; 
+    height: auto; 
+    object-fit: cover; 
+    margin-bottom: 5px;
+    border-radius: 1px; 
+}
+
+.image-container {
+    padding: 0;
+}
+/* Bullet and List Styling */
+
+.checkmark-list {
+    margin-left: 2%;
+    margin-bottom: 2%; /* Adjust as needed */
+    list-style: none; /* Remove default list style */
+    padding-left: 1.5rem; /* Add padding to align checkmarks */
+}
+
+.checkmark-list li {
+    position: relative;
+    margin-bottom: 0.5%; /* Adjust as needed */
+    text-align: left; 
+    font-size: 1rem;
+}
+
+.checkmark-list li::before {
+    content: '\2714';  /* was 2713 */
+    position: absolute;
+    left: -1.5rem;
+    top: -.1rem; 
+    color: var(--blue);  
+    font-size: 1.2rem; 
+    transition: color 0.3s ease; 
+}
+
+.checkmark-list li:hover::before {
+    color: var(--orange); /* Change color on hover */
+}
+
+.date-container {
+    padding-left: 10px;
+    position: relative; 
+}
+
+.date-container a.book-button {
+    padding: 4px 8px; 
+    font-size: 12px; 
+    font-weight: bold;
+    background-color: red;
+    color: var(--white);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2), 0 4px 6px rgba(0, 0, 0, 0.1); /* More pronounced 3D effect */
+    border: 2px solid rgba(0, 0, 0, 0.2); /* Slightly thicker border for better definition */
+    white-space: nowrap; /* Prevent text wrapping */
+}
+
+/* Add a hover effect to enhance the 3D look */
+.date-container a.book-button:hover {
+    background-color: darkred; /* Adjust as needed */
+    transform: translateY(-3px); /* Slightly lift the button */
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2), 0 6px 8px rgba(0, 0, 0, 0.1); /* Enhance the shadow */
+}
+
+/* Add an active effect to simulate pressing the button */
+.date-container a.book-button:active {
+    transform: translateY(2px); /* Slightly push the button down */
+    box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1); /* Reduce the shadow */
+}
+
+/* Disabled state styling */
+.date-container .book-button:disabled {
+    background-color: var(--lightgray);
+    cursor: not-allowed;
+}
+
+.date-list {
+    list-style: none;
+    padding: 0;
+}
+
+.date-list h4{
+    margin-bottom: 3px;
+}
+
+.date-list ul {
+    list-style-type: none !important;  
+}
+
+.date-list li {
+    position: relative;
+    padding-left: 25px !important;
+    margin-bottom: 3px;
+    text-align: left; 
+    font-size: 0.8rem; /* Made smaller for better hierarchy */
+}
+
+.date-list li::before {
+    content: "\f073"; /* Unicode for Font Awesome calendar icon */
+    font-family: "Font Awesome 5 Free"; /* Font family for Font Awesome */
+    font-weight: 900; /* Font weight for solid icons */
+    position: absolute;
+    color:black;
+    left: 0;
+    top: 0;
+    font-size: 18px;
+    margin-bottom: 5px;
+}
+
+/* Modifier class to change the color */
+.date-list--blue li::before {
+    color: blue; /* Change the color as needed */
+}
+
+/* Modifier class to change the color */
+.date-list--orange li::before {
+    color: orange; /* Change the color as needed */
+}
+
+/* Modifier class to change the font size */
+.date-list--smallblue li {
+    font-size: 16px;
+}
+
+/* Modifier class to change the color */
+.date-list--smallblue li::before {
+    color: blue; /* Change the color as needed */
+    font-size: 16px;
+}
+
+/* Badges */
+.badge {
+    display: inline-block;
+    background-color: var(--redbadge); 
+    color: var(--white);
+    font-size: 0.7rem; /* Made slightly smaller from 0.75rem */
+    padding: 1px 4px; 
+    border-radius: 4px; 
+    margin-left: 4px; 
+    position: relative; 
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.badge.green {
+    background-color: var(--white);
+    color: #333;
+    border: 1px solid #ddd;
+}
+.badge.orange {
+    background-color: var(--orange);
+}
+.badge.red {
+    background-color: var(--redbadge);
+}
+.badge.blue {
+    background-color: var(--blue);
+}
+.badge.yellow {
+    background-color: var(--yellow);
+}
+.badge.white {
+    background-color: transparent;
+    color: #666;
+    border: 1px solid #ddd;
+}
+.badge.gray {
+    background-color: #e0e0e0;
+    color: #555;
+    border: none;
+}
+
+/* 3-column layout for tour date sections only (not schedule) */
+.date-list.date-list--smallblue li,
+.date-list.date-list--blue li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 3px 0;
+    margin-bottom: 3px;
+}
+
+.date-list.date-list--smallblue li::before,
+.date-list.date-list--blue li::before {
+    content: "📅";
+    flex-shrink: 0;
+    width: 20px;
+    margin-top: 2px;
+}
+
+.date-list.date-list--smallblue .date-content,
+.date-list.date-list--blue .date-content {
+    flex: 1;
+    text-align: left;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    font-size: 14px;
+}
+
+.date-list.date-list--smallblue .badge,
+.date-list.date-list--blue .badge {
+    flex-shrink: 0;
+    min-width: 80px;
+    text-align: center;
+    margin-left: 0;
+}
+
+.tours-container .badge {
+    font-size: 0.9rem; 
+    top: -.2em;
+}
+
+/* for the booking section on the tour form */
+
+
+
+/* Adjust the widths of the columns */
+.booking-columns {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.booking-left {
+    width: 50%;
+    display: flex;
+    flex-direction: column;
+    gap: 5px; /* Reduce the gap between labels and dropdowns */
+}
+
+.booking-right {
+    width: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Center align items in the right column */
+    gap: 5px;
+}
+
+.booking-columns label {
+    font-size: 0.9em; /* Make the label text smaller */
+}
+
+.booking-columns select,
+.booking-columns input {
+    width: auto !important; 
+    padding: 5px;
+    font-size: .8em;
+}
+
+.vehicle-dropdown-container{
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+.currency-container {
+    display: flex;
+    align-items: center !important;
+}
+
+.currency-flag {
+    background-size: cover;
+    margin-left: 3px; 
+    margin-top: -28px;
+    display: inline-block;
+    height: 30px;
+    width: auto; 
+    font-size: 2em;
+}
+
+.price-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+.price-container input {
+    border: none;
+    background: none;
+    font-size: 1em;
+    font-weight: bold;
+    text-align: center;
+    width: 100%;
+}
+
+.price-container .tourprice-converted {
+    font-size: 1em;
+    font-style: normal;
+    font-weight: bold;
+    color: var(--lightgray);
+    margin-top: 2px;
+}
+
+.booking-right .book-button {
+    margin-top: 18px;
+    padding: 6px 12px; 
+    font-size: 1em; 
+    font-weight: bold;
+    background-color: red;
+    color: var(--white);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2), 0 4px 6px rgba(0, 0, 0, 0.1); /* More pronounced 3D effect */
+    border: 2px solid rgba(0, 0, 0, 0.2); /* Slightly thicker border for better definition */
+    white-space: nowrap; /* Prevent text wrapping */
+}
+
+/* Add a hover effect to enhance the 3D look */
+.booking-right .book-button:hover {
+    background-color: darkred; /* Adjust as needed */
+    transform: translateY(-3px); /* Slightly lift the button */
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2), 0 6px 8px rgba(0, 0, 0, 0.1); /* Enhance the shadow */
+}
+
+/* Add an active effect to simulate pressing the button */
+.booking-right .book-button:active {
+    transform: translateY(2px); /* Slightly push the button down */
+    box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1); /* Reduce the shadow */
+}
+
+.small-text {
+    font-size: .6em !important;
+    white-space: normal; /* Allow text to wrap */
+    margin-left: 0 !important;
+}
+
+.small-centered-italic {
+    font-size: .6em !important;
+    text-align: center !important;
+    font-style: italic;
+    white-space: normal; /* Allow text to wrap */
+    margin-left: 0 !important;
+}
+
+/* Disabled state styling */
+.booking-right .book-button:disabled {
+    background-color: var(--lightgray);
+    cursor: not-allowed;
+}
+
+/* Ensure the image-container is positioned relative */
+.listing-image-container {
+    position: relative;
+    display: inline-block;
+}
+
+/* Position the new-icon absolutely within the image-container */
+.new-icon {
+    position: absolute !important;
+    top: -11.21px !important; 
+    right: -12px !important; 
+    height: 100px !important; 
+    width: auto !important;
+    z-index: 2 !important;
+}
+
+/* Image styling */
+.listing-image-container img {
+    display: block;
+    width: 100%; /* Adjust as needed */
+}
+
+/* Text overlay styling */
+.listing-image-container .overlay-text {
+    position: absolute;
+    bottom: 20px; /* Position 10px above the bottom */
+    left: 50%;
+    transform: translateX(-50%); /* Center horizontally */
+    text-align: center; /* Center the text */
+}
+
+/* Badge styling */
+.listing-image-container .badge {
+    display: inline-block;
+    padding: 5px 10px; /* Adjust as needed */
+    background-color: green; /* Adjust as needed */
+    color: white; /* Adjust as needed */
+    border-radius: 5px; /* Adjust as needed */
+}
+
+/* Style the MC4WP form */
+.mc4wp-form p {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    font-family: 'Open Sans', sans-serif; /* Use Open Sans font */
+    font-size: 1rem; /* Base font size for all text */
+    color: var(--darkgray); /* Adjust to match Gravity Forms */
+}
+
+.mc4wp-form label {
+    width: 150px; /* Adjust the width as needed */
+    text-align: right;
+    margin-right: 10px;
+    font-family: 'Open Sans', sans-serif; /* Use Open Sans font */
+    font-size: 0.9rem; /* Smaller font size for labels */
+    font-weight: bold; /* Make the label text bold */
+    color: var(--darkgray); /* Adjust to match Gravity Forms */
+}
+
+.mc4wp-form input[type="text"],
+.mc4wp-form input[type="email"],
+.mc4wp-form input[type="tel"],
+.mc4wp-form select {
+    flex: 1;
+    padding: 5px;
+    max-width: 200px; /* Limit the field sizes to 200px */
+    font-family: 'Open Sans', sans-serif; /* Use Open Sans font */
+    font-size: 1rem; /* Base font size for all text */
+    color: var(--darkgray); /* Adjust to match Gravity Forms */
+}
+
+.mc4wp-form input[name="FNAME"],
+.mc4wp-form input[name="LNAME"] {
+    max-width: 150px; /* Slightly shorter for first and last name fields */
+}
+
+.mc4wp-form input[type="email"] {
+    max-width: 250px; /* Slightly longer for email field */
+}
+
+.mc4wp-form input[type="submit"] {
+    margin-left: 160px; /* Adjust to align with the input fields */
+    color: var(--white); /* Adjust to match Gravity Forms */
+    background-color: var(--blue); /* Adjust to match Gravity Forms */
+    border: none; /* Remove border */
+}
+
+.mc4wp-form input[type="submit"]:hover {
+    background-color: var(--darkblue); /* Adjust to match Gravity Forms */
+}
+
+/* Ensure the mc4wp-response div is visible */
+.mc4wp-response {
+    display: block !important; /* Ensure the response div is displayed */
+    margin-top: 20px; /* Add some space above the response */
+    font-family: 'Open Sans', sans-serif; /* Use Open Sans font */
+    font-size: 1rem; /* Base font size for all text */
+    color: var(--darkgray); /* Adjust to match Gravity Forms */
+    background-color: var(--white); /* Ensure the background is white */
+    padding: 10px; /* Add padding for better readability */
+    border-radius: 5px; /* Add border radius for rounded corners */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Add a subtle shadow */
+}
+
+/* Style the alert messages */
+.mc4wp-alert {
+    padding: 10px;
+    border: 1px solid var(--darkgray); /* Adjust border color as needed */
+    background-color: var(--lightgray); /* Adjust background color as needed */
+    color: var(--darkgray); /* Ensure text color is dark enough to be visible */
+    border-radius: 5px; /* Add border radius for rounded corners */
+    margin-bottom: 20px; /* Add some space below the alert */
+}
+
+/* Style the success messages */
+.mc4wp-alert.mc4wp-success {
+    border-color: var(--greenbadge); /* Adjust border color for success */
+    background-color: var(--greenbadge); /* Adjust background color for success */
+    color: var(--white); /* Adjust text color for success */
+}
+
+/* Style the error messages */
+.mc4wp-alert.mc4wp-error {
+    border-color: var(--redbadge); /* Adjust border color for error */
+    background-color: var(--redbadge); /* Adjust background color for error */
+    color: var(--white); /* Adjust text color for error */
+}
+
+/* Media Adjustments */
+/* For tablets (screen width 768px or smaller) */
+@media (max-width: 768px) {
+    .tours-container {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    .tour-box, .tour-type-box  {
+        width: 44%;
+        margin: 10px;
+    }
+    .banner-text {
+        font-size: 2.8rem;
+        max-width: 85vw;
+    }
+
+    /* Page content wrapper responsive adjustments */
+    .page-content-wrapper {
+        padding: 0 1rem; /* Reduced from 1.5rem for tablets */
+    }
+
+    /* Two Column Layout */
+    .two-column-container {
+        flex-direction: column; 
+        gap: 1.5rem; 
+        padding: 0; /* Remove all padding */
+    }
+    .left-column, .right-column {
+        width: 95%;  
+    }
+    .left-column h2, .right-column h3 {
+        font-size: 1.3rem;  
+    }
+    .left-column p, .right-column p {
+        font-size: 1rem;  
+    }
+
+    /* Adjustments for Dates and Buttons */
+    .date-list li {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .badge {
+        font-size: 12px;
+        padding: 4px 8px;
+    }
+    .book-button {
+        width: 80%;
+        margin-top: 10px;
+        font-size: 14px;
+        padding: 12px;
+    }
+}
+
+/* For phones (screen width 480px or smaller) */
+@media (max-width: 480px) {
+    .tour-box, .tour-type-box {
+        width: 98%;
+        margin: 10px 0;
+    }
+    /* Banner text - better size and wrapping on mobile */
+    .banner-text,
+    h1.banner-text,
+    body.single-tour h1.banner-text {
+        font-size: 2.2rem !important;
+        max-width: 98vw !important;
+        white-space: normal !important;
+        line-height: 1.2 !important;
+        text-align: center !important;
+        padding: 0 5px !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        hyphens: none !important;
+        width: auto !important;
+        letter-spacing: -0.5px !important;
+    }
+
+    /* Hide breadcrumbs completely on mobile - common best practice */
+    .bst-breadcrumb-section {
+        display: none !important;
+    }
+    
+    /* Mobile-specific optimizations */
+    .page-content-wrapper {
+        padding: 0 0.5rem !important;
+    }
+
+    footer {
+        font-size: 0.9rem;
+    }
+
+    /* Improved touch targets for mobile */
+    .booking-columns select,
+    .booking-columns button {
+        min-height: 44px !important;
+        font-size: 16px !important; /* Prevents zoom on iOS */
+    }
+
+    /* Better spacing for mobile forms */
+    .booking-columns {
+        gap: 1rem !important;
+    }
+
+    /* Ensure images are mobile-friendly */
+    .image-container img {
+        max-width: 100% !important;
+        height: auto !important;
+    }
+
+    /* Two Column Layout */
+    .two-column-container {
+        flex-direction: column;  
+        padding: 0.5rem 0; /* Reduced from 1rem to 0.5rem */
+    }
+    .left-column, .right-column {
+        width: 100%;  
+    }
+    .left-column h4, .right-column h4 {
+        font-size: 1.2rem; 
+    }
+    .left-column p, .right-column p {
+        font-size: 0.95rem; 
+    }
+
+    /* Adjustments for Dates and Buttons */
+
+    .date-container {
+        padding-left: 4px;
+    }
+
+    .date-container a.book-button {
+        width: 70px;
+        padding: 3px 5px; 
+        font-size: 10px; 
+    }
+
+    .date-list li {
+        flex-direction: row; /* Ensure items are in a row */
+        align-items: center; /* Center items vertically */
+        justify-content: space-between; /* Space between items */
+        font-size: 15px;
+        text-align: left !important; 
+    }
+
+    .date-list--smallblue li {
+        font-size: .9rem; 
+        text-align: left !important;
+    }
+
+    .checkmark-list li {
+        font-size: .9rem; 
+    }
+    
+    .checkmark-list li::before {
+        left: -1.5rem;
+        top: -.1rem; 
+        font-size: .9rem; 
+    }
+
+    .badge {
+        font-size: 10px;
+        padding: 2px 4px;
+    }
+
+    p {
+        margin-top: .5rem; 
+        text-align: left; 
+    }
+
+    /* Booking form mobile adjustments */
+    .booking-columns {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .booking-left, .booking-right {
+        width: 100% !important;
+    }
+    
+    .booking-columns select,
+    .booking-columns input {
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0 !important;
+    }
+    
+    .book-button {
+        width: 100% !important;
+        max-width: 300px;
+        margin: 0 auto;
+    }
+}
+
+/* 
+ * SEO Hierarchy Fix: Style H2 and H3 to look like original H4
+ * This maintains proper semantic hierarchy while preserving visual design
+ */
+
+/* Tour box titles on taxonomy/archive pages - maintain H4 visual style */
+.tour-box h2 {
+    font-size: 1.25em; /* Updated to requested size */
+    font-weight: 600; /* Medium weight between normal and bold */
+    margin: 0.83em 0; /* Default H4 margins */
+    color: var(--darkgray);
+    text-align: center;
+}
+
+/* Year headings in date lists - smaller than tour titles but bigger than dates */
+.date-list h3 {
+    font-size: 1.1em; /* Updated to requested size */
+    font-weight: 600; /* Medium weight between normal and bold */
+    margin: 0.83em 0 10px 0; /* Added more bottom margin for spacing */
+    color: var(--darkgray);
+    text-align: center; /* Centered the heading */
+}
+
+/* Ensure consistency across tour pages */
+.tour-type-box h2 {
+    font-size: 1.25em; /* Updated to requested size */
+    font-weight: 600; /* Medium weight between normal and bold */
+    margin: 0.83em 0;
+    color: var(--darkgray);
+    text-align: center;
+}
+
+/* Archive tour type specific styling - smaller date items to prevent wrapping */
+body.post-type-archive-tour-type .date-list li {
+    font-size: 0.85rem; /* Closer to original size, just slightly smaller to prevent wrapping */
+}
+
+/* Single tour page specific styling - smaller H2 year headers and H3 day headers */
+body.single-tour .left-column h2:not(:first-of-type) {
+    font-size: 1.25em; /* Updated to requested size */
+    font-weight: 600; /* Medium weight between normal and bold */
+    margin: 0.3em 0; /* Reduced top margin from 0.83em to 0.3em */
+    color: var(--darkgray);
+    text-align: left; /* Left justified */
+}
+
+/* Specific styling for tour date year headers */
+body.single-tour .left-column h2 {
+    font-size: 1.25em; /* Updated to requested size */
+    font-weight: 600; /* Medium weight between normal and bold */
+    margin: 0.3em 0 10px 0; /* Reduced top margin from 0.83em to 0.3em */
+    color: var(--darkgray);
+    text-align: left; /* Left justified instead of center */
+}
+
+/* Right column H2 headers should match left column */
+body.single-tour .right-column h2 {
+    font-size: 1.25em; /* Updated to requested size */
+    font-weight: 600; /* Medium weight between normal and bold */
+    margin: 0.3em 0; /* Reduced top margin from 0.83em to 0.3em */
+    color: var(--darkgray);
+    text-align: left; /* Left justified */
+}
+
+/* Schedule day headers (H3) on single tour pages - larger size */
+body.single-tour .date-list h3 {
+    font-size: 1.0em; /* Larger for better readability */
+    font-weight: bold;
+    margin: 0.83em 0 5px 0; /* Reduced bottom margin to minimize newline */
+    color: var(--darkgray);
+    text-align: left;
+    display: inline-block; /* Prevent full newline */
+}
+
+/* Tour dates under year headers should be larger like taxonomy pages */
+body.single-tour .date-list li {
+    font-size: 1.0rem; /* Updated to requested size */
+}
+
+body.single-tour .date-list .date-content {
+    font-size: 16px;
+}
+
+/* Tour rating tooltip wrapper */
+body.single-tour .tour-rating-tooltip-wrapper {
+    cursor: help;
+    display: inline-block;
+    position: relative;
+}
+
+/* Subtle highlight when tooltip is active */
+body.single-tour .tour-rating-tooltip-wrapper.tooltip-active {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+}
+
+/* Booking instruction text - stronger and larger */
+body.single-tour .booking-instruction {
+    font-size: 0.95rem; /* Slightly larger text */
+    font-weight: bold; /* Make it strong/bold */
+    margin: 10px 0;
+    color: var(--darkgray);
+    line-height: 1.2; /* Tighter line height for single line */
+}
+
+/* Old breadcrumb styles removed - now using centralized BST breadcrumb system */
+
+/* Centralized Breadcrumb Styles - Only for BST Tour Pages */
+.top-banner-container .bst-breadcrumb-overlay {
+    position: absolute;
+    bottom: 35px;
+    left: 130px;
+    z-index: 999;
+}
+
+.top-banner-container .bst-breadcrumb-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.top-banner-container .bst-breadcrumb-item {
+    margin: 0;
+    padding: 0;
+}
+
+.top-banner-container .bst-breadcrumb-separator {
+    margin: 0 6px;
+    color: #ffffff;
+    font-weight: normal;
+    font-size: 16px;
+    font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.top-banner-container .bst-breadcrumb-link {
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 600;
+    text-transform: uppercase;
+    transition: color 0.3s ease;
+    font-size: 16px;
+    font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    letter-spacing: 1.0px;
+}
+
+.top-banner-container .bst-breadcrumb-link:hover {
+    color: #f9cd02; /* Yellow hover effect */
+}
+
+.top-banner-container .bst-breadcrumb-text {
+    color: #ffffff;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 16px;
+    font-family: 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    letter-spacing: 1.0px;
+}
+
+.top-banner-container .bst-breadcrumb-home-icon {
+    margin-right: 0px;
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+    vertical-align: middle;
+    transform: translateY(-2px);
+}
+
+/* New breadcrumb section styling - positioned between banner and content */
+.bst-breadcrumb-section {
+    position: relative;
+    padding: 15px 0; /* Increased from 8px to 15px to move breadcrumbs down further */
+    margin: 0; /* Remove negative margin */
+}
+
+/* For single tour pages, break out of page-content-wrapper constraints */
+body.single-tour .bst-breadcrumb-section {
+    margin-left: -10px;
+    margin-right: -10px;
+    width: calc(100% + 20px);
+}
+
+/* Only add background when breadcrumbs are NOT inside translucent overlay */
+.bst-breadcrumb-section:not(.translucent-overlay .bst-breadcrumb-section)::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--translucence); 
+    z-index: 1;
+}
+
+/* Breadcrumb container for pages WITHOUT filters (archive/single pages) */
+.bst-breadcrumb-container:not(:has(.breadcrumb-filters)) {
+    position: relative;
+    z-index: 2;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+    height: 40px; /* Matches taxonomy page height for consistency */
+    display: flex; /* Add flex display for vertical centering */
+    align-items: center; /* Center content vertically */
+}
+
+/* Breadcrumb container with share buttons - use grid layout */
+.bst-breadcrumb-container.has-share-buttons {
+    display: grid; /* Use grid instead of flex for share buttons and filters */
+    grid-template-columns: 1fr auto auto; /* Left: breadcrumbs, center: filters, right: share buttons */
+    grid-template-areas: "breadcrumbs filters share";
+    align-items: center;
+    gap: 80px; /* Same gap as filter pages */
+    margin: 0 auto; /* Center the container */
+    padding: 0 20px; /* Add padding for content spacing */
+    max-width: 1200px; /* Match the wrapper max-width */
+    width: 100%; /* Force container to fill available width */
+    box-sizing: border-box; /* Include padding in width calculation */
+}
+
+.bst-breadcrumb-container .bst-breadcrumb-item {
+    display: flex;
+    align-items: center;
+    line-height: 1; /* Add consistent line height */
+}
+
+.bst-breadcrumb-container .bst-breadcrumb-separator {
+    margin: 0 6px;
+    color: #666;
+    font-weight: normal;
+}
+
+.bst-breadcrumb-container .bst-breadcrumb-link {
+    color: var(--blue); /* Blue for parent path links */
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    transition: color 0.3s ease;
+    letter-spacing: 1.0px; /* Set letter spacing to 1.0px */
+}
+
+.bst-breadcrumb-container .bst-breadcrumb-link:hover {
+    color: var(--darkblue); /* Dark blue hover for parent path links */
+    text-decoration: none;
+}
+
+.bst-breadcrumb-container .bst-breadcrumb-text {
+    color: #666; /* Keep current page text gray */
+    font-weight: 600;
+    letter-spacing: 1.0px; /* Set letter spacing to 1.0px */
+}
+
+.bst-breadcrumb-container .bst-breadcrumb-home-icon {
+    width: 18px;
+    height: 18px;
+    fill: var(--blue); /* Make home icon blue */
+    margin-right: 2px;
+}
+
+/* Share Buttons - breadcrumb list for containers with share buttons */
+.bst-breadcrumb-container.has-share-buttons .bst-breadcrumb-list {
+    grid-area: breadcrumbs; /* Assign to left side of grid */
+    justify-self: start; /* Left align */
+}
+
+.bst-share-buttons {
+    grid-area: share; /* Use the rightmost side of the grid */
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-self: end; /* Align to the right like filters do */
+}
+
+/* Share Buttons on Banner - centered at bottom */
+.bst-share-buttons-banner {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: rgba(128, 128, 128, 0.9);
+    padding: 6px 12px;
+    border-radius: 50px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    z-index: 5;
+}
+
+.bst-share-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--blue);
+    margin-right: 4px;
+}
+
+.bst-share-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--blue);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    position: relative;
+}
+
+.bst-share-icon:hover {
+    background: var(--darkblue);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.bst-share-icon:active {
+    transform: translateY(0);
+}
+
+.bst-share-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+}
+
+.bst-share-icon.bst-share-copy.copied {
+    background: #28a745;
+}
+
+.bst-share-icon.bst-share-copy.copied::after {
+    content: '✓';
+    position: absolute;
+    font-size: 18px;
+    color: white;
+}
+
+.bst-share-icon.bst-share-copy.copied svg {
+    display: none;
+}
+
+/* Tour Filter Styles */
+.tour-filters-section {
+    background: var(--filter-bg);
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    display: none; /* Hide mobile filters on desktop */
+}
+
+.tour-filters-section h3 {
+    margin-bottom: 15px;
+    color: var(--darkgray);
+    font-size: 1.2em;
+}
+
+.tour-filter-form {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.filter-group label {
+    font-weight: bold;
+    color: var(--darkgray);
+    margin-right: 5px;
+}
+
+.filter-group select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    font-size: 14px;
+    min-width: 150px;
+}
+
+.tour-filter-form button,
+.tour-filter-form a {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 14px;
+    transition: background-color 0.3s ease;
+}
+
+.tour-filter-form button {
+    background: var(--yellow);
+    color: var(--darkgray);
+}
+
+.tour-filter-form button:hover {
+    background: var(--orange);
+    color: white;
+}
+
+.tour-filter-form a {
+    background: #666;
+    color: white;
+}
+
+.tour-filter-form a:hover {
+    background: #555;
+}
+
+/* Tour filters styling - positioned like breadcrumbs */
+.tour-filters-section {
+    position: relative;
+    padding: 12px 0;
+    margin: 0;
+}
+
+.tour-filters-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--translucence);
+    z-index: 1;
+}
+
+.tour-filters-container {
+    position: relative;
+    z-index: 2;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.tour-filters-title {
+    margin-bottom: 15px;
+    color: #333;
+    font-size: 1.2em;
+    font-weight: bold;
+}
+
+.tour-filter-form {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.filter-label {
+    font-weight: bold;
+    color: #333;
+}
+
+.filter-select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    font-size: 14px;
+}
+
+.filter-submit-btn {
+    padding: 8px 15px;
+    background: #0073aa;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.filter-submit-btn:hover {
+    background: #005a87;
+}
+
+.filter-clear-btn {
+    padding: 8px 15px;
+    background: #666;
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.filter-clear-btn:hover {
+    background: #555;
+}
+
+/* Tour Rating Badge Styles */
+.tour-ratings {
+    margin-top: 8px;
+}
+
+.rating-badge {
+    background: var(--rating-badge) !important;
+    color: white !important;
+    padding: 3px 8px;
+    border-radius: 3px;
+    margin-right: 5px;
+    font-size: 0.9em;
+    font-weight: normal;
+    display: inline-block;
+}
+
+/* Responsive Design for Filters */
+@media (max-width: 768px) {
+    .tour-filter-form {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    
+    .filter-group {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+    }
+    
+    .filter-group select {
+        min-width: auto;
+        width: 100%;
+    }
+}
+
+
+
+/* Custom Dropdown Styles */
+.custom-dropdown-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.custom-dropdown-selected {
+    min-width: 200px;
+    padding: 8px 30px 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    position: relative;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+}
+
+.custom-dropdown-selected:hover {
+    border-color: #999;
+}
+
+.custom-dropdown-options {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    display: none;
+    z-index: 1000;
+    max-height: 200px;
+    overflow-y: auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.dropdown-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    transition: background-color 0.2s ease;
+}
+
+.dropdown-option:hover {
+    background-color: #f0f0f0 !important;
+}
+
+/* Medal Rating Overlay Styles */
+.medal-rating-overlay {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 2px 6px;
+    border-radius: 12px;
+    max-width: calc(100% - 16px);
+    box-sizing: border-box;
+}
+
+.tour-medal-circle {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.medal-rating-overlay:hover .tour-medal-circle {
+    transform: scale(1.15);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.6) !important;
+}
+
+.medal-rating-overlay:hover {
+    background: rgba(0, 0, 0, 0.75);
+}
+
+/* Legacy support for old medal icons and emojis */
+.tour-medal-icon {
+    display: block;
+    filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 0.5));
+    transition: transform 0.2s ease;
+}
+
+.tour-medal-emoji {
+    display: block;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+    transition: transform 0.2s ease;
+}
+
+.medal-rating-overlay:hover .tour-medal-icon,
+.medal-rating-overlay:hover .tour-medal-emoji {
+    transform: scale(1.1);
+}
+
+/* Tour Class Medal Styles for Single Tour Pages */
+.tour-class-label {
+    font-weight: 600;
+    margin-right: 8px;
+}
+
+.tour-medal-inline {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1px solid;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.tour-medal-platinum {
+    background: linear-gradient(135deg, #E5E4E2, #C0C0C0);
+    border-color: #999;
+}
+
+.tour-medal-gold {
+    background: linear-gradient(135deg, #FFD700, #FFA500);
+    border-color: #CC8400;
+}
+
+.tour-medal-silver {
+    background: linear-gradient(135deg, #C0C0C0, #A0A0A0);
+    border-color: #808080;
+}
+
+.tour-medal-bronze {
+    background: linear-gradient(135deg, #CD7F32, #A0522D);
+    border-color: #8B4513;
+}
+
+.tour-medal-text {
+    font-weight: 600;
+}
+
+/* Star Rating Overlay Styles (Legacy - keeping for backwards compatibility) */
+.listing-image-container {
+    position: relative;
+}
+
+.star-rating-overlay {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 10;
+    display: flex;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.gold-star {
+    color: #FFD700;
+    font-size: 16px;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    line-height: 1;
+}
+
+/* Custom HTML Tooltip */
+.custom-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 350px;
+    min-width: 200px;
+    z-index: 99999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    white-space: normal;
+    text-align: left !important;
+}
+
+.custom-tooltip * {
+    text-align: left !important;
+}
+
+.custom-tooltip.show {
+    opacity: 1;
+}
+
+.custom-tooltip::before {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border: 5px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Arrow for tooltip positioned below element */
+.custom-tooltip.tooltip-below::before {
+    top: -10px;
+    border-top: none;
+    border-bottom-color: rgba(0, 0, 0, 0.9);
+}
+
+/* Style HTML elements within tooltip */
+.custom-tooltip ul {
+    margin: 8px 0;
+    padding-left: 20px;
+    list-style-type: disc;
+    list-style-position: outside;
+}
+
+.custom-tooltip li {
+    margin: 4px 0;
+    line-height: 1.4;
+    display: list-item;
+    margin-left: 0;
+    padding-left: 0;
+    text-indent: 0;
+}
+
+/* Mobile-specific fixes for bullet indentation */
+@media (max-width: 768px) {
+    .custom-tooltip {
+        max-width: 90vw;
+        min-width: 250px;
+        padding: 16px 20px;
+        text-align: left !important;
+    }
+    
+    .custom-tooltip ul {
+        padding-left: 24px;
+        margin: 10px 0;
+        text-align: left;
+    }
+    
+    .custom-tooltip li {
+        margin: 6px 0;
+        line-height: 1.5;
+        padding-left: 0;
+        margin-left: 0;
+        text-align: left;
+    }
+    
+    .custom-tooltip p,
+    .custom-tooltip div {
+        text-align: left !important;
+    }
+}
+
+.custom-tooltip li div {
+    display: inline;
+    margin: 0;
+}
+
+.custom-tooltip strong {
+    font-weight: bold;
+    color: #FFD700;
+}
+
+.custom-tooltip div {
+    margin: 2px 0;
+}
+
+/* Fix for nested divs inside list items */
+.custom-tooltip li > div {
+    display: inline;
+    margin: 0;
+    padding: 0;
+}
+
+.medal-rating-overlay {
+    cursor: help;
+}
+
+.star-rating-overlay {
+    cursor: help;
+}
+
+/* Rating filter label and help button */
+.breadcrumb-filter-label {
+    margin-right: 8px;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    color: inherit;
+}
+
+.rating-help-btn {
+    background: none;
+    color: var(--blue);
+    border: none;
+    font-size: 18px;
+    font-style: normal;
+    text-decoration: underline;
+    cursor: pointer;
+    margin-left: 2px;
+    margin-right: 8px;
+    display: inline;
+    transition: color 0.3s ease;
+}
+
+.rating-help-btn:hover {
+    color: var(--darkblue);
+    text-decoration: none;
+}
+
+/* Rating help popup */
+.rating-help-popup {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 999999999 !important; /* Extremely high z-index with !important */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.rating-help-backdrop {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(0, 0, 0, 0.9) !important; /* Much darker backdrop */
+    cursor: pointer;
+    z-index: 999999998 !important;
+}
+
+.rating-help-content {
+    position: relative !important;
+    background: #f8f9fa; /* Light gray instead of pure white */
+    border: 3px solid #007cba; /* Blue border to make it stand out */
+    border-radius: 12px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0, 0, 0, 0.1); /* Stronger shadow */
+    max-width: 600px;
+    width: 100%;
+    max-height: 80vh; /* Reduced from 90vh to keep it above content */
+    overflow-y: auto;
+    z-index: 999999999 !important;
+    transform: scale(1);
+    transition: transform 0.3s ease;
+    margin-top: -50px; /* Pull it up slightly */
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .rating-help-popup {
+        padding: 10px;
+        align-items: flex-start;
+        padding-top: 60px; /* More space from top on mobile */
+    }
+    
+    .rating-help-content {
+        max-width: 100%;
+        max-height: 75vh; /* Even smaller on mobile */
+        border-radius: 8px;
+        margin-top: 0;
+    }
+    
+    /* Ensure medal circles display properly on mobile */
+    .tour-medal-circle {
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px;
+        min-height: 18px;
+    }
+    
+    .medal-rating-overlay {
+        padding: 3px 6px !important;
+        border-radius: 8px !important;
+    }
+}
+
+.rating-help-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px 16px;
+    border-bottom: 2px solid #007cba; /* Blue border instead of gray */
+    background: #007cba; /* Blue background */
+    color: white; /* White text */
+    border-radius: 12px 12px 0 0; /* Rounded top corners */
+}
+
+.rating-help-header h3 {
+    margin: 0;
+    font-size: 20px;
+    color: white; /* White text */
+    font-weight: 600;
+}
+
+.rating-help-close {
+    background: rgba(255, 255, 255, 0.2); /* Semi-transparent white background */
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    font-size: 28px;
+    color: white; /* White X */
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: background-color 0.3s ease;
+    flex-shrink: 0;
+}
+
+.rating-help-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+.rating-help-body {
+    padding: 20px 24px;
+}
+
+.rating-help-item {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
+    gap: 16px;
+}
+
+.rating-help-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.rating-help-stars {
+    font-size: 22px;
+    color: #FFD700;
+    line-height: 1;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+    min-width: 90px;
+    flex-shrink: 0;
+}
+
+.rating-help-info {
+    flex: 1;
+    min-width: 0; /* Allows flex item to shrink below content size */
+}
+
+.rating-help-info strong {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.rating-help-description {
+    color: #666;
+    line-height: 1.6;
+    font-size: 14px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.rating-help-description ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.rating-help-description li {
+    margin-bottom: 4px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* Mobile responsive adjustments for content */
+@media (max-width: 768px) {
+    .rating-help-header {
+        padding: 16px 20px 12px;
+    }
+    
+    .rating-help-header h3 {
+        font-size: 18px;
+    }
+    
+    .rating-help-body {
+        padding: 16px 20px;
+    }
+    
+    .rating-help-item {
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+    }
+    
+    .rating-help-stars {
+        font-size: 20px;
+        min-width: auto;
+        align-self: flex-start;
+    }
+    
+    .rating-help-info strong {
+        font-size: 15px;
+    }
+    
+    .rating-help-description {
+        font-size: 13px;
+        line-height: 1.5;
+    }
+}
+
+.rating-help-description ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.rating-help-description li {
+    margin: 4px 0;
+}
+
+.rating-help-description strong {
+    color: #FFD700;
+    font-weight: bold;
+    display: inline;
+    margin: 0;
+}
+
+/* Breadcrumb with inline filters - CSS Grid Layout */
+.bst-breadcrumb-container {
+    display: grid;
+    grid-template-columns: 1fr auto; /* Left column takes available space, right column auto-sizes */
+    grid-template-areas: "breadcrumbs filters";
+    align-items: center;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px; /* Consistent left/right padding */
+    height: 40px; /* Explicit height for consistent alignment */
+    gap: 80px; /* Increased from 20px to 40px for more space */
+    position: relative; /* Add positioning */
+    z-index: 2; /* Ensure it's above the translucent overlay */
+}
+
+/* Left column for breadcrumbs - left justified */
+.bst-breadcrumb-list {
+    grid-area: breadcrumbs;
+    display: flex;
+    align-items: center;
+    justify-self: start; /* Left justify in grid area */
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-family: 'Open Sans', sans-serif;
+    font-weight: 600;
+    font-size: 14px; /* Changed from 16px to 14px */
+    letter-spacing: 1.0px;
+    overflow: hidden; /* Prevent overflow */
+    line-height: 1; /* Ensure consistent line height */
+}
+
+/* Right column for filters - right justified */
+.breadcrumb-filters {
+    grid-area: filters;
+    display: flex;
+    align-items: center;
+    justify-self: center; /* Center within the middle grid area */
+    gap: 12px;
+    white-space: nowrap; /* Prevent wrapping of filter controls */
+    line-height: 1; /* Match breadcrumbs line height */
+    margin-right: 0; /* No extra right offset when centered */
+}
+
+.breadcrumb-filter-form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.breadcrumb-filter-select {
+    padding: 8px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    min-width: 140px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    font-family: inherit;
+    color: rgb(102, 102, 102);
+    font-weight: 600;
+    height: 40px; /* Set explicit height for consistent alignment */
+    line-height: 1; /* Match breadcrumbs line height */
+}
+
+.breadcrumb-filter-select option {
+    font-family: inherit;
+    padding: 5px;
+    color: rgb(102, 102, 102);
+    font-weight: 600;
+}
+
+.breadcrumb-filter-select:focus {
+    outline: none;
+    border-color: var(--yellow);
+    box-shadow: 0 0 0 3px rgba(249, 205, 2, 0.2);
+}
+
+.breadcrumb-filter-btn {
+    padding: 8px 20px;
+    background: linear-gradient(135deg, var(--yellow) 0%, #f0c000 100%); /* Changed back to yellow */
+    color: rgb(102, 102, 102); /* Gray text to match breadcrumbs */
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    height: 40px; /* Match select height for perfect alignment */
+    display: flex;
+    align-items: center;
+    line-height: 1; /* Match breadcrumbs line height */
+}
+
+.breadcrumb-filter-btn:hover {
+    background: linear-gradient(135deg, var(--orange) 0%, #e65a00 100%); /* Orange hover to match original yellow button behavior */
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.breadcrumb-filter-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.breadcrumb-clear-btn {
+    padding: 8px 18px;
+    background: linear-gradient(135deg, #666 0%, #555 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+.breadcrumb-clear-btn:hover {
+    background: linear-gradient(135deg, #555 0%, #444 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+    color: white;
+    text-decoration: none;
+}
+
+/* Responsive adjustments for breadcrumb filters */
+@media (max-width: 768px) {
+    .bst-breadcrumb-container {
+        grid-template-columns: 1fr; /* Single column on mobile */
+        grid-template-areas: 
+            "breadcrumbs"
+            "filters";
+        gap: 15px;
+        justify-items: center; /* Center both elements */
+        padding: 15px 20px;
+    }
+    
+    .bst-breadcrumb-list {
+        justify-self: center; /* Center breadcrumbs on mobile */
+    }
+    
+    .breadcrumb-filters {
+        justify-self: center; /* Center filters on mobile */
+    }
+    
+    .breadcrumb-filter-form {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .breadcrumb-filter-select {
+        min-width: auto;
+        width: 150px;
+    }
+}
+
+/* Prevent body scroll when rating help popup is open */
+body.rating-help-open {
+    overflow: hidden;
+}
+
+/* Single Tour Rating Display Styles */
+.tour-rating-section .tour-rating-display {
+    margin-bottom: 5px;
+}
+
+.tour-rating-display .gold-star {
+    color: #FFD700;
+    font-size: 20px;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* ================================================
+   TOUR FILTERS SECTION (Separate from breadcrumbs)
+   ================================================ */
+
+/* Tour filters section - visible on both desktop and mobile */
+.tour-filters-section {
+    background: rgba(255, 255, 255, 0.95);
+    border-bottom: 1px solid #e0e0e0;
+    padding: 15px 0;
+    margin-bottom: 20px;
+}
+
+.tour-filters-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.tour-filter-form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.tour-filter-label {
+    text-transform: uppercase;
+    font-weight: 600;
+    color: #666;
+    font-size: 14px;
+    letter-spacing: 1.0px;
+    margin-right: 8px;
+    white-space: nowrap;
+}
+
+.tour-filter-select {
+    padding: 8px 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    min-width: 140px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    font-family: inherit;
+    color: rgb(102, 102, 102);
+    font-weight: 600;
+    height: 40px;
+    line-height: 1;
+}
+
+.tour-filter-select:focus {
+    outline: none;
+    border-color: var(--yellow);
+    box-shadow: 0 0 0 3px rgba(249, 205, 2, 0.2);
+}
+
+.tour-filter-btn {
+    padding: 8px 20px;
+    background: linear-gradient(135deg, var(--yellow) 0%, #f0c000 100%);
+    color: rgb(102, 102, 102);
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    line-height: 1;
+}
+
+.tour-filter-btn:hover {
+    background: linear-gradient(135deg, var(--orange) 0%, #e65a00 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.tour-filter-clear-btn {
+    padding: 8px 18px;
+    background: linear-gradient(135deg, #666 0%, #555 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+.tour-filter-clear-btn:hover {
+    background: linear-gradient(135deg, #555 0%, #444 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Hide the tour filters section on desktop (only show on mobile) */
+@media (min-width: 769px) {
+    .tour-filters-section {
+        display: none;
+    }
+}
+
+/* Mobile styles for tour filters */
+@media (max-width: 768px) {
+    .tour-filters-section {
+        padding: 8px 0;
+        margin-bottom: 15px;
+    }
+    
+    .tour-filters-container {
+        padding: 0 10px;
+        overflow-x: auto; /* Allow horizontal scroll if needed */
+    }
+    
+    .tour-filter-form {
+        display: flex !important;
+        align-items: center !important;
+        gap: 4px !important;
+        flex-wrap: nowrap !important; /* Force single line */
+        white-space: nowrap !important;
+        min-width: max-content;
+    }
+    
+    .tour-filter-label {
+        display: none !important; /* Hide the RATING: label on mobile */
+    }
+    
+    .tour-filter-select {
+        min-width: 80px !important;
+        width: auto !important;
+        font-size: 14px !important;
+        padding: 6px 8px !important;
+        height: 36px !important;
+        flex-shrink: 1 !important;
+        border-width: 1px !important;
+        max-width: 120px !important;
+    }
+    
+    .tour-filter-btn {
+        font-size: 14px !important;
+        padding: 6px 12px !important;
+        height: 36px !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+        min-width: auto !important;
+    }
+    
+    .tour-filter-clear-btn {
+        font-size: 14px !important;
+        padding: 6px 10px !important;
+        height: 36px !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+        min-width: auto !important;
+    }
+    
+    /* Mobile info button */
+    .mobile-rating-help-btn {
+        background: none !important;
+        color: #666 !important;
+        border: 1px solid #ddd !important;
+        border-radius: 4px !important;
+        box-shadow: none !important;
+        transform: none !important;
+        height: 36px !important;
+        width: 36px !important;
+        padding: 0 !important;
+        font-size: 16px !important;
+        flex-shrink: 0 !important;
+        min-width: 36px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+    }
+    
+    .mobile-rating-help-btn:hover {
+        background: #f5f5f5 !important;
+        color: #333 !important;
+        transform: none !important;
+        box-shadow: none !important;
+    }
+    
+    /* Mobile tour filters - simple and working */
+    .tour-filters-section {
+        display: block;
+        background: white;
+        padding: 15px;
+        margin: 15px 0;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        position: relative;
+        z-index: 999;
+    }
+    
+    .tour-filters-section .tour-filter-form {
+        display: flex;
+        flex-direction: row;
+        gap: 15px;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .tour-filters-section .filter-group {
+        display: flex;
+        flex-direction: row;
+        gap: 8px;
+        align-items: center;
+    }
+    
+    .tour-filters-section .tour-filter-label {
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin: 0;
+        color: #333;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    
+    .tour-filters-section .tour-filter-select {
+        font-size: 14px;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: white;
+        min-width: 200px;
+    }
+    
+    .tour-filters-section .tour-filter-btn,
+    .tour-filters-section .tour-filter-clear-btn {
+        font-size: 14px;
+        padding: 8px 16px;
+        border-radius: 4px;
+        text-decoration: none;
+        white-space: nowrap;
+        cursor: pointer;
+    }
+    
+    .tour-filters-section .tour-filter-btn {
+        background: var(--blue);
+        color: white;
+        border: none;
+    }
+    
+    .tour-filters-section .tour-filter-clear-btn {
+        background: #f8f9fa;
+        color: #666;
+        border: 1px solid #ddd;
+    }
+    
+    .tour-filters-section .rating-help-btn {
+        background: var(--blue);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+    }
+}
+
+/* Extension checkbox label styling */
+#extensionLabel {
+    font-weight: 600;
+    color: #2c5aa0;
+    font-size: 15px;
+    line-height: 1.4;
+}
+
+#extension-checkbox-container {
+    background-color: #f8f9fa;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    transition: all 0.2s ease;
+}
+
+#extension-checkbox-container:hover {
+    background-color: #e9ecef;
+    border-color: #2c5aa0;
+}
+
+#extension-checkbox-container label {
+    margin: 0;
+}
+
+#extensionCheckbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* Mobile styles for extension checkbox */
+@media (max-width: 768px) {
+    #extension-checkbox-container label {
+        display: flex !important;
+        align-items: flex-start !important;
+        gap: 10px !important;
+    }
+    
+    #extensionCheckbox {
+        flex-shrink: 0 !important;
+        width: 18px !important;
+        height: 18px !important;
+        margin-top: 3px !important;
+    }
+    
+    #extensionLabel {
+        flex: 1 !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        white-space: normal !important;
+        text-align: left !important;
+    }
+}

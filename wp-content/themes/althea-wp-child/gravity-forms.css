@@ -1,0 +1,250 @@
+/* Specific styles for the input fields with IDs input_1_93, input_1_77, and input_1_78 */
+body .gform_wrapper #input_4_93,
+body .gform_wrapper #input_4_77,
+body .gform_wrapper #input_4_78,
+body .gform_wrapper #input_4_81 {
+    font-size: 1rem; /* Adjust the value as needed */
+    font-family: 'Open Sans', sans-serif; /* Ensure the font matches */
+    font-weight: bold; /* Make the text bold */
+}
+
+/* Style the price label */
+.ginput_product_price {
+    font-weight: bold;
+    color: #000; /* Change the color as needed */
+    font-size: 1.2em; /* Adjust the font size as needed */
+}
+
+/* Make field labels bold and slightly smaller */
+body .gform_wrapper .gfield_label {
+    font-size: .9rem; /* Adjust the value as needed */
+}
+
+/* Use Open Sans font for all Gravity Forms elements */
+body .gform_wrapper {
+    font-family: 'Open Sans', sans-serif;
+    font-size: 1rem; /* Base font size for all text */
+}
+
+/* Add space between the label and the required field indicator */
+body .gform_wrapper .gfield_label .gfield_required {
+    margin-left: 5px; /* Adjust the value as needed */
+}
+
+/* Ensure consistent font size for text fields, HTML content fields, dropdown fields, and labels */
+body .gform_wrapper input[type="text"],
+body .gform_wrapper input[type="email"],
+body .gform_wrapper input[type="url"],
+body .gform_wrapper input[type="tel"],
+body .gform_wrapper input[type="number"],
+body .gform_wrapper input[type="password"],
+body .gform_wrapper select,
+body .gform_wrapper textarea,
+body .gform_wrapper .custom-html-content,
+body .gform_wrapper .ginput_total,
+body .gform_wrapper .gfield_total,
+body .gform_wrapper .ginput_product_price_wrapper,
+body .gform_wrapper .ginput_product_price_label,
+body .gform_wrapper .ginput_product_price,
+body .gform_wrapper .gfield_label {
+    font-size: 1rem; /* Adjust the value as needed */
+    text-align: left; /* Align text to the left */
+}
+
+/* Custom styles for the HTML content field */
+.custom-html-content {
+    background-color: #f9f9f9; /* Change to your desired background color */
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+
+/* Ensure Gravity Forms fields have proper width */
+body .gform_wrapper .top_label input.medium,
+body .gform_wrapper .top_label select.medium,
+body .gform_wrapper .top_label textarea.textarea {
+    width: 100% !important;
+}
+
+/* Ensure Gravity Forms labels are displayed correctly */
+body .gform_wrapper .top_label .gfield_label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+/* Ensure Gravity Forms submit button is styled correctly */
+body .gform_wrapper .gform_footer .gform_button {
+    background-color: #0073aa; /* Change to your desired color */
+    color: #fff;
+    padding: 10px 20px;
+    border: none;
+    cursor: pointer;
+}
+
+/* Ensure Gravity Forms error messages are styled correctly */
+body .gform_wrapper .validation_error {
+    color: #ff0000; /* Change to your desired color */
+    background-color: #ffe6e6; /* Change to your desired color */
+    padding: 10px;
+    border: 1px solid #ff0000; /* Change to your desired color */
+}
+
+/* Ensure Gravity Forms field descriptions are styled correctly */
+body .gform_wrapper .gfield_description {
+    font-size: 0.9em;
+    color: #666;
+    margin-top: 5px;
+}
+
+/* Hide text within .gform_card_icon elements */
+body .gform_wrapper .gform_card_icon {
+    text-indent: -9999px; /* Move text out of view */
+    overflow: hidden; /* Hide any overflow */
+    position: relative; /* Ensure positioning context */
+}
+
+body .gform_wrapper .gform_card_icon::before {
+    content: ''; /* Ensure the icon is still visible */
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+/* Specific styles for each credit card type using Font Awesome */
+body .gform_wrapper .gform_card_icon_amex::before {
+    content: '\f1f3'; /* Font Awesome icon for American Express */
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    font-size: 24px;
+    color: #007bc1; /* Change to your desired color */
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+body .gform_wrapper .gform_card_icon_discover::before {
+    content: '\f1f2'; /* Font Awesome icon for Discover */
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    font-size: 24px;
+    color: #ff6000; /* Change to your desired color */
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+body .gform_wrapper .gform_card_icon_mastercard::before {
+    content: '\f1f1'; /* Font Awesome icon for MasterCard */
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    font-size: 24px;
+    color: #eb001b; /* Change to your desired color */
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+body .gform_wrapper .gform_card_icon_visa::before {
+    content: '\f1f0'; /* Font Awesome icon for Visa */
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    font-size: 24px;
+    color: #1a1f71; /* Change to your desired color */
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Override the class to set the maximum height */
+body .gform_wrapper .gfield_description.gfield_consent_description {
+    max-height: 200px;
+    overflow: auto; /* Adds scrollbars if content exceeds max height */
+}
+
+/* Style the gf_readonly dropdown fields to appear disabled */
+body .gform_wrapper .gf_readonly select {
+    background-color: #e9ecef !important; /* Light gray background */
+    pointer-events: none !important; /* Prevent interaction */
+    color: #6c757d !important; /* Gray text color */
+    border: 1px solid #ced4da !important; /* Light gray border */
+    cursor: not-allowed !important; /* Change cursor to indicate disabled state */
+}
+
+/* Style for the tourprice input field to make it readonly */
+
+body .gform_wrapper .tourprice input,
+body .gform_wrapper .gf-tour-price input,
+body .gform_wrapper .gf-total input {
+    pointer-events: none; 
+    font-size: larger;
+    border: none; 
+    font-weight: bold; 
+    cursor: not-allowed; 
+}
+
+/* for the fields I send over to the new gravity form */
+/* Style the gf_readonly fields to appear read-only */
+
+body .gform_wrapper .gf-readonly input,
+body .gform_wrapper .gf-readonly textarea,
+body .gform_wrapper .gf-readonly select {
+    pointer-events: none !important; 
+    background-color: #e9ecef !important;
+    color: #6c757d !important;
+    border: 1px solid #ced4da !important; 
+    cursor: not-allowed !important; 
+}
+
+body .gform_wrapper .gf-deposit input,
+body .gform_wrapper .gf-balance input { 
+    pointer-events: none !important; 
+    border: none !important; 
+    cursor: not-allowed !important; 
+}
+
+.hidden-calculated-field {
+    opacity: 0 !important; /* Make the element fully transparent */
+    height: 0 !important; /* Collapse the height */
+    overflow: hidden !important; /* Hide any overflowing content */
+    margin: 0 !important; /* Remove margins */
+    padding: 0 !important; /* Remove padding */
+    border: none !important; /* Remove borders */
+}
+
+/* Red error message styling for Gravity Forms validation errors */
+body .gform_wrapper .gform_validation_errors,
+body .gform_wrapper .gfield_error .gfield_description,
+body .gform_wrapper .validation_message,
+body .gform_wrapper .gfield_stripe_creditcard_error {
+    color: #d93025 !important;
+    background-color: #fce8e6 !important;
+    border-left: 4px solid #d93025 !important;
+    padding: 12px 16px !important;
+    font-weight: 600 !important;
+    margin-bottom: 16px !important;
+}
+
+body .gform_wrapper .gform_validation_errors h2 {
+    color: #d93025 !important;
+    font-weight: 700 !important;
+}
+
+body .gform_wrapper .gfield_error {
+    border-top: 1px solid #d93025 !important;
+    border-bottom: 1px solid #d93025 !important;
+}
+
+/* Green bold amount styling for GF9 amount fields */
+body .gform_wrapper .gf-green-amount input {
+    font-size: 1.5rem !important;
+    color: #28a745 !important;
+    font-weight: bold !important;
+    pointer-events: none !important;
+    border: none !important;
+    background-color: transparent !important;
+}

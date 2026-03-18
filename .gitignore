@@ -1,0 +1,17 @@
+wp-config.php
+.env
+*.log
+wp-content/uploads/
+wp-content/cache/
+wp-content/backups/
+wp-content/upgrade/
+wp-content/debug.log
+# Deploy only our MU plugin + child theme
+wp-content/mu-plugins/*
+!wp-content/mu-plugins/bst_plugin/
+!wp-content/mu-plugins/bst_plugin/**
+wp-content/themes/*
+!wp-content/themes/althea-wp-child/
+!wp-content/themes/althea-wp-child/**
+# Ignore other plugins/themes not managed by git deploy
+wp-content/plugins/*
