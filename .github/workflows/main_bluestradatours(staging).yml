@@ -1,7 +1,10 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
+# STAGING ONLY — deploys to App Service slot "staging".
+# Production uses deploy-production.yml (default slot), not this file.
+#
+# Docs: https://github.com/Azure/webapps-deploy
+# Azure Actions: https://github.com/Azure/actions
 
-name: Deploy WordPress app to Azure Web App - bluestradatours
+name: Deploy to Azure — bluestradatours (STAGING slot)
 on:
   push:
     branches:

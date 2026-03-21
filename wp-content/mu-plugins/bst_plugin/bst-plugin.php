@@ -48,6 +48,9 @@ define('BST_PLUGIN_DIR', plugin_dir_path(__FILE__));
 // Include user roles and capabilities
 require_once plugin_dir_path(__FILE__) . 'includes/user-roles.php';
 
+// ACF / SCF Local JSON (field groups in bst_plugin/acf-json — commit to Git)
+require_once plugin_dir_path(__FILE__) . 'includes/acf-json.php';
+
 // Include the main plugin class
 require_once plugin_dir_path(__FILE__) . 'includes/class-bst-plugin.php';
 
