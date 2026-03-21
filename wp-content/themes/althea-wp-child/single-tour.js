@@ -432,7 +432,7 @@ jQuery(document).ready(function ($) {
       }
       
       // Update label with title, dates (without year), and price in same parentheses
-      var labelText = 'Add ' + tourExtensionSettings.title;
+      var labelText = tourExtensionSettings.title;
       var extensionDatesWithYear = '';
       if (dateText) {
         // Store dates with year for database/gravity forms

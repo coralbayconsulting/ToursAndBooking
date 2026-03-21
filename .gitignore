@@ -1,3 +1,14 @@
+# --- WordPress core (this repo only tracks custom code under wp-content) ---
+/wp-admin/
+/wp-includes/
+/index.php
+/license.txt
+/readme.html
+/llms.txt
+/xmlrpc.php
+/wp-*.php
+/.htaccess
+
 wp-config.php
 .env
 *.log
@@ -6,6 +17,11 @@ wp-content/cache/
 wp-content/backups/
 wp-content/upgrade/
 wp-content/debug.log
+wp-content/languages/
+wp-content/ai1wm-backups/
+wp-content/smush-webp/
+wp-content/w3tc-config/
+wp-content/index.php
 # Deploy only our MU plugin + child theme
 wp-content/mu-plugins/*
 !wp-content/mu-plugins/bst_plugin/
