@@ -1,0 +1,60 @@
+# ngrok agent config (example)
+# Copy to:  %LocalAppData%\ngrok\ngrok.yml   (Windows)
+# Or set:   set NGROK_CONFIG=C:\path\to\ngrok.yml
+#
+# Do NOT commit a real ngrok.yml with your authtoken to Git.
+#
+# Add your token either:
+#   ngrok config add-authtoken YOUR_TOKEN
+# or replace AUTHTOKEN_PLACEHOLDER below (then delete this comment block if you like).
+
+version: "3"
+
+agent:
+  authtoken: AUTHTOKEN_PLACEHOLDER
+  update_channel: stable
+  # Allow Local by Flywheel / custom host when using the ngrok agent web UI / API.
+  web_allow_hosts:
+    - bluestradatours-development.local
+    - localhost
+    - 127.0.0.1
+
+# Optional: tunnel definition (CLI "ngrok http PORT" still works without this.)
+# endpoints:
+#   - name: wp
+#     url: https://
+#     upstream:
+#       url: http://127.0.0.1:10004
+
+# -----------------------------------------------------------------------------
+# Troubleshooting (ngrok acting weird — often config-related)
+# -----------------------------------------------------------------------------
+#
+# 1) Prove which file ngrok reads:
+#      ngrok config check
+#    If this errors, fix YAML or remove the bad line (often empty update_channel).
+#
+# 2) Default path on Windows:
+#      %LOCALAPPDATA%\ngrok\ngrok.yml
+#    Or:  echo %LOCALAPPDATA%\ngrok\ngrok.yml
+#    Custom path: %NGROK_CONFIG%  (if set, that wins).
+#
+# 3) Start with a MINIMAL file (only version + authtoken + update_channel):
+#    - Use spaces for YAML indentation, not tabs.
+#    - Never leave update_channel: with nothing after it (must be stable|beta|unstable).
+#    - Run: ngrok config add-authtoken YOUR_TOKEN
+#      then add web_allow_hosts only if you still see "Rejected host" on the agent UI.
+#
+# 4) Microsoft Store ngrok can behave oddly; if problems persist, install the
+#    Windows installer from https://ngrok.com/download and use its ngrok.exe.
+#
+# 5) Tunnel vs WordPress: ngrok only forwards HTTP. If WordPress redirects to
+#    your .local URL or blocks the ngrok host, fix WP (site URL, or trusted host
+#    plugins) — that is separate from ngrok.yml.
+#
+# 6) web_allow_hosts only affects who may talk to the local ngrok agent API
+#    (e.g. localhost:4040 inspector) with certain Host headers — not the same as
+#    routing traffic to your site. For vhost Local sites, use:
+#      ngrok http PORT --host-header=rewrite
+#    or:
+#      ngrok http PORT --host-header=bluestradatours-development.local

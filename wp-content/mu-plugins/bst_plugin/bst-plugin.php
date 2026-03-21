@@ -44,12 +44,25 @@ add_action('init', function() {
 // Define plugin constants
 define('BST_PLUGIN_VERSION', '1.0.0');
 define('BST_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('BST_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 // Include user roles and capabilities
 require_once plugin_dir_path(__FILE__) . 'includes/user-roles.php';
 
 // ACF / SCF Local JSON (field groups in bst_plugin/acf-json — commit to Git)
 require_once plugin_dir_path(__FILE__) . 'includes/acf-json.php';
+
+// Gravity Forms + Airwallex payment add-on (scaffold) — loads only when GF is active.
+add_action(
+	'gform_loaded',
+	static function () {
+		if ( ! class_exists( 'GFForms', false ) ) {
+			return;
+		}
+		require_once BST_PLUGIN_DIR . 'includes/integrations/gf-airwallex/class-gf-airwallex.php';
+	},
+	5
+);
 
 // Include the main plugin class
 require_once plugin_dir_path(__FILE__) . 'includes/class-bst-plugin.php';
