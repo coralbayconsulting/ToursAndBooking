@@ -3,8 +3,8 @@
 function create_tour_booking_tables() {
     global $wpdb;
 
-    // Force UTF8MB4 charset and collation for proper international character support
-    $charset_collate = "DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+    // Match WordPress DB charset/collation (dbDelta expects this helper).
+    $charset_collate = $wpdb->get_charset_collate();
 
     // Create customers table first (since booking table references it)
     $customers_table = $wpdb->prefix . 'bst_customers';
@@ -147,7 +147,7 @@ function create_tour_booking_tables() {
             created_date DATETIME,
             updated_by VARCHAR(50),
             updated_date DATETIME,
-            PRIMARY KEY (id),
+            PRIMARY KEY  (id),
             KEY customer_id (customer_id)
         ) $charset_collate;
     ";
@@ -202,7 +202,7 @@ function create_tour_booking_tables() {
         message_id VARCHAR(255) DEFAULT NULL,
         batch_id BIGINT(20) UNSIGNED DEFAULT NULL,
         error_message TEXT DEFAULT NULL,
-        PRIMARY KEY (id),
+        PRIMARY KEY  (id),
         KEY booking_id_idx (booking_id),
         KEY email_type_idx (email_type),
         KEY sent_date_idx (sent_date),
@@ -231,7 +231,7 @@ function create_tour_booking_tables() {
         failed_emails INT(11) NOT NULL DEFAULT 0,
         is_test TINYINT(1) DEFAULT 0,
         notes TEXT DEFAULT NULL,
-        PRIMARY KEY (id),
+        PRIMARY KEY  (id),
         KEY batch_timestamp_idx (batch_timestamp),
         KEY sent_by_user_id_idx (sent_by_user_id),
         KEY email_type_idx (email_type),
