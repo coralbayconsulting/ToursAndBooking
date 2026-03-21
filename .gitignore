@@ -10,6 +10,8 @@ wp-content/debug.log
 wp-content/mu-plugins/*
 !wp-content/mu-plugins/bst_plugin/
 !wp-content/mu-plugins/bst_plugin/**
+# MU plugin loader (sibling of bst_plugin/ folder; must not be ignored)
+!wp-content/mu-plugins/bst-plugin.php
 wp-content/themes/*
 !wp-content/themes/althea-wp-child/
 !wp-content/themes/althea-wp-child/**
