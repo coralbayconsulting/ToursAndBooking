@@ -2,7 +2,13 @@
 # Does NOT run automatically on every push to main (use staging workflow for that).
 #
 # Run manually: Actions → "Deploy to Azure — bluestradatours (PRODUCTION)" → Run workflow.
-# Optional: add branch `production` or GitHub Environments + required reviewers later.
+#
+# Troubleshooting:
+# - Always deploys from branch `main` (see checkout ref), so you get the same tree as GitHub main
+#   even if you accidentally run the workflow from another branch in the UI.
+# - If deploy "succeeds" but the site does not change: check Azure RBAC — the GitHub OIDC app
+#   needs permission to deploy the *default* app (not only the staging slot). Add resource
+#   group in GitHub repo variable AZURE_RESOURCE_GROUP if the action cannot resolve the app.
 #
 # Docs: https://github.com/Azure/webapps-deploy
 
@@ -12,40 +18,22 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Zip artifact for deployment
-        run: zip release.zip ./* -r
-
-      - name: Upload artifact for deployment job
-        uses: actions/upload-artifact@v4
-        with:
-          name: wordpress-app
-          path: release.zip
-
   deploy:
     runs-on: ubuntu-latest
-    needs: build
     permissions:
-      id-token: write
       contents: read
+      id-token: write
 
     steps:
-      - name: Download artifact from build job
-        uses: actions/download-artifact@v4
+      # Always use main so manual runs cannot deploy an empty/wrong branch by mistake.
+      - uses: actions/checkout@v4
         with:
-          name: wordpress-app
+          ref: main
+          fetch-depth: 1
 
-      - name: Unzip artifact for deployment
-        run: |
-          unzip release.zip
-          rm release.zip
+      # Same pattern as staging workflow: ./* avoids zipping hidden dirs like .git at repo root.
+      - name: Zip site for deployment
+        run: zip -r release.zip ./*
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -54,10 +42,13 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_80D0218D465E49219EBC687AF0098B6B }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_BEF30C7BEE314963B77018828D554DC4 }}
 
-      # Default slot = production (no slot-name)
+      # Deploy the zip directly (same payload as staging; avoids artifact download path issues).
+      # Omit slot-name → default production app (not the named "staging" slot).
+      # Optional: set repo variable AZURE_RESOURCE_GROUP and uncomment the next line if deploy
+      # fails to resolve the app (duplicate names across RGs).
       - name: Deploy to Azure Web App (production)
         uses: azure/webapps-deploy@v3
-        id: deploy-to-webapp
         with:
           app-name: 'bluestradatours'
-          package: .
+          package: release.zip
+          restart: true
