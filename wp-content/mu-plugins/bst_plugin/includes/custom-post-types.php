@@ -260,76 +260,361 @@ add_filter('pre_get_posts', function($query) {
     }
 });
 
-// Update status counts when Tour Type filter is applied
-add_filter('wp_count_posts', function($counts, $type, $perm) {
-    if ($type === 'tour' && is_admin() && isset($_GET['tour_type_filter']) && $_GET['tour_type_filter'] != '') {
-        global $wpdb;
-        
-        // Get counts for each status with the Tour Type filter applied using taxonomy
-        $tour_type_code = sanitize_text_field($_GET['tour_type_filter']);
-        
-        $query = "
-            SELECT p.post_status, COUNT(*) as count 
-            FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->term_relationships} tr ON p.ID = tr.object_id
-            INNER JOIN {$wpdb->term_taxonomy} tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
-            INNER JOIN {$wpdb->terms} t ON tt.term_id = t.term_id
-            WHERE p.post_type = 'tour'
-            AND tt.taxonomy = 'tour-type-code'
-            AND t.slug = %s
-            GROUP BY p.post_status
-        ";
-        
-        $results = $wpdb->get_results($wpdb->prepare($query, $tour_type_code));
-        
-        // Reset all counts to 0
-        foreach ($counts as $status => $count) {
+/**
+ * Current tour-type filter slug from the Tours list screen (tour-type-code taxonomy).
+ *
+ * @return string
+ */
+function bst_tour_get_request_tour_type_filter_slug() {
+    if ( empty( $_GET['tour_type_filter'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        return '';
+    }
+    return sanitize_text_field( wp_unslash( $_GET['tour_type_filter'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+}
+
+/**
+ * Parse query args from a list-table href (edit.php?...).
+ *
+ * WordPress outputs `&amp;` in HTML attributes; parse_str() on the raw string drops params like `author`
+ * (Mine tab), so normalize before parsing.
+ *
+ * @param string $href Value from href="..." (relative or absolute).
+ * @return array<string, string>
+ */
+function bst_parse_edit_php_href_query_args( $href ) {
+    $href = str_replace( '&amp;', '&', $href );
+    $href = html_entity_decode( $href, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+    $parts = wp_parse_url( $href );
+    $query  = isset( $parts['query'] ) ? $parts['query'] : '';
+    $params = array();
+    if ( $query !== '' ) {
+        parse_str( $query, $params );
+    }
+    return $params;
+}
+
+/**
+ * Post statuses that appear in the default admin list table query when no `post_status` filter is set.
+ *
+ * Matches {@see WP_Query} logic (public OR protected+show_in_admin_all_list, plus private).
+ * Statuses registered only with `show_in_admin_all_list` (e.g. some "cancelled" setups) but without
+ * `public` or `protected` are excluded from the main list — they only appear on their status tab.
+ * Using only `NOT IN ( show_in_admin_all_list => false )` for Mine over-counts those.
+ *
+ * @return string[]
+ */
+function bst_wp_admin_default_browse_post_status_slugs() {
+    $public   = array_values( (array) get_post_stati( array( 'public' => true ), 'names' ) );
+    $prot_adm = array_values(
+        (array) get_post_stati(
+            array(
+                'protected'              => true,
+                'show_in_admin_all_list' => true,
+            ),
+            'names'
+        )
+    );
+    $private = array_values( (array) get_post_stati( array( 'private' => true ), 'names' ) );
+
+    return array_unique( array_merge( $public, $prot_adm, $private ) );
+}
+
+/**
+ * Per-status counts + "mine" count for tours filtered by tour-type-code, matching core list table logic.
+ *
+ * @param string $tour_type_slug Taxonomy term slug (tour-type-code).
+ * @param string $perm           Same as wp_count_posts second arg ('readable' or '').
+ * @return array{statuses: stdClass, mine: int}|null
+ */
+function bst_tour_get_filtered_tour_counts( $tour_type_slug, $perm = '' ) {
+    global $wpdb;
+
+    $tour_type_slug = sanitize_title( $tour_type_slug );
+    if ( '' === $tour_type_slug ) {
+        return null;
+    }
+
+    $private_sql = '';
+    if ( 'readable' === $perm && is_user_logged_in() ) {
+        $pto = get_post_type_object( 'tour' );
+        if ( $pto && ! current_user_can( $pto->cap->read_private_posts ) ) {
+            $private_sql = $wpdb->prepare(
+                ' AND (p.post_status != "private" OR ( p.post_author = %d AND p.post_status = "private" ))',
+                get_current_user_id()
+            );
+        }
+    }
+
+    $base_from = "
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->term_relationships} tr ON p.ID = tr.object_id
+        INNER JOIN {$wpdb->term_taxonomy} tt ON tr.term_taxonomy_id = tt.term_taxonomy_id AND tt.taxonomy = 'tour-type-code'
+        INNER JOIN {$wpdb->terms} t ON tt.term_id = t.term_id AND t.slug = %s
+        WHERE p.post_type = 'tour'
+        {$private_sql}
+    ";
+
+    $query = "
+        SELECT p.post_status, COUNT(DISTINCT p.ID) AS count
+        {$base_from}
+        GROUP BY p.post_status
+    ";
+
+    // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- base_from contains prepare placeholder for slug only when no private_sql; see below.
+    $prepared = $wpdb->prepare( $query, $tour_type_slug );
+    $results  = $wpdb->get_results( $prepared );
+
+    $statuses = (object) array_fill_keys( array_keys( get_post_stati() ), 0 );
+    foreach ( $results as $row ) {
+        if ( isset( $statuses->{$row->post_status} ) ) {
+            $statuses->{$row->post_status} = (int) $row->count;
+        }
+    }
+
+    // "Mine" must match rows the default admin list would return (see bst_wp_admin_default_browse_post_status_slugs).
+    $browse_slugs = bst_wp_admin_default_browse_post_status_slugs();
+    $browse_in    = "'" . implode( "','", array_map( 'esc_sql', $browse_slugs ) ) . "'";
+    $mine_sql     = "
+        SELECT COUNT(DISTINCT p.ID)
+        {$base_from}
+        AND p.post_author = %d
+        AND p.post_status IN ( {$browse_in} )
+    ";
+    $mine         = (int) $wpdb->get_var( $wpdb->prepare( $mine_sql, $tour_type_slug, get_current_user_id() ) );
+
+    return array(
+        'statuses' => $statuses,
+        'mine'     => $mine,
+    );
+}
+
+/**
+ * Total for the "All" subview: sum of status counts minus statuses hidden from the All list (core behavior).
+ *
+ * @param stdClass $counts Per-status counts object.
+ * @return int
+ */
+function bst_tour_all_total_from_status_counts( $counts ) {
+    $total = array_sum( (array) $counts );
+    foreach ( get_post_stati( array( 'show_in_admin_all_list' => false ) ) as $state ) {
+        if ( isset( $counts->$state ) ) {
+            $total -= (int) $counts->$state;
+        }
+    }
+    return (int) $total;
+}
+
+/**
+ * Tour Date list: selected tour ID from meta_tour_filter (ACF "tour" field on tour-date).
+ *
+ * @return int
+ */
+function bst_tour_date_get_request_meta_tour_filter_id() {
+    if ( empty( $_GET['meta_tour_filter'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        return 0;
+    }
+    return absint( wp_unslash( $_GET['meta_tour_filter'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+}
+
+/**
+ * Per-status + Mine counts for tour-date posts linked to a given tour (meta key `tour`).
+ *
+ * @param int    $tour_id Tour post ID.
+ * @param string $perm    Same as wp_count_posts second arg ('readable' or '').
+ * @return array{statuses: stdClass, mine: int}|null
+ */
+function bst_tour_date_get_filtered_counts( $tour_id, $perm = '' ) {
+    global $wpdb;
+
+    $tour_id = absint( $tour_id );
+    if ( $tour_id <= 0 ) {
+        return null;
+    }
+
+    // ACF / post object fields often store the ID as a string in postmeta.
+    $tour_meta = (string) $tour_id;
+
+    $private_sql = '';
+    if ( 'readable' === $perm && is_user_logged_in() ) {
+        $pto = get_post_type_object( 'tour-date' );
+        if ( $pto && ! current_user_can( $pto->cap->read_private_posts ) ) {
+            $private_sql = $wpdb->prepare(
+                ' AND (p.post_status != "private" OR ( p.post_author = %d AND p.post_status = "private" ))',
+                get_current_user_id()
+            );
+        }
+    }
+
+    $join = "
+        INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+        AND pm.meta_key = 'tour'
+        AND pm.meta_value = %s
+    ";
+
+    $query = "
+        SELECT p.post_status, COUNT(DISTINCT p.ID) AS count
+        FROM {$wpdb->posts} p
+        {$join}
+        WHERE p.post_type = 'tour-date'
+        {$private_sql}
+        GROUP BY p.post_status
+    ";
+
+    $prepared = $wpdb->prepare( $query, $tour_meta );
+    $results  = $wpdb->get_results( $prepared );
+
+    $statuses = (object) array_fill_keys( array_keys( get_post_stati() ), 0 );
+    foreach ( $results as $row ) {
+        if ( isset( $statuses->{$row->post_status} ) ) {
+            $statuses->{$row->post_status} = (int) $row->count;
+        }
+    }
+
+    $browse_slugs = bst_wp_admin_default_browse_post_status_slugs();
+    $browse_in    = "'" . implode( "','", array_map( 'esc_sql', $browse_slugs ) ) . "'";
+
+    $mine_sql = "
+        SELECT COUNT(DISTINCT p.ID)
+        FROM {$wpdb->posts} p
+        {$join}
+        WHERE p.post_type = 'tour-date'
+        {$private_sql}
+        AND p.post_author = %d
+        AND p.post_status IN ( {$browse_in} )
+    ";
+
+    $mine = (int) $wpdb->get_var( $wpdb->prepare( $mine_sql, $tour_meta, get_current_user_id() ) );
+
+    return array(
+        'statuses' => $statuses,
+        'mine'     => $mine,
+    );
+}
+
+// Update status counts when Tour Type filter is applied.
+add_filter(
+    'wp_count_posts',
+    function ( $counts, $type, $perm ) {
+        if ( 'tour' !== $type || ! is_admin() ) {
+            return $counts;
+        }
+        $slug = bst_tour_get_request_tour_type_filter_slug();
+        if ( '' === $slug ) {
+            return $counts;
+        }
+
+        $data = bst_tour_get_filtered_tour_counts( $slug, $perm );
+        if ( null === $data ) {
+            return $counts;
+        }
+
+        foreach ( $counts as $status => $_c ) {
             $counts->$status = 0;
         }
-        
-        // Update counts based on query results
-        foreach ($results as $result) {
-            if (property_exists($counts, $result->post_status)) {
-                $counts->{$result->post_status} = $result->count;
+        foreach ( $data['statuses'] as $status => $num ) {
+            if ( property_exists( $counts, $status ) ) {
+                $counts->$status = (int) $num;
             }
         }
-    }
-    
-    return $counts;
-}, 10, 3);
 
-// Preserve Tour Type filter when clicking status filters
-add_filter('views_edit-tour', function($views) {
-    if (isset($_GET['tour_type_filter']) && $_GET['tour_type_filter'] != '') {
-        $tour_type_code = sanitize_text_field($_GET['tour_type_filter']);
-        
-        // Rebuild each status filter link to include the tour type parameter
-        foreach ($views as $key => $view) {
-            // Extract the existing URL from the href attribute
-            if (preg_match('/href="([^"]*)"/', $view, $matches)) {
-                $url = $matches[1];
-                
-                // Parse the URL and add our parameter
-                $parsed_url = parse_url($url);
-                parse_str($parsed_url['query'] ?? '', $query_params);
-                
-                // Ensure post_type=tour is always included
-                $query_params['post_type'] = 'tour';
-                
-                // Add the tour type filter
-                $query_params['tour_type_filter'] = $tour_type_code;
-                
-                // Rebuild the URL
-                $new_url = admin_url('edit.php?' . http_build_query($query_params));
-                
-                // Replace the href in the view
-                $views[$key] = str_replace($url, $new_url, $view);
+        return $counts;
+    },
+    10,
+    3
+);
+
+// Preserve Tour Type filter when clicking status filters; fix subsubsub numbers (incl. Mine) when filtered.
+add_filter(
+    'views_edit-tour',
+    function ( $views ) {
+        $slug = bst_tour_get_request_tour_type_filter_slug();
+        if ( '' !== $slug ) {
+            foreach ( $views as $key => $view ) {
+                if ( preg_match( '/href="([^"]*)"/', $view, $matches ) ) {
+                    $url = $matches[1];
+
+                    $query_params = bst_parse_edit_php_href_query_args( $url );
+
+                    $query_params['post_type']        = 'tour';
+                    $query_params['tour_type_filter'] = $slug;
+
+                    $new_url       = admin_url( 'edit.php?' . http_build_query( $query_params ) );
+                    $views[ $key ] = str_replace( $url, $new_url, $view );
+                }
+            }
+
+            // Patch counts in labels — same logic as views_edit-tour-date (All/Mine + any status tab, incl. custom).
+            $data = bst_tour_get_filtered_tour_counts( $slug, 'readable' );
+            if ( ! $data ) {
+                return $views;
+            }
+
+            $s = $data['statuses'];
+            foreach ( $views as $vkey => $html ) {
+                if ( false === strpos( $html, '(' ) ) {
+                    continue;
+                }
+                if ( 'all' === $vkey ) {
+                    $num = bst_tour_all_total_from_status_counts( $s );
+                } elseif ( 'mine' === $vkey ) {
+                    $num = (int) $data['mine'];
+                } elseif ( isset( $s->{$vkey} ) ) {
+                    $num = (int) $s->{$vkey};
+                } else {
+                    continue;
+                }
+                $views[ $vkey ] = preg_replace(
+                    '/\(\s*[\d,]+\s*\)/',
+                    '(' . number_format_i18n( $num ) . ')',
+                    $html,
+                    1
+                );
             }
         }
-    }
-    
-    return $views;
-});
+
+        return $views;
+    },
+    10
+);
+
+/**
+ * Pass list filter into post edit URLs so "Record X of Y" and prev/next use the same subset (server-side, no JS required).
+ */
+add_filter(
+    'get_edit_post_link',
+    function ( $link, $post_id, $context ) {
+        if ( 'display' !== $context || ! is_admin() || ! $link ) {
+            return $link;
+        }
+        $post = get_post( (int) $post_id );
+        if ( ! $post ) {
+            return $link;
+        }
+        if ( 'tour' === $post->post_type ) {
+            $slug = bst_tour_get_request_tour_type_filter_slug();
+            if ( '' !== $slug ) {
+                $link = add_query_arg( 'filter_tour_type', $slug, $link );
+            }
+        }
+        if ( 'tour-date' === $post->post_type && ! empty( $_GET['meta_tour_filter'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            $link = add_query_arg(
+                'filter_tour',
+                sanitize_text_field( wp_unslash( $_GET['meta_tour_filter'] ) ), // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+                $link
+            );
+        }
+        // Mine tab uses ?author=ID on the list; use filter_author on post.php so nav matches.
+        if ( in_array( $post->post_type, array( 'tour', 'tour-date' ), true ) && ! empty( $_GET['author'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            $aid = absint( $_GET['author'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            if ( $aid ) {
+                $link = add_query_arg( 'filter_author', $aid, $link );
+            }
+        }
+        return $link;
+    },
+    10,
+    3
+);
 
 // Add sort indicator for auto-sorted title column
 add_action('admin_footer', function() {
@@ -585,83 +870,89 @@ add_filter('pre_get_posts', function($query) {
     }
 });
 
-// Update status counts when Tour filter is applied to tour-dates
-add_filter('wp_count_posts', function($counts, $type, $perm) {
-    if ($type === 'tour-date' && is_admin() && isset($_GET['meta_tour_filter']) && $_GET['meta_tour_filter'] != '') {
-        global $wpdb;
-        
-        // Get counts for each status with the Tour filter applied
-        $tour_id = intval($_GET['meta_tour_filter']);
-        
-        $query = "
-            SELECT p.post_status, COUNT(*) as count 
-            FROM {$wpdb->posts} p
-            INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-            WHERE p.post_type = 'tour-date'
-            AND pm.meta_key = 'tour'
-            AND pm.meta_value = %s
-            GROUP BY p.post_status
-        ";
-        
-        $results = $wpdb->get_results($wpdb->prepare($query, $tour_id));
-        
-        // Create a new counts object to ensure we have all statuses
-        $filtered_counts = (object) array();
-        
-        // Initialize with 0 for all known statuses
-        $known_statuses = array('publish', 'draft', 'pending', 'private', 'future', 'trash', 'auto-draft', 'inherit');
-        foreach ($known_statuses as $status) {
-            $filtered_counts->$status = 0;
+// Update status counts when Tour filter is applied to tour-dates (matches list query + Mine tab).
+add_filter(
+    'wp_count_posts',
+    function ( $counts, $type, $perm ) {
+        if ( 'tour-date' !== $type || ! is_admin() ) {
+            return $counts;
         }
-        
-        // Also initialize any existing counts properties to 0
-        foreach ($counts as $status => $count) {
-            $filtered_counts->$status = 0;
+        $tid = bst_tour_date_get_request_meta_tour_filter_id();
+        if ( $tid <= 0 ) {
+            return $counts;
         }
-        
-        // Update with actual filtered counts
-        foreach ($results as $result) {
-            $filtered_counts->{$result->post_status} = intval($result->count);
-        }
-        
-        return $filtered_counts;
-    }
-    
-    return $counts;
-}, 10, 3);
 
-// Preserve Tour filter when clicking status filters for tour-dates
-add_filter('views_edit-tour-date', function($views) {
-    if (isset($_GET['meta_tour_filter']) && $_GET['meta_tour_filter'] != '') {
-        $tour_id = sanitize_text_field($_GET['meta_tour_filter']);
-        
-        // Rebuild each status filter link to include the tour filter parameter
-        foreach ($views as $key => $view) {
-            // Extract the existing URL from the href attribute
-            if (preg_match('/href="([^"]*)"/', $view, $matches)) {
-                $url = $matches[1];
-                
-                // Parse the URL and add our parameter
-                $parsed_url = parse_url($url);
-                parse_str($parsed_url['query'] ?? '', $query_params);
-                
-                // Ensure post_type=tour-date is always included
-                $query_params['post_type'] = 'tour-date';
-                
-                // Add the tour filter
-                $query_params['meta_tour_filter'] = $tour_id;
-                
-                // Rebuild the URL
-                $new_url = admin_url('edit.php?' . http_build_query($query_params));
-                
-                // Replace the href in the view
-                $views[$key] = str_replace($url, $new_url, $view);
+        $data = bst_tour_date_get_filtered_counts( $tid, $perm );
+        if ( null === $data ) {
+            return $counts;
+        }
+
+        foreach ( $counts as $status => $_c ) {
+            $counts->$status = 0;
+        }
+        foreach ( $data['statuses'] as $status => $num ) {
+            if ( property_exists( $counts, $status ) ) {
+                $counts->$status = (int) $num;
             }
         }
-    }
-    
-    return $views;
-});
+
+        return $counts;
+    },
+    10,
+    3
+);
+
+// Preserve Tour filter when clicking status filters; fix subsubsub counts (incl. Mine + custom statuses).
+add_filter(
+    'views_edit-tour-date',
+    function ( $views ) {
+        $tour_id = bst_tour_date_get_request_meta_tour_filter_id();
+        if ( $tour_id <= 0 ) {
+            return $views;
+        }
+
+        foreach ( $views as $key => $view ) {
+            if ( preg_match( '/href="([^"]*)"/', $view, $matches ) ) {
+                $url           = $matches[1];
+                $query_params  = bst_parse_edit_php_href_query_args( $url );
+                $query_params['post_type']        = 'tour-date';
+                $query_params['meta_tour_filter'] = $tour_id;
+                $new_url                         = admin_url( 'edit.php?' . http_build_query( $query_params ) );
+                $views[ $key ]                   = str_replace( $url, $new_url, $view );
+            }
+        }
+
+        $data = bst_tour_date_get_filtered_counts( $tour_id, 'readable' );
+        if ( ! $data ) {
+            return $views;
+        }
+
+        $s = $data['statuses'];
+        foreach ( $views as $vkey => $html ) {
+            if ( false === strpos( $html, '(' ) ) {
+                continue;
+            }
+            if ( 'all' === $vkey ) {
+                $num = bst_tour_all_total_from_status_counts( $s );
+            } elseif ( 'mine' === $vkey ) {
+                $num = (int) $data['mine'];
+            } elseif ( isset( $s->{$vkey} ) ) {
+                $num = (int) $s->{$vkey};
+            } else {
+                continue;
+            }
+            $views[ $vkey ] = preg_replace(
+                '/\(\s*[\d,]+\s*\)/',
+                '(' . number_format_i18n( $num ) . ')',
+                $html,
+                1
+            );
+        }
+
+        return $views;
+    },
+    10
+);
 
 // Add custom columns to the Tour Date post type
 add_filter('manage_tour-date_posts_columns', 'set_custom_edit_tour_date_columns');

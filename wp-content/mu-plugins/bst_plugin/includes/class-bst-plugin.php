@@ -2822,15 +2822,13 @@ class BST_Plugin {
             return;
         }
         
-        // Get current list state parameters
+        // Get current list state parameters (tour / tour-date filters are appended server-side via get_edit_post_link).
         $params = array();
-        if (isset($_GET['orderby'])) $params['sort_by'] = sanitize_text_field($_GET['orderby']);
-        if (isset($_GET['order'])) $params['sort_order'] = sanitize_text_field($_GET['order']);
-        if (isset($_GET['tour_type_filter']) && !empty($_GET['tour_type_filter'])) {
-            $params['filter_tour_type'] = sanitize_text_field($_GET['tour_type_filter']);
+        if (isset($_GET['orderby'])) {
+            $params['sort_by'] = sanitize_text_field($_GET['orderby']);
         }
-        if (isset($_GET['meta_tour_filter']) && !empty($_GET['meta_tour_filter'])) {
-            $params['filter_tour'] = sanitize_text_field($_GET['meta_tour_filter']);
+        if (isset($_GET['order'])) {
+            $params['sort_order'] = sanitize_text_field($_GET['order']);
         }
         if (isset($_GET['s']) && !empty($_GET['s'])) $params['search'] = sanitize_text_field($_GET['s']);
         if (isset($_GET['post_status']) && !empty($_GET['post_status'])) {
@@ -2913,7 +2911,7 @@ class BST_Plugin {
         // Get list state parameters from the current request
         $list_params = array();
         $params_to_preserve = array(
-            'sort_by', 'sort_order', 'filter_tour_type', 'filter_tour', 'search', 'filter_status', 'filter_date'
+            'sort_by', 'sort_order', 'filter_tour_type', 'filter_tour', 'filter_author', 'search', 'filter_status', 'filter_date'
         );
         
         foreach ($params_to_preserve as $param) {
@@ -2943,21 +2941,31 @@ class BST_Plugin {
         // Get list state parameters using tour booking system parameter names
         $list_state = array();
         
-        // Map our parameters to WordPress list parameters
+        // Map our parameters to WordPress list / query parameters.
         $param_mapping = array(
             'sort_by' => 'orderby',
-            'sort_order' => 'order', 
+            'sort_order' => 'order',
             'filter_tour_type' => 'tour_type_filter',
             'filter_tour' => 'meta_tour_filter',
             'search' => 's',
             'filter_status' => 'post_status',
-            'filter_date' => 'm'
+            'filter_date' => 'm',
+            // Mine tab: list uses ?author=ID; on post.php we use filter_author=ID to avoid clashes.
+            'filter_author' => 'author',
         );
-        
-        foreach ($param_mapping as $our_param => $wp_param) {
-            if (isset($_GET[$our_param]) && !empty($_GET[$our_param])) {
-                $list_state[$wp_param] = sanitize_text_field($_GET[$our_param]);
+
+        foreach ( $param_mapping as $our_param => $wp_param ) {
+            if ( ! isset( $_GET[ $our_param ] ) || '' === $_GET[ $our_param ] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+                continue;
             }
+            if ( 'filter_author' === $our_param ) {
+                $aid = absint( wp_unslash( $_GET['filter_author'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+                if ( $aid ) {
+                    $list_state['author'] = $aid;
+                }
+                continue;
+            }
+            $list_state[ $wp_param ] = sanitize_text_field( wp_unslash( $_GET[ $our_param ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
         }
         
         // Build the back to list URL
@@ -3021,6 +3029,23 @@ class BST_Plugin {
         echo '});';
         echo '</script>';
     }
+
+    /**
+     * post_status for edit-screen nav queries: explicit tab from list_state, else same as default admin browse
+     * (see bst_wp_admin_default_browse_post_status_slugs) — not `any`, so e.g. cancelled-only rows match the list.
+     *
+     * @param array $list_state Parsed list parameters (orderby, author, post_status, …).
+     * @return string|string[] WP_Query post_status argument.
+     */
+    private function bst_get_nav_query_post_status( $list_state ) {
+        if ( ! empty( $list_state['post_status'] ) ) {
+            return $list_state['post_status'];
+        }
+        if ( function_exists( 'bst_wp_admin_default_browse_post_status_slugs' ) ) {
+            return bst_wp_admin_default_browse_post_status_slugs();
+        }
+        return 'any';
+    }
     
     /**
      * Get record position information
@@ -3031,7 +3056,7 @@ class BST_Plugin {
             'post_type' => $post->post_type,
             'posts_per_page' => -1,
             'fields' => 'ids',
-            'post_status' => isset($list_state['post_status']) ? $list_state['post_status'] : 'any'
+            'post_status' => $this->bst_get_nav_query_post_status( $list_state ),
         );
         
         // Add search if present
@@ -3048,6 +3073,11 @@ class BST_Plugin {
                     'terms'    => $list_state['tour_type_filter'],
                 ),
             );
+        }
+
+        // Mine tab: restrict to author (same as ?author= on edit.php list).
+        if ( isset( $list_state['author'] ) && $list_state['author'] > 0 ) {
+            $query_args['author'] = absint( $list_state['author'] );
         }
         
         // Add tour filter if present (for tour-dates)
@@ -3175,7 +3205,7 @@ class BST_Plugin {
             'post_type' => $post->post_type,
             'posts_per_page' => -1,
             'fields' => 'ids',
-            'post_status' => isset($list_state['post_status']) ? $list_state['post_status'] : 'any'
+            'post_status' => $this->bst_get_nav_query_post_status( $list_state ),
         );
         
         // Add search if present
@@ -3192,6 +3222,10 @@ class BST_Plugin {
                     'terms'    => $list_state['tour_type_filter'],
                 ),
             );
+        }
+
+        if ( isset( $list_state['author'] ) && $list_state['author'] > 0 ) {
+            $query_args['author'] = absint( $list_state['author'] );
         }
         
         // Add tour filter if present (for tour-dates)
@@ -3314,6 +3348,9 @@ class BST_Plugin {
                     case 'meta_tour_filter':
                         $edit_params['filter_tour'] = $value;
                         break;
+                    case 'author':
+                        $edit_params['filter_author'] = $value;
+                        break;
                     case 's':
                         $edit_params['search'] = $value;
                         break;
@@ -3350,6 +3387,9 @@ class BST_Plugin {
                         break;
                     case 'meta_tour_filter':
                         $edit_params['filter_tour'] = $value;
+                        break;
+                    case 'author':
+                        $edit_params['filter_author'] = $value;
                         break;
                     case 's':
                         $edit_params['search'] = $value;
