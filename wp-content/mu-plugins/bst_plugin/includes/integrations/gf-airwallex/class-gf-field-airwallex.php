@@ -34,6 +34,21 @@ class GF_Field_Airwallex extends GF_Field {
 	}
 
 	/**
+	 * Place the field under **Pricing Fields** in the form editor (like Stripe).
+	 *
+	 * GF_Field defaults {@see get_form_editor_button()} to `standard_fields`; setting the group here
+	 * is required for the sidebar accordion, not only {@see get_form_editor_field_group()}.
+	 *
+	 * @return array{group:string,text:string}
+	 */
+	public function get_form_editor_button() {
+		return array(
+			'group' => 'pricing_fields',
+			'text'  => $this->get_form_editor_field_title(),
+		);
+	}
+
+	/**
 	 * @return array
 	 */
 	public function get_form_editor_field_settings() {
@@ -146,18 +161,6 @@ class GF_Field_Airwallex extends GF_Field {
 				</div>
 			</div>
 			<div style="<?php echo esc_attr( $row ); ?>">
-				<div style="flex:1;min-width:0;">
-					<label style="<?php echo esc_attr( $label ); ?>"><?php esc_html_e( 'Name on card', 'bst' ); ?></label>
-					<input type="text" readonly disabled style="<?php echo esc_attr( $input ); ?>" value="Jane Cardholder" aria-hidden="true" />
-				</div>
-			</div>
-			<div style="<?php echo esc_attr( $row ); ?>">
-				<div style="flex:1;min-width:0;">
-					<label style="<?php echo esc_attr( $label ); ?>"><?php esc_html_e( 'Billing postal / ZIP', 'bst' ); ?></label>
-					<input type="text" readonly disabled style="<?php echo esc_attr( $input ); ?>" value="94102" aria-hidden="true" />
-				</div>
-			</div>
-			<div style="<?php echo esc_attr( $row_last ); ?>">
 				<div style="<?php echo esc_attr( $half ); ?>">
 					<label style="<?php echo esc_attr( $label ); ?>"><?php esc_html_e( 'Expiration', 'bst' ); ?></label>
 					<input type="text" readonly disabled style="<?php echo esc_attr( $input ); ?>" value="12 / 34" aria-hidden="true" />
@@ -165,6 +168,16 @@ class GF_Field_Airwallex extends GF_Field {
 				<div style="<?php echo esc_attr( $half ); ?>">
 					<label style="<?php echo esc_attr( $label ); ?>"><?php esc_html_e( 'CVC', 'bst' ); ?></label>
 					<input type="text" readonly disabled style="<?php echo esc_attr( $input ); ?>" value="123" aria-hidden="true" />
+				</div>
+			</div>
+			<div style="<?php echo esc_attr( $row_last ); ?>">
+				<div style="<?php echo esc_attr( $half ); ?>">
+					<label style="<?php echo esc_attr( $label ); ?>"><?php esc_html_e( 'Name on card', 'bst' ); ?></label>
+					<input type="text" readonly disabled style="<?php echo esc_attr( $input ); ?>" value="Jane Cardholder" aria-hidden="true" />
+				</div>
+				<div style="<?php echo esc_attr( $half ); ?>">
+					<label style="<?php echo esc_attr( $label ); ?>"><?php esc_html_e( 'Billing postal / ZIP', 'bst' ); ?></label>
+					<input type="text" readonly disabled style="<?php echo esc_attr( $input ); ?>" value="94102" aria-hidden="true" />
 				</div>
 			</div>
 			<p style="<?php echo esc_attr( $hint ); ?>">
