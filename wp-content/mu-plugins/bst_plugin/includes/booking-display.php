@@ -3358,7 +3358,9 @@ function bst_booking_invoice_shortcode($atts) {
 
 /**
  * Generate expandable bank wire instructions section
- * Checks if any payments use Bank Wire and if they are pending (no received date)
+ * Checks if any payments use Bank Wire and if they are still pending.
+ * For a real DB booking, "pending" uses per-line payment status (see bst_payment_line_received_for_display).
+ * For entry-only context (no booking row), pending is inferred from missing received date on the pseudo-booking.
  * Auto-expands based on page context and pending status
  * 
  * @param object $booking The booking object
@@ -3406,7 +3408,13 @@ function bst_generate_bank_wire_section($booking, $entry = null, $always_open = 
     // Check deposit payment
     if (!empty($booking->deposit_payment_method) && $booking->deposit_payment_method === 'Bank Wire') {
         $has_bank_wire = true;
-        $is_pending = empty($booking->deposit_payment_date);
+        $dep_amt_wire = isset($booking->deposit_payment_amount) ? floatval($booking->deposit_payment_amount) : 0.0;
+        if (function_exists('bst_payment_line_received_for_display')) {
+            // Real booking: trust line status + amount; entry-only pseudo-booking has no amount/status → stays "pending".
+            $is_pending = ! bst_payment_line_received_for_display($booking->deposit_payment_status ?? null, $dep_amt_wire);
+        } else {
+            $is_pending = empty($booking->deposit_payment_date);
+        }
         if ($is_pending) {
             $has_pending_wire = true;
         }
@@ -3421,7 +3429,12 @@ function bst_generate_bank_wire_section($booking, $entry = null, $always_open = 
     // Check balance payment
     if (!empty($booking->balance_payment_method) && $booking->balance_payment_method === 'Bank Wire') {
         $has_bank_wire = true;
-        $is_pending = empty($booking->balance_payment_date);
+        $bal_amt_wire = isset($booking->balance_payment_amount) ? floatval($booking->balance_payment_amount) : 0.0;
+        if (function_exists('bst_payment_line_received_for_display')) {
+            $is_pending = ! bst_payment_line_received_for_display($booking->balance_payment_status ?? null, $bal_amt_wire);
+        } else {
+            $is_pending = empty($booking->balance_payment_date);
+        }
         if ($is_pending) {
             $has_pending_wire = true;
         }

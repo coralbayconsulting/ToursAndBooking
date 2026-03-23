@@ -966,21 +966,46 @@ function bst_update_tile() {
             
             if ($current_booking) {
                 $current_status = $current_booking->booking_status;
-                
-                // Rule 1: If status = Pending, payment method = Bank Wire, and deposit amount/date provided, change to "Booked"
-                if ($current_status === 'Pending' && 
-                    $data['deposit_payment_method'] === 'Bank Wire' && 
-                    !empty($data['deposit_payment_amount']) && 
-                    !empty($data['deposit_payment_date'])) {
-                    $data['booking_status'] = 'Booked';
+
+                // Resolve line statuses from POST with DB fallback (same row as financials save).
+                $dep_status_for_rules = $data['deposit_payment_status'] ?? $current_booking->deposit_payment_status ?? null;
+                $bal_status_for_rules = $data['balance_payment_status'] ?? $current_booking->balance_payment_status ?? null;
+                $dep_amt_for_rules      = floatval( $data['deposit_payment_amount'] ?? 0 );
+                $bal_amt_for_rules      = floatval( $data['balance_payment_amount'] ?? 0 );
+
+                $dep_line_received = function_exists( 'bst_payment_line_received_for_display' )
+                    ? bst_payment_line_received_for_display( $dep_status_for_rules, $dep_amt_for_rules )
+                    : false;
+                $bal_line_received = function_exists( 'bst_payment_line_received_for_display' )
+                    ? bst_payment_line_received_for_display( $bal_status_for_rules, $bal_amt_for_rules )
+                    : false;
+
+                $dep_st_trim = ( null !== $dep_status_for_rules && '' !== $dep_status_for_rules ) ? trim( (string) $dep_status_for_rules ) : '';
+                $bal_st_trim = ( null !== $bal_status_for_rules && '' !== $bal_status_for_rules ) ? trim( (string) $bal_status_for_rules ) : '';
+                // Legacy date+amount path only when the line is not already marked Paid/Processing (status is source of truth).
+                $dep_already_paid_label = in_array( $dep_st_trim, array( 'Paid', 'Processing' ), true );
+                $bal_already_paid_label = in_array( $bal_st_trim, array( 'Paid', 'Processing' ), true );
+
+                // Rule 1: Pending → Booked when deposit bank wire is received (per line status), or legacy date+amount if line not already Paid/Processing.
+                if ( $current_status === 'Pending'
+                    && $data['deposit_payment_method'] === 'Bank Wire'
+                    && $dep_amt_for_rules > 0 ) {
+                    if ( $dep_line_received ) {
+                        $data['booking_status'] = 'Booked';
+                    } elseif ( ! empty( $data['deposit_payment_date'] ) && ! $dep_already_paid_label ) {
+                        $data['booking_status'] = 'Booked';
+                    }
                 }
-                
-                // Rule 2: If status = Booked, payment method = Bank Wire, and balance amount/date provided, change to "Finalized"
-                if ($current_status === 'Booked' && 
-                    $data['balance_payment_method'] === 'Bank Wire' && 
-                    !empty($data['balance_payment_amount']) && 
-                    !empty($data['balance_payment_date'])) {
-                    $data['booking_status'] = 'Finalized';
+
+                // Rule 2: Booked → Finalized when balance bank wire is received (per line status), or legacy date+amount if line not already Paid/Processing.
+                if ( $current_status === 'Booked'
+                    && $data['balance_payment_method'] === 'Bank Wire'
+                    && $bal_amt_for_rules > 0 ) {
+                    if ( $bal_line_received ) {
+                        $data['booking_status'] = 'Finalized';
+                    } elseif ( ! empty( $data['balance_payment_date'] ) && ! $bal_already_paid_label ) {
+                        $data['booking_status'] = 'Finalized';
+                    }
                 }
 
                 if ( function_exists( 'bst_merge_booking_status_with_payment_line_statuses' ) ) {
