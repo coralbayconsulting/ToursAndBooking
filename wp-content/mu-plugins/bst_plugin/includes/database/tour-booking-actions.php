@@ -912,23 +912,27 @@ function bst_update_tile() {
                 'deposit_payment_date' => sanitize_text_field($_POST['deposit_payment_date'] ?? ''),
                 'deposit_commission_invoice' => sanitize_text_field($_POST['deposit_commission_invoice'] ?? ''),
                 'deposit_payment_discount' => floatval($_POST['deposit_payment_discount'] ?? 0),
+                'deposit_payment_status' => function_exists( 'bst_sanitize_payment_status' ) ? bst_sanitize_payment_status( wp_unslash( $_POST['deposit_payment_status'] ?? '' ) ) : null,
                 
                 'balance_payment_method' => sanitize_text_field($_POST['balance_payment_method'] ?? ''),
                 'balance_payment_amount' => floatval($_POST['balance_payment_amount'] ?? 0),
                 'balance_payment_date' => sanitize_text_field($_POST['balance_payment_date'] ?? ''),
                 'balance_commission_invoice' => sanitize_text_field($_POST['balance_commission_invoice'] ?? ''),
                 'balance_payment_discount' => floatval($_POST['balance_payment_discount'] ?? 0),
+                'balance_payment_status' => function_exists( 'bst_sanitize_payment_status' ) ? bst_sanitize_payment_status( wp_unslash( $_POST['balance_payment_status'] ?? '' ) ) : null,
                 
                 'additional_payment_method' => sanitize_text_field($_POST['additional_payment_method'] ?? ''),
                 'additional_payment_amount' => floatval($_POST['additional_payment_amount'] ?? 0),
                 'additional_payment_date' => sanitize_text_field($_POST['additional_payment_date'] ?? ''),
                 'additional_payment_commission_invoice' => sanitize_text_field($_POST['additional_payment_commission_invoice'] ?? ''),
                 'additional_payment_discount' => floatval($_POST['additional_payment_discount'] ?? 0),
+                'additional_payment_status' => function_exists( 'bst_sanitize_payment_status' ) ? bst_sanitize_payment_status( wp_unslash( $_POST['additional_payment_status'] ?? '' ) ) : null,
                 
                 'refund_payment_method' => sanitize_text_field($_POST['refund_payment_method'] ?? ''),
                 'refund_payment_amount' => floatval($_POST['refund_payment_amount'] ?? 0),
                 'refund_payment_date' => sanitize_text_field($_POST['refund_payment_date'] ?? ''),
-                'refund_commission_invoice' => sanitize_text_field($_POST['refund_commission_invoice'] ?? '')
+                'refund_commission_invoice' => sanitize_text_field($_POST['refund_commission_invoice'] ?? ''),
+                'refund_payment_status' => function_exists( 'bst_sanitize_payment_status' ) ? bst_sanitize_payment_status( wp_unslash( $_POST['refund_payment_status'] ?? '' ) ) : null,
             );
             
             // Calculate derived values
@@ -958,7 +962,7 @@ function bst_update_tile() {
             // Get current booking to check current status
             global $wpdb;
             $booking_table = $wpdb->prefix . 'bst_tour_booking';
-            $current_booking = $wpdb->get_row($wpdb->prepare("SELECT booking_status FROM $booking_table WHERE id = %d", $booking_id));
+            $current_booking = $wpdb->get_row($wpdb->prepare("SELECT * FROM $booking_table WHERE id = %d", $booking_id));
             
             if ($current_booking) {
                 $current_status = $current_booking->booking_status;
@@ -977,6 +981,17 @@ function bst_update_tile() {
                     !empty($data['balance_payment_amount']) && 
                     !empty($data['balance_payment_date'])) {
                     $data['booking_status'] = 'Finalized';
+                }
+
+                if ( function_exists( 'bst_merge_booking_status_with_payment_line_statuses' ) ) {
+                    $base_status = isset( $data['booking_status'] ) ? $data['booking_status'] : $current_status;
+                    $data['booking_status'] = bst_merge_booking_status_with_payment_line_statuses(
+                        $base_status,
+                        $data['deposit_payment_status'] ?? $current_booking->deposit_payment_status ?? null,
+                        $data['balance_payment_status'] ?? $current_booking->balance_payment_status ?? null,
+                        $data['additional_payment_status'] ?? $current_booking->additional_payment_status ?? null,
+                        $data['refund_payment_status'] ?? $current_booking->refund_payment_status ?? null
+                    );
                 }
             }
             break;

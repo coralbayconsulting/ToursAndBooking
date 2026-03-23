@@ -1,4 +1,8 @@
 <?php
+/**
+ * Payment status constants + helpers (deposit/balance line statuses for bookings).
+ */
+require_once __DIR__ . '/booking-payment-status.php';
 
 // --- Dynamic field population for encoded booking IDs ---
 // Populate field 261 (booking ID field in form 10) with decoded booking ID from bid parameter
@@ -265,16 +269,23 @@ function bst_calculate_gf_payment_details($entry, $existing_total_paid = 0, $con
     $payment_date = null;
     $booking_status = null;
     
+    $deposit_payment_status = null;
+
     if ($payment_method == 'Bank Wire' && (empty($wire_received_date) || empty($wire_received_amount))) {
-        $booking_status = 'Pending';
+        $booking_status         = 'Pending';
+        // Option B: include expected wire amount (field 230, tour currency) in totals.
+        $payment_amount         = floatval( rgar( $entry, '230' ) );
+        $deposit_payment_status = 'Pending';
     } else {
         // Check entry payment status for async payment methods (SEPA, etc.)
         $entry_payment_status = isset($entry['payment_status']) ? $entry['payment_status'] : '';
         
         if ($entry_payment_status === 'Processing') {
             $booking_status = 'Processing';  // SEPA Direct Debit, etc. awaiting confirmation
+            $deposit_payment_status = 'Processing';
         } elseif ($entry_payment_status === 'Failed') {
             $booking_status = 'Payment Failed';  // Payment was declined/failed
+            $deposit_payment_status = 'Failed';
         } else {
             // Determine initial status based on context
             $booking_status = ($context === 'update') ? 'Booked' : 'Booked';
@@ -284,6 +295,9 @@ function bst_calculate_gf_payment_details($entry, $existing_total_paid = 0, $con
         if ($payment_method == 'Bank Wire') {
             $payment_amount = floatval(preg_replace('/[^0-9.]/', '', $wire_received_amount));
             $payment_date = $wire_received_date;
+            if ( $payment_amount > 0 ) {
+                $deposit_payment_status = 'Paid';
+            }
         } else {
             // Try different field sources for non-wire payments
             $payment_amount = floatval(preg_replace('/[^0-9.]/', '', rgar($entry, '177')));
@@ -291,18 +305,30 @@ function bst_calculate_gf_payment_details($entry, $existing_total_paid = 0, $con
                 $payment_amount = floatval(rgar($entry, 'payment_amount'));
             }
             $payment_date = rgar($entry, 'payment_date') ? rgar($entry, 'payment_date') : $entry['date_created'];
+            if ( $payment_amount > 0 && null === $deposit_payment_status ) {
+                $deposit_payment_status = 'Paid';
+            }
         }
     }
     
     // Calculate totals
     $total_paid = $existing_total_paid + $payment_amount;
+
+    if ( null === $deposit_payment_status && $payment_amount > 0 && null !== $payment_method && '' !== $payment_method ) {
+        $deposit_payment_status = 'Paid';
+    }
+
+    $booking_status = function_exists( 'bst_merge_booking_status_with_payment_line_statuses' )
+        ? bst_merge_booking_status_with_payment_line_statuses( $booking_status, $deposit_payment_status, null, null, null )
+        : $booking_status;
     
     return array(
         'payment_method' => $payment_method,
         'payment_amount' => $payment_amount,
         'payment_date' => $payment_date,
         'total_paid' => $total_paid,
-        'booking_status' => $booking_status
+        'booking_status' => $booking_status,
+        'deposit_payment_status' => $deposit_payment_status,
     );
 }
 
@@ -385,7 +411,8 @@ function bst_calculate_gf10_payment_details($entry, $existing_total_paid = 0, $n
             'total_paid' => $existing_total_paid,
             'balance_due' => $balance_due,
             'booking_status' => 'Finalized',  // Already paid, set to Finalized
-            'has_payment_info' => false
+            'has_payment_info' => false,
+            'balance_payment_status' => null,
         );
     }
     
@@ -397,15 +424,19 @@ function bst_calculate_gf10_payment_details($entry, $existing_total_paid = 0, $n
     $payment_date = null;
     $has_payment_info = false;
     $booking_status = null;
+    $balance_payment_status = null;
     
     if ($payment_method == 'Bank Wire') {
         if (!empty($wire_received_date) && !empty($wire_received_amount)) {
             $has_payment_info = true;
             $payment_amount = floatval($wire_received_amount);
             $payment_date = $wire_received_date;
+            $balance_payment_status = 'Paid';
         } else {
-            // Bank Wire selected but no payment received yet - set to Pending
+            // Bank Wire selected but no payment received yet - set to Pending; Option B: expected amount field 279
             $booking_status = 'Pending';
+            $balance_payment_status = 'Pending';
+            $payment_amount = floatval( rgar( $entry, '279' ) );
         }
     } else {
         // Check entry payment status for async payment methods (SEPA, etc.)
@@ -432,14 +463,20 @@ function bst_calculate_gf10_payment_details($entry, $existing_total_paid = 0, $n
         // Set status based on entry payment status for async payments
         if ($entry_payment_status === 'Processing') {
             $booking_status = 'Processing';  // SEPA Direct Debit, etc. awaiting confirmation
+            $balance_payment_status = 'Processing';
         } elseif ($entry_payment_status === 'Failed') {
             $booking_status = 'Payment Failed';  // Payment was declined/failed
+            $balance_payment_status = 'Failed';
+        } elseif ( ! empty( $payment_amount ) ) {
+            $balance_payment_status = 'Paid';
         }
     }
     
     // Calculate totals
     $total_paid = $existing_total_paid;
     if ($has_payment_info) {
+        $total_paid += $payment_amount;
+    } elseif ( 'Bank Wire' === $payment_method && 'Pending' === $booking_status && $payment_amount > 0 ) {
         $total_paid += $payment_amount;
     }
     
@@ -452,6 +489,10 @@ function bst_calculate_gf10_payment_details($entry, $existing_total_paid = 0, $n
     if (!$booking_status && $has_payment_info) {
         $booking_status = 'Finalized';
     }
+
+    if ( null === $balance_payment_status && $payment_amount > 0 && $payment_method ) {
+        $balance_payment_status = 'Paid';
+    }
     
     return array(
         'payment_method' => $payment_method,
@@ -460,7 +501,8 @@ function bst_calculate_gf10_payment_details($entry, $existing_total_paid = 0, $n
         'total_paid' => $total_paid,
         'balance_due' => $balance_due,
         'booking_status' => $booking_status,
-        'has_payment_info' => $has_payment_info
+        'has_payment_info' => $has_payment_info,
+        'balance_payment_status' => $balance_payment_status,
     );
 }
 
@@ -1003,6 +1045,7 @@ function bst_gf9_process_booking_logic($entry, $form) {
                 'deposit_payment_method' => $payment_method,
                 'deposit_payment_amount' => $payment_amount,
                 'deposit_payment_date' => $payment_date,
+                'deposit_payment_status' => $payment_details['deposit_payment_status'] ?? null,
                 'total_paid' => $total_paid,
                 'source' => $source,
                 'referrer' => $referrer,
@@ -1374,6 +1417,7 @@ function bst_gf9_create_booking($entry, $form) {
         'deposit_payment_amount' => $payment_amount,
         'deposit_payment_discount' => $deposit_payment_discount,
         'deposit_payment_date' => $payment_date,
+        'deposit_payment_status' => $payment_details['deposit_payment_status'] ?? null,
         'total_paid' => $total_paid,
         'balance_due' => $balance_due,
         'how_heard' => $how_heard,
@@ -1485,12 +1529,15 @@ function bst_gf9_handle_admin_update($form, $entry_id) {
     $updated_by = is_user_logged_in() ? wp_get_current_user()->user_login : 'Web';
     $updated_date = current_time('mysql');
     
+    $deposit_status_paid = bst_sanitize_payment_status( BST_PAYMENT_STATUS_PAID ) ?: BST_PAYMENT_STATUS_PAID;
+
     // Prepare update data - update deposit fields, payment discount, and calculated totals
     $update_data = array(
         'booking_status' => $booking_status,
         'deposit_payment_amount' => $deposit_payment_amount,
         'deposit_payment_date' => $deposit_payment_date,
         'deposit_payment_discount' => $deposit_payment_discount,
+        'deposit_payment_status' => $deposit_status_paid,
         'payment_discount_amount' => $payment_discount_amount,
         'total_paid' => $total_paid,
         'balance_due' => $balance_due,
@@ -2021,6 +2068,19 @@ function bst_gf10_process_finalization_logic($entry, $form) {
     $total_paid = $payment_details['total_paid'];
     $balance_due = $payment_details['balance_due'];
     $has_payment_info = $payment_details['has_payment_info'];
+    $balance_payment_status = $payment_details['balance_payment_status'] ?? null;
+
+    if ( function_exists( 'bst_merge_booking_status_with_payment_line_statuses' ) ) {
+        $booking_status = bst_merge_booking_status_with_payment_line_statuses(
+            $payment_details['booking_status'] ? $payment_details['booking_status'] : $tour_booking->booking_status,
+            $tour_booking->deposit_payment_status ?? null,
+            $balance_payment_status,
+            $tour_booking->additional_payment_status ?? null,
+            $tour_booking->refund_payment_status ?? null
+        );
+    } else {
+        $booking_status = $payment_details['booking_status'] ? $payment_details['booking_status'] : $tour_booking->booking_status;
+    }
     
     // Build bank wire notes if payment method is Bank Wire and append to existing notes
     $bank_wire_notes = '';
@@ -2046,14 +2106,6 @@ function bst_gf10_process_finalization_logic($entry, $form) {
         }
         
         $bank_wire_notes = "Customer chose Bank Wire for their balance payment on {$date_chosen} and was instructed to send " . number_format($converted_amount, 2) . " in {$payment_currency} (which is converted from " . number_format($balance_after_discount, 2) . " {$tour_currency} at today's exchange rates)";
-    }
-    
-    // Determine status based on payment method and info
-    if ($payment_details['booking_status']) {
-        $booking_status = $payment_details['booking_status'];
-    } else {
-        // No payment info provided and no status set - keep current status
-        $booking_status = $tour_booking->booking_status;
     }
     
     $updated_by = is_user_logged_in() ? wp_get_current_user()->user_login : 'Web';
@@ -2135,7 +2187,8 @@ function bst_gf10_process_finalization_logic($entry, $form) {
         'guest2_emergency_contact_email' => $guest2_emergency_contact_email,
         'booking_status' => $booking_status,
         'payment_discount_amount' => $payment_discount_amount,
-        'balance_payment_discount' => $balance_payment_discount
+        'balance_payment_discount' => $balance_payment_discount,
+        'balance_payment_status' => $balance_payment_status,
     );
     
     // If we have bank wire notes, append them to existing notes
@@ -2151,18 +2204,16 @@ function bst_gf10_process_finalization_logic($entry, $form) {
     // Always set the balance payment method if provided, regardless of payment completion
     if (!empty($payment_method)) {
         $update_data['balance_payment_method'] = $payment_method;
+        $update_data['balance_payment_amount'] = $payment_amount;
+        if ($has_payment_info) {
+            $update_data['balance_payment_date'] = $payment_date;
+        }
         $update_data['total_paid'] = $total_paid;
         $update_data['balance_due'] = $balance_due;
     } else {
         // No payment method (zero balance case) - still update totals
         $update_data['total_paid'] = $total_paid;
         $update_data['balance_due'] = $balance_due;
-    }
-    
-    // Add payment details only if we have payment info
-    if ($has_payment_info) {
-        $update_data['balance_payment_amount'] = $payment_amount;
-        $update_data['balance_payment_date'] = $payment_date;
     }
     
     // Use centralized update function
@@ -2334,12 +2385,16 @@ function bst_gf10_handle_admin_update($form, $entry_id) {
     $booking_status = 'Finalized';
     
     $updated_by = is_user_logged_in() ? wp_get_current_user()->user_login : 'Web';
-       $updated_date = current_time('mysql');
+    $updated_date = current_time('mysql');
 
-    // Update only payment and status fields for admin updates
+    $balance_status_paid = bst_sanitize_payment_status( BST_PAYMENT_STATUS_PAID ) ?: BST_PAYMENT_STATUS_PAID;
+
+    // Update only payment and status fields for admin updates (bank wire received in GF entry)
     $update_data = array(
         'balance_payment_amount' => $payment_amount,
         'balance_payment_date' => $payment_date,
+        'balance_payment_discount' => $balance_payment_discount,
+        'balance_payment_status' => $balance_status_paid,
         'payment_discount_amount' => $payment_discount_amount,
         'booking_status' => $booking_status,
         'total_paid' => $total_paid,
@@ -3138,4 +3193,3 @@ function get_tour_currency() {
     
     wp_send_json_success(array('currency' => $currency));
 }
-

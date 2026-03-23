@@ -23,25 +23,16 @@ function bst_export_commission_bookings_xlsx_handler() {
     global $wpdb;
     $table_name = $wpdb->prefix . 'bst_tour_booking';
     
-    // Query includes uninvoiced payments AND refunds where at least one payment was invoiced
-    $query = "SELECT * FROM {$table_name} WHERE (
-        (booking_status = 'Completed' AND (
-            (deposit_payment_amount > 0 AND (deposit_commission_invoice IS NULL OR deposit_commission_invoice = '')) OR
-            (balance_payment_amount > 0 AND (balance_commission_invoice IS NULL OR balance_commission_invoice = '')) OR
-            (additional_payment_amount > 0 AND (additional_payment_commission_invoice IS NULL OR additional_payment_commission_invoice = ''))
-        )) OR
-        (booking_status = 'Booked' AND booking_method != 'Offline' AND (deposit_commission_invoice IS NULL OR deposit_commission_invoice = '')) OR
-        (booking_status = 'Finalized' AND booking_method != 'Offline' AND (
-            (balance_commission_invoice IS NULL OR balance_commission_invoice = '') OR
-            (additional_payment_amount > 0 AND (additional_payment_commission_invoice IS NULL OR additional_payment_commission_invoice = ''))
-        )) OR
-        (refund_payment_amount > 0 AND booking_status IN ('Completed', 'Booked', 'Finalized', 'Cancelled') AND (
-            (deposit_commission_invoice IS NOT NULL AND deposit_commission_invoice != '') OR
-            (balance_commission_invoice IS NOT NULL AND balance_commission_invoice != '') OR
-            (additional_payment_commission_invoice IS NOT NULL AND additional_payment_commission_invoice != '')
-        ) AND (refund_commission_invoice IS NULL OR refund_commission_invoice = ''))
-    ) AND booking_status NOT IN ('Reserved', 'Waiting List')
-      AND (booking_commission_percent IS NOT NULL AND booking_commission_percent != 0)";
+    // Candidate rows: uninvoiced commission fields on any payment line (filter by payment status in PHP via bst_calculate_commission_basis).
+    $query = "SELECT * FROM {$table_name} WHERE
+        (booking_commission_percent IS NOT NULL AND booking_commission_percent != 0)
+        AND booking_status NOT IN ('Reserved', 'Waiting List')
+        AND (
+            (deposit_payment_amount > 0 AND (deposit_commission_invoice IS NULL OR deposit_commission_invoice = ''))
+            OR (balance_payment_amount > 0 AND (balance_commission_invoice IS NULL OR balance_commission_invoice = ''))
+            OR (additional_payment_amount > 0 AND (additional_payment_commission_invoice IS NULL OR additional_payment_commission_invoice = ''))
+            OR (refund_payment_amount > 0 AND (refund_commission_invoice IS NULL OR refund_commission_invoice = ''))
+        )";
     
     $bookings = $wpdb->get_results($query);
     
@@ -115,116 +106,81 @@ function bst_export_commission_bookings_xlsx_handler() {
     foreach ($bookings as $booking) {
         $commission_basis = bst_calculate_commission_basis($booking, $usd_to_eur_rate);
         
-        // Check if this has a refund with invoiced payments (negative basis is OK for refunds)
-        $has_refund_payment = !empty($booking->refund_payment_amount) && floatval($booking->refund_payment_amount) > 0;
-        $has_invoiced_payments = !empty($booking->deposit_commission_invoice) || !empty($booking->balance_commission_invoice) || !empty($booking->additional_payment_commission_invoice);
-        $is_refund_case = $has_refund_payment && $has_invoiced_payments;
-        
+        $is_refund_case = function_exists('bst_commission_refund_reduces_basis') && bst_commission_refund_reduces_basis($booking);
+
         // Skip bookings with no commission basis UNLESS it's a refund case (negative basis is OK for refunds)
-        if ($commission_basis == 0 || ($commission_basis < 0 && !$is_refund_case)) continue;
-        
-        $commission_percent = floatval($booking->booking_commission_percent ?? 0);
-        $commission_percent_display = round($commission_percent * 100);
-        
-        $booking_method = $booking->booking_method ?? '';
-        $booking_status = $booking->booking_status ?? '';
-        
-        // Check if deposit and balance will be on same invoice (both have payments but neither has invoice number)
-        $has_deposit_payment = !empty($booking->deposit_payment_amount) && floatval($booking->deposit_payment_amount) > 0;
-        $has_balance_payment = !empty($booking->balance_payment_amount) && floatval($booking->balance_payment_amount) > 0;
-        
-        $deposit_has_invoice = !empty($booking->deposit_commission_invoice);
-        $balance_has_invoice = !empty($booking->balance_commission_invoice);
-        $additional_has_invoice = !empty($booking->additional_payment_commission_invoice);
-        
-        $payments_on_same_invoice = $has_deposit_payment && $has_balance_payment && !$deposit_has_invoice && !$balance_has_invoice;
-        
-        // Use the refund detection from above
+        if ($commission_basis == 0 || ($commission_basis < 0 && !$is_refund_case)) {
+            continue;
+        }
+
+        $commission_percent         = floatval($booking->booking_commission_percent ?? 0);
+        $commission_percent_display = (int) round($commission_percent * 100);
+
+        $nets_row = function_exists('bst_commission_uninvoiced_inflow_amounts')
+            ? bst_commission_uninvoiced_inflow_amounts($booking)
+            : array('deposit' => 0, 'balance' => 0, 'additional' => 0);
+        $needs_dep = floatval($nets_row['deposit'] ?? 0) > 0;
+        $needs_bal = floatval($nets_row['balance'] ?? 0) > 0;
+        $needs_add = floatval($nets_row['additional'] ?? 0) > 0;
+
+        $payments_on_same_invoice = $needs_dep && $needs_bal;
+
         $is_refund = $is_refund_case;
-        
-        // Group logic (same as CSV export)
+
+        // Group logic — payment status + invoice fields (no paper/offline split)
         if ($is_refund) {
-            // Refund groups - negative commission to reverse previously paid commissions
-            if ($commission_percent_display == 2) {
-                $group_key = 'H_2_Refunds';
-                $group_name = '2% Web Bookings (Refund)';
-            } elseif ($commission_percent_display == 5) {
-                $group_key = 'I_5_Refunds';
-                $group_name = '5% Web Bookings (Refund)';
+            if ($commission_percent_display === 2) {
+                $group_key  = 'H_2_Refunds';
+                $group_name = '2% Bookings (Refund)';
+            } elseif ($commission_percent_display === 5) {
+                $group_key  = 'I_5_Refunds';
+                $group_name = '5% Bookings (Refund)';
             } else {
-                $group_key = 'Z_Other_Refunds_' . $commission_percent_display;
-                $group_name = $commission_percent_display . '% Web Bookings (Refund)';
+                $group_key  = 'Z_Other_Refunds_' . $commission_percent_display;
+                $group_name = $commission_percent_display . '% Bookings (Refund)';
             }
-        } elseif ($commission_percent_display == 2) {
-            if ($booking_method === 'Offline') {
-                $group_key = 'A_2_Paper_Total';
-                $group_name = '2% Paper Bookings (Total)';
+        } elseif ($commission_percent_display === 2) {
+            if ($payments_on_same_invoice) {
+                $group_key  = 'B_2_Total';
+                $group_name = '2% Bookings (Total)';
+            } elseif ($needs_dep && ! $needs_bal && ! $needs_add) {
+                $group_key  = 'C_2_Deposits';
+                $group_name = '2% Bookings (Deposits)';
+            } elseif ($needs_dep && $needs_add && ! $needs_bal) {
+                $group_key  = 'C2_2_Deposits_Additional';
+                $group_name = '2% Bookings (Deposits + Additional)';
+            } elseif ($needs_add && ! $needs_bal && ! $needs_dep) {
+                $group_key  = 'D2_2_Additional';
+                $group_name = '2% Bookings (Additional Payments)';
+            } elseif ($needs_bal && $needs_add) {
+                $group_key  = 'D3_2_Balance_Additional';
+                $group_name = '2% Bookings (Balance + Additional)';
             } else {
-                // If both payments will be on same invoice, treat as Total
-                if ($payments_on_same_invoice) {
-                    $group_key = 'B_2_Web_Total';
-                    $group_name = '2% Web Bookings (Total)';
-                } else {
-                    // Determine group based on which payment type(s) are uninvoiced
-                    $has_uninvoiced_deposit    = $has_deposit_payment && !$deposit_has_invoice;
-                    $has_uninvoiced_balance    = $has_balance_payment && !$balance_has_invoice;
-                    $has_additional_payment    = !empty($booking->additional_payment_amount) && floatval($booking->additional_payment_amount) > 0;
-                    $has_uninvoiced_additional = $has_additional_payment && !$additional_has_invoice;
-
-                    if ($has_uninvoiced_deposit && !$has_uninvoiced_balance && !$has_uninvoiced_additional) {
-                        $group_key  = 'C_2_Web_Deposits';
-                        $group_name = '2% Web Bookings (Deposits)';
-                    } elseif ($has_uninvoiced_deposit && $has_uninvoiced_additional && !$has_uninvoiced_balance) {
-                        $group_key  = 'C2_2_Web_Deposits_Additional';
-                        $group_name = '2% Web Bookings (Deposits + Additional)';
-                    } elseif ($has_uninvoiced_additional && !$has_uninvoiced_balance && !$has_uninvoiced_deposit) {
-                        $group_key  = 'D2_2_Web_Additional';
-                        $group_name = '2% Web Bookings (Additional Payments)';
-                    } elseif ($has_uninvoiced_balance && $has_uninvoiced_additional) {
-                        $group_key  = 'D3_2_Web_Balance_Additional';
-                        $group_name = '2% Web Bookings (Balance + Additional)';
-                    } else {
-                        $group_key  = 'D_2_Web_Balance';
-                        $group_name = '2% Web Bookings (Balance)';
-                    }
-                }
+                $group_key  = 'D_2_Balance';
+                $group_name = '2% Bookings (Balance)';
             }
-        } elseif ($commission_percent_display == 5) {
-            if ($booking_method !== 'Offline') {
-                // If both payments will be on same invoice, treat as Total
-                if ($payments_on_same_invoice) {
-                    $group_key = 'E_5_Web_Total';
-                    $group_name = '5% Web Bookings (Total)';
-                } else {
-                    // Determine group based on which payment type(s) are uninvoiced
-                    $has_uninvoiced_deposit    = $has_deposit_payment && !$deposit_has_invoice;
-                    $has_uninvoiced_balance    = $has_balance_payment && !$balance_has_invoice;
-                    $has_additional_payment    = !empty($booking->additional_payment_amount) && floatval($booking->additional_payment_amount) > 0;
-                    $has_uninvoiced_additional = $has_additional_payment && !$additional_has_invoice;
-
-                    if ($has_uninvoiced_deposit && !$has_uninvoiced_balance && !$has_uninvoiced_additional) {
-                        $group_key  = 'F_5_Web_Deposits';
-                        $group_name = '5% Web Bookings (Deposits)';
-                    } elseif ($has_uninvoiced_deposit && $has_uninvoiced_additional && !$has_uninvoiced_balance) {
-                        $group_key  = 'F2_5_Web_Deposits_Additional';
-                        $group_name = '5% Web Bookings (Deposits + Additional)';
-                    } elseif ($has_uninvoiced_additional && !$has_uninvoiced_balance && !$has_uninvoiced_deposit) {
-                        $group_key  = 'G2_5_Web_Additional';
-                        $group_name = '5% Web Bookings (Additional Payments)';
-                    } elseif ($has_uninvoiced_balance && $has_uninvoiced_additional) {
-                        $group_key  = 'G3_5_Web_Balance_Additional';
-                        $group_name = '5% Web Bookings (Balance + Additional)';
-                    } else {
-                        $group_key  = 'G_5_Web_Balance';
-                        $group_name = '5% Web Bookings (Balance)';
-                    }
-                }
+        } elseif ($commission_percent_display === 5) {
+            if ($payments_on_same_invoice) {
+                $group_key  = 'E_5_Total';
+                $group_name = '5% Bookings (Total)';
+            } elseif ($needs_dep && ! $needs_bal && ! $needs_add) {
+                $group_key  = 'F_5_Deposits';
+                $group_name = '5% Bookings (Deposits)';
+            } elseif ($needs_dep && $needs_add && ! $needs_bal) {
+                $group_key  = 'F2_5_Deposits_Additional';
+                $group_name = '5% Bookings (Deposits + Additional)';
+            } elseif ($needs_add && ! $needs_bal && ! $needs_dep) {
+                $group_key  = 'G2_5_Additional';
+                $group_name = '5% Bookings (Additional Payments)';
+            } elseif ($needs_bal && $needs_add) {
+                $group_key  = 'G3_5_Balance_Additional';
+                $group_name = '5% Bookings (Balance + Additional)';
             } else {
-                $group_key = 'A_5_Paper_Total';
-                $group_name = '5% Paper Bookings (Total)';
+                $group_key  = 'G_5_Balance';
+                $group_name = '5% Bookings (Balance)';
             }
         } else {
-            $group_key = 'Z_Other_' . $commission_percent_display;
+            $group_key  = 'Z_Other_' . $commission_percent_display;
             $group_name = $commission_percent_display . '% Bookings';
         }
         
@@ -398,19 +354,8 @@ function bst_get_commission_booking_row_data_xlsx($booking, $exchange_rate) {
     // Use actual booking currency (not always EUR)
     $currency = strtoupper(trim($booking->tour_currency ?? 'EUR'));
     
-    // For offline bookings, just use total_paid directly
-    if ($booking->booking_method === 'Offline') {
-        $original_basis = floatval($booking->total_paid ?? 0);
-        if ($currency === 'USD') {
-            $eur_basis = $original_basis * $exchange_rate; // Convert USD to EUR
-        } else {
-            $eur_basis = $original_basis; // Already in EUR
-        }
-    } else {
-        // For online bookings, use the complex calculation functions
-        $original_basis = bst_get_original_commission_basis($booking);
-        $eur_basis = bst_calculate_commission_basis($booking, $exchange_rate);
-    }
+    $original_basis = bst_get_original_commission_basis($booking);
+    $eur_basis      = bst_calculate_commission_basis($booking, $exchange_rate);
     
     $commission_percent = floatval($booking->booking_commission_percent ?? 0);
     $commission_amount = round($eur_basis * $commission_percent, 2);

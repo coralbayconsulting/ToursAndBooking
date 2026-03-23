@@ -35,6 +35,7 @@ class BST_Plugin {
         require_once BST_PLUGIN_DIR . 'includes/gravity-forms.php';
         require_once BST_PLUGIN_DIR . 'includes/booking-display.php';
         require_once BST_PLUGIN_DIR . 'includes/data-import-handlers.php';
+        require_once BST_PLUGIN_DIR . 'includes/booking-payment-status.php';
         require_once BST_PLUGIN_DIR . 'includes/data-export-handlers.php';
         require_once BST_PLUGIN_DIR . 'includes/xlsx-export-handler.php';
         require_once BST_PLUGIN_DIR . 'includes/admin-settings.php'; // Include admin settings
@@ -3735,14 +3736,17 @@ class BST_Plugin {
         // 4. Payment failed
         $payment_failed_count = $wpdb->get_var("SELECT COUNT(*) FROM $booking_table WHERE booking_status = 'Payment Failed'");
 
-        // 5. Bank wire pending
+        // 5. Bank wire pending (candidate rows; matches templates/dashboard.php query)
         $bank_wire_count = $wpdb->get_var("
             SELECT COUNT(*) FROM $booking_table 
             WHERE (
                 booking_status = 'Pending' OR
                 (deposit_payment_method = 'Bank Wire' AND (deposit_payment_amount IS NULL OR deposit_payment_amount = 0)) OR
                 (balance_payment_method = 'Bank Wire' AND (balance_payment_amount IS NULL OR balance_payment_amount = 0)) OR
-                (additional_payment_method = 'Bank Wire' AND (additional_payment_amount IS NULL OR additional_payment_amount = 0))
+                (additional_payment_method = 'Bank Wire' AND (additional_payment_amount IS NULL OR additional_payment_amount = 0)) OR
+                (deposit_payment_method = 'Bank Wire' AND deposit_payment_status IN ('Pending', 'Processing')) OR
+                (balance_payment_method = 'Bank Wire' AND balance_payment_status IN ('Pending', 'Processing')) OR
+                (additional_payment_method = 'Bank Wire' AND additional_payment_status IN ('Pending', 'Processing'))
             )
         ");
 
