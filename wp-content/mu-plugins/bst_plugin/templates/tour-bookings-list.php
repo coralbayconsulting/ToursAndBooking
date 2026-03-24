@@ -390,7 +390,8 @@ if (is_array($tour_bookings) && !empty($tour_bookings)) {
         return !empty(trim($status));
     });
     
-    $show_status_filter = count($statuses_with_bookings) > 1;
+    // Show status filter when multiple statuses exist, or when "All Active" is selected (needs dropdown to stay visible).
+    $show_status_filter = count($statuses_with_bookings) > 1 || $selected_status === 'all_active';
 }
 
 // The filtered bookings are the tour_bookings themselves (already filtered and sorted by SQL)
@@ -463,6 +464,7 @@ $filtered_bookings = $tour_bookings;
                 <label for="filter_status" class="cbc-bookings-filter-label">Status:</label>
                 <select name="filter_status" id="filter_status">
                     <option value="">All Statuses</option>
+                    <option value="all_active" <?php selected( $selected_status, 'all_active' ); ?>>All Active (No WL/Cancelled)</option>
                     <?php foreach ($statuses_with_bookings as $status): ?>
                         <option value="<?php echo esc_attr($status); ?>" <?php selected($selected_status, $status); ?>>
                             <?php echo esc_html($status); ?>
@@ -540,9 +542,9 @@ $filtered_bookings = $tour_bookings;
                     <label for="list-type" style="font-weight: 600; white-space: nowrap;">Export List:</label>
                     <select name="list_type" id="list-type" required style="min-width: 150px;">
                         <option value="">Choose a List...</option>
-                        <option value="finalization">Finalization List</option>
                         <option value="rooming">Rooming List</option>
                         <option value="vehicle">Vehicle List</option>
+                        <option value="shirt">Shirt Size List</option>
                     </select>
                     
                     <button type="submit" class="button button-primary">

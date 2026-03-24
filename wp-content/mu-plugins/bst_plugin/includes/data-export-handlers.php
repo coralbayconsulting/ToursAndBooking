@@ -11,6 +11,55 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * Apply tour booking list status filter for exports (matches admin list: supports all_active).
+ *
+ * @param string       $filter_status   GET/POST filter_status value.
+ * @param string[]     $where_conditions SQL fragments (with booking_status unqualified).
+ * @param array        $where_params     Bound parameters.
+ */
+function bst_export_apply_booking_status_filter( $filter_status, array &$where_conditions, array &$where_params ) {
+    if ( empty( $filter_status ) ) {
+        return;
+    }
+    if ( 'all_active' === $filter_status ) {
+        $where_conditions[] = 'booking_status NOT IN (%s, %s)';
+        $where_params[]     = 'Waiting List';
+        $where_params[]     = 'Cancelled';
+    } else {
+        $where_conditions[] = 'booking_status = %s';
+        $where_params[]     = $filter_status;
+    }
+}
+
+/**
+ * ORDER BY for exports — matches BST_Plugin::bst_tour_bookings_page() list ordering.
+ *
+ * @param string $sort_by    sort_by value (id, name, date, tour, or whitelisted column).
+ * @param string $sort_order asc / desc.
+ * @return string SQL fragment beginning with " ORDER BY ...".
+ */
+function bst_export_booking_list_order_clause( $sort_by, $sort_order ) {
+    $sort_by  = is_string( $sort_by ) ? $sort_by : 'id';
+    $sort_ord = ( is_string( $sort_order ) && strtolower( $sort_order ) === 'desc' ) ? 'DESC' : 'ASC';
+
+    if ( 'name' === $sort_by ) {
+        return " ORDER BY guest1_last_name {$sort_ord}, guest1_first_name {$sort_ord}";
+    }
+    if ( 'date' === $sort_by ) {
+        return " ORDER BY created_date {$sort_ord}";
+    }
+    if ( 'tour' === $sort_by ) {
+        return " ORDER BY tour_text {$sort_ord}";
+    }
+    $allowed = array( 'id', 'guest1_first_name', 'guest1_last_name', 'tour_text', 'tour_date_text', 'booking_status', 'created_date' );
+    if ( in_array( $sort_by, $allowed, true ) ) {
+        return " ORDER BY {$sort_by} {$sort_ord}";
+    }
+    // Same fallback as list when column is unknown: avoid unbounded results order.
+    return " ORDER BY id {$sort_ord}";
+}
+
 // #region Tour Bookings Excel Export
 
 /**
@@ -56,39 +105,13 @@ function bst_export_bookings_excel_handler() {
         $query_params[] = $filter_tour_date_id . '%';
     }
     
-    if (!empty($filter_status)) {
-        $where_conditions[] = 'booking_status = %s';
-        $query_params[] = $filter_status;
-    }
+    bst_export_apply_booking_status_filter( $filter_status, $where_conditions, $query_params );
     
-    // Build ORDER BY clause
-    $order_clause = '';
-    switch ($sort_by) {
-        case 'id':
-            $order_clause = 'ORDER BY id';
-            break;
-        case 'date':
-            $order_clause = 'ORDER BY created_date';
-            break;
-        case 'name':
-            $order_clause = 'ORDER BY guest1_first_name, guest1_last_name';
-            break;
-        case 'tour':
-            $order_clause = 'ORDER BY tour_text';
-            break;
-        default:
-            $order_clause = 'ORDER BY id';
-    }
-    
-    if ($sort_order === 'desc') {
-        $order_clause .= ' DESC';
-    } else {
-        $order_clause .= ' ASC';
-    }
+    $order_clause = bst_export_booking_list_order_clause( $sort_by, $sort_order );
     
     // Execute query
     $where_clause = implode(' AND ', $where_conditions);
-    $query = "SELECT * FROM {$table_name} WHERE {$where_clause} {$order_clause}";
+    $query = "SELECT * FROM {$table_name} WHERE {$where_clause}{$order_clause}";
     
     if (!empty($query_params)) {
         $bookings = $wpdb->get_results($wpdb->prepare($query, $query_params));
@@ -119,7 +142,7 @@ function bst_export_bookings_excel_handler() {
         $filename .= '_date' . $filter_tour_date_id;
     }
     if (!empty($filter_status)) {
-        $filename .= '_' . sanitize_file_name($filter_status);
+        $filename .= '_' . sanitize_file_name( 'all_active' === $filter_status ? 'All_Active_No_WL_Cancelled' : $filter_status );
     }
     $filename .= '.csv';
     
@@ -820,30 +843,14 @@ function bst_export_bookings_excel_db_fields_handler() {
         $where_params[] = $filter_tour_date_id;
     }
 
-    if (!empty($filter_status)) {
-        $where_conditions[] = "booking_status = %s";
-        $where_params[] = $filter_status;
-    }
+    bst_export_apply_booking_status_filter( $filter_status, $where_conditions, $where_params );
 
     $where_clause = '';
     if (!empty($where_conditions)) {
         $where_clause = ' WHERE ' . implode(' AND ', $where_conditions);
     }
 
-    // Add ORDER BY clause
-    $order_clause = '';
-    if (!empty($sort_by)) {
-        if ($sort_by === 'name') {
-            $sort_order = ($sort_order === 'desc') ? 'DESC' : 'ASC';
-            $order_clause = " ORDER BY guest1_last_name $sort_order, guest1_first_name $sort_order";
-        } else {
-            $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'tour_text', 'tour_date_text', 'booking_status', 'created_date');
-            if (in_array($sort_by, $allowed_sort_columns)) {
-                $sort_order = ($sort_order === 'desc') ? 'DESC' : 'ASC';
-                $order_clause = " ORDER BY $sort_by $sort_order";
-            }
-        }
-    }
+    $order_clause = bst_export_booking_list_order_clause( $sort_by, $sort_order );
 
     $sql = "SELECT * FROM $table_name" . $where_clause . $order_clause;
     
@@ -1788,10 +1795,10 @@ function bst_write_annual_commission_csv($output, $commission_data, $year) {
 
 // #endregion
 
-// #region Custom List Export (Rooming List / Vehicle List)
+// #region Custom List Export (Rooming / Vehicle / Shirt Size)
 
 /**
- * Admin handler to export custom lists (rooming or vehicle lists)
+ * Admin handler to export custom lists (rooming, vehicle, or shirt size)
  */
 add_action('admin_post_bst_export_custom_list', 'bst_export_custom_list_handler');
 
@@ -1814,9 +1821,11 @@ function bst_export_custom_list_handler() {
     $filter_tour_id = isset($_POST['filter_tour_id']) ? intval($_POST['filter_tour_id']) : 0;
     $filter_tour_date_id = isset($_POST['filter_tour_date_id']) ? intval($_POST['filter_tour_date_id']) : 0;
     $filter_status = isset($_POST['filter_status']) ? trim($_POST['filter_status']) : '';
+    $sort_by       = isset($_POST['sort_by']) ? $_POST['sort_by'] : 'id';
+    $sort_order    = isset($_POST['sort_order']) ? $_POST['sort_order'] : 'desc';
     
     // Validate list type
-    if (!in_array($list_type, array('rooming', 'vehicle', 'finalization'))) {
+    if (!in_array($list_type, array('rooming', 'vehicle', 'shirt'), true)) {
         wp_die('Invalid list type', 'Error', array('response' => 400));
     }
     
@@ -1833,19 +1842,11 @@ function bst_export_custom_list_handler() {
     $where_conditions[] = 'tour_date_id = %d';
     $query_params[] = $filter_tour_date_id;
     
-    if (!empty($filter_status)) {
-        $where_conditions[] = 'booking_status = %s';
-        $query_params[] = $filter_status;
-    }
+    bst_export_apply_booking_status_filter( $filter_status, $where_conditions, $query_params );
     
-    // For finalization list, exclude cancelled bookings
-    if ($list_type === 'finalization') {
-        $where_conditions[] = "booking_status != 'cancelled'";
-    }
-    
-    $where_clause = implode(' AND ', $where_conditions);
-    
-    $query = "SELECT * FROM $table_name WHERE $where_clause ORDER BY id ASC";
+    $where_clause  = implode(' AND ', $where_conditions );
+    $order_clause  = bst_export_booking_list_order_clause( $sort_by, $sort_order );
+    $query         = "SELECT * FROM $table_name WHERE $where_clause{$order_clause}";
     
     if (!empty($query_params)) {
         $bookings = $wpdb->get_results($wpdb->prepare($query, $query_params));
@@ -1869,7 +1870,7 @@ function bst_export_custom_list_handler() {
     } elseif ($list_type === 'vehicle') {
         bst_export_vehicle_list_csv($output, $bookings, $filter_tour_date_id);
     } else {
-        bst_export_finalization_list_csv($output, $bookings, $filter_tour_date_id);
+        bst_export_shirt_size_list_csv($output, $bookings, $filter_tour_date_id);
     }
     
     fclose($output);
@@ -2101,248 +2102,85 @@ function bst_export_vehicle_list_csv($output, $bookings, $tour_date_id) {
 }
 
 /**
- * Generate finalization list CSV
+ * Generate shirt size list CSV (one row per guest: name + shirt size; same tour header as rooming/vehicle).
  */
-function bst_export_finalization_list_csv($output, $bookings, $tour_date_id) {
-    // Get tour info from tour_date_id
-    $tour_name = '';
-    $tour_dates = '';
-    $tour_id = 0;
-    
-    if ($tour_date_id > 0) {
-        $tour_date_post = get_post($tour_date_id);
-        
-        if ($tour_date_post) {
-            // Get tour_id from ACF field 'tour' on the tour-date post
-            $tour_id = get_field('tour', $tour_date_id);
-            
-            if ($tour_id) {
-                $tour_post = get_post($tour_id);
+function bst_export_shirt_size_list_csv( $output, $bookings, $tour_date_id ) {
+    $tour_name   = '';
+    $tour_dates  = '';
+    $tour_id     = 0;
+
+    if ( $tour_date_id > 0 ) {
+        $tour_date_post = get_post( $tour_date_id );
+
+        if ( $tour_date_post ) {
+            $tour_id = get_field( 'tour', $tour_date_id );
+
+            if ( $tour_id ) {
+                $tour_post = get_post( $tour_id );
                 $tour_name = $tour_post ? $tour_post->post_title : '';
             }
-            
-            $start_date = get_field('start_date', $tour_date_id);
-            $end_date = get_field('end_date', $tour_date_id);
-            
-            if ($start_date && $end_date) {
-                $tour_dates = date('j M', strtotime($start_date)) . ' - ' . date('j M Y', strtotime($end_date));
+
+            $start_date = get_field( 'start_date', $tour_date_id );
+            $end_date   = get_field( 'end_date', $tour_date_id );
+
+            if ( $start_date && $end_date ) {
+                $tour_dates = date( 'j M', strtotime( $start_date ) ) . ' - ' . date( 'j M Y', strtotime( $end_date ) );
             }
         }
     }
-    
-    // Check if tour offers extension
+
     $extension_offered = false;
-    $extension_name = '';
-    $extension_dates = '';
-    
-    if ($tour_id > 0) {
-        $extension_offered = get_field('extension_offered', $tour_id);
-        if ($extension_offered) {
-            $extension_name = get_field('extension_title', $tour_id) ?: 'Extension';
+    $extension_name    = '';
+    $extension_dates   = '';
+
+    if ( $tour_id > 0 ) {
+        $extension_offered = get_field( 'extension_offered', $tour_id );
+        if ( $extension_offered ) {
+            $extension_name = get_field( 'extension_title', $tour_id ) ?: 'Extension';
         }
     }
-    
-    if ($tour_date_id > 0 && $extension_offered) {
-        $extension_days = get_field('extension_driving_days', $tour_id);
-        $tour_end_date = get_field('end_date', $tour_date_id);
-        if ($extension_days && $tour_end_date) {
-            // Extension starts on tour end date, not the day after
-            $ext_start = date('j M Y', strtotime($tour_end_date));
-            $ext_end = date('j M Y', strtotime($tour_end_date . ' +' . $extension_days . ' days'));
+
+    if ( $tour_date_id > 0 && $extension_offered ) {
+        $extension_days = get_field( 'extension_driving_days', $tour_id );
+        $tour_end_date  = get_field( 'end_date', $tour_date_id );
+        if ( $extension_days && $tour_end_date ) {
+            $ext_start = date( 'j M Y', strtotime( $tour_end_date ) );
+            $ext_end   = date( 'j M Y', strtotime( $tour_end_date . ' +' . $extension_days . ' days' ) );
             $extension_dates = $ext_start . ' - ' . $ext_end;
         }
     }
-    
-    // Header section with tour info
-    fputcsv($output, array('Tour:', $tour_name));
-    fputcsv($output, array('Tour Dates:', $tour_dates));
-    if ($extension_offered) {
-        fputcsv($output, array('Extension:', $extension_name));
-        fputcsv($output, array('Extension Dates:', $extension_dates));
+
+    fputcsv( $output, array( 'Tour:', $tour_name ) );
+    fputcsv( $output, array( 'Tour Dates:', $tour_dates ) );
+    if ( $extension_offered ) {
+        fputcsv( $output, array( 'Extension:', $extension_name ) );
+        fputcsv( $output, array( 'Extension Dates:', $extension_dates ) );
     }
-    fputcsv($output, array()); // Blank row
-    
-    // Column headers
-    $headers = array(
-        'ID',
-        'Name',
-        'Email',
-        'Phone',
-        'Package',
-        'Vehicles',
-        'Tour Price',
-        'Coupon',
-        'Add\'l Charge',
-        'Total Due',
-        'Total Paid',
-        'Payment Discount',
-        'Balance Due',
-        'Status',
-        'Booking Details Link',
-        'Finalization Link'
-    );
-    
-    // Add Extension column if extension is offered
-    if ($extension_offered) {
-        array_splice($headers, 5, 0, array('Extension'));
-    }
-    fputcsv($output, $headers);
-    
-    // Data rows
-    foreach ($bookings as $booking) {
-        // Build combined name using standard helper function
-        $combined_name = bst_format_guest_name(
-            $booking->guest1_first_name,
-            $booking->guest1_last_name,
-            $booking->guest2_first_name ?? '',
-            $booking->guest2_last_name ?? ''
-        );
-        
-        // Format phone number (international style)
-        $phone = $booking->guest1_phone;
-        $formatted_phone = bst_format_phone_international($phone);
-        
-        // Build package description (just the package, no extension)
-        $package_desc = '';
-        if (!empty($booking->tour_package_text)) {
-            $package_desc = $booking->tour_package_text;
+    fputcsv( $output, array() );
+
+    fputcsv( $output, array( 'Guest Name', 'Shirt Size' ) );
+
+    foreach ( $bookings as $booking ) {
+        $g1 = trim( ( $booking->guest1_first_name ?? '' ) . ' ' . ( $booking->guest1_last_name ?? '' ) );
+        $g2 = trim( ( $booking->guest2_first_name ?? '' ) . ' ' . ( $booking->guest2_last_name ?? '' ) );
+        $s1 = isset( $booking->guest1_shirt_size ) ? trim( (string) $booking->guest1_shirt_size ) : '';
+        $s2 = isset( $booking->guest2_shirt_size ) ? trim( (string) $booking->guest2_shirt_size ) : '';
+
+        $guest1_row = ( '' !== $g1 || '' !== $s1 );
+        $guest2_row = ( '' !== $g2 || '' !== $s2 );
+
+        if ( $guest1_row ) {
+            $size_disp = function_exists( 'bst_get_shirt_size_display' ) ? bst_get_shirt_size_display( $s1 ) : $s1;
+            fputcsv( $output, array( $g1, $size_disp ) );
         }
-        
-        // Build vehicles string (strip last set of parentheses from each vehicle)
-        $vehicles = '';
-        if (!empty($booking->vehicle1)) {
-            $vehicle1_clean = preg_replace('/\s*\([^)]*\)\s*$/', '', $booking->vehicle1);
-            $vehicles = trim($vehicle1_clean);
+        if ( $guest2_row ) {
+            $size_disp2 = function_exists( 'bst_get_shirt_size_display' ) ? bst_get_shirt_size_display( $s2 ) : $s2;
+            fputcsv( $output, array( $g2, $size_disp2 ) );
         }
-        if (!empty($booking->vehicle2)) {
-            $vehicle2_clean = preg_replace('/\s*\([^)]*\)\s*$/', '', $booking->vehicle2);
-            $vehicles .= (!empty($vehicles) ? ' / ' : '') . trim($vehicle2_clean);
-        }
-        
-        // Financial data
-        $tour_price = !empty($booking->tour_price) ? $booking->tour_price : 0;
-        $coupon_amount = !empty($booking->coupon_amount) ? $booking->coupon_amount : 0;
-        $additional_charge = !empty($booking->additional_charge) ? $booking->additional_charge : 0;
-        $total_paid = !empty($booking->total_paid) ? $booking->total_paid : 0;
-        $payment_discount = !empty($booking->payment_discount) ? $booking->payment_discount : 0;
-        
-        // Calculate Total Due
-        $total_due = $tour_price - $coupon_amount + $additional_charge;
-        
-        // Get Balance Due from booking record (accounts for all payments and discounts)
-        $balance_due = !empty($booking->balance_due) ? $booking->balance_due : 0;
-        
-        // Booking Details link (customer view)
-        $booking_details_link = '';
-        // Use entry_id if available, otherwise use booking_id
-        if (!empty($booking->booking_entry_id)) {
-            $encoded_eid = bst_encode_booking_id($booking->booking_entry_id);
-            $booking_details_link = site_url('/bookingdetails/') . '?eid=' . $encoded_eid;
-        } elseif (!empty($booking->finalization_entry_id)) {
-            $encoded_eid = bst_encode_booking_id($booking->finalization_entry_id);
-            $booking_details_link = site_url('/bookingdetails/') . '?eid=' . $encoded_eid;
-        } elseif (!empty($booking->id)) {
-            $encoded_bid = bst_encode_booking_id($booking->id);
-            $booking_details_link = site_url('/bookingdetails/') . '?bid=' . $encoded_bid;
-        }
-        
-        // Finalization link (if status = booked and no finalization_entry_id)
-        $finalization_link = '';
-        if (strtolower($booking->booking_status) === 'booked' && empty($booking->finalization_entry_id)) {
-            $finalization_link = bst_get_finalization_url($booking->id);
-        }
-        
-        // Build row
-        $row = array(
-            $booking->id,
-            $combined_name,
-            $booking->guest1_email,
-            $formatted_phone,
-            $package_desc,
-            $vehicles,
-            number_format($tour_price, 2, '.', ''),
-            number_format($coupon_amount, 2, '.', ''),
-            number_format($additional_charge, 2, '.', ''),
-            number_format($total_due, 2, '.', ''),
-            number_format($total_paid, 2, '.', ''),
-            number_format($payment_discount, 2, '.', ''),
-            number_format($balance_due, 2, '.', ''),
-            $booking->booking_status,
-            $booking_details_link,
-            $finalization_link
-        );
-        
-        // Insert Extension column value if extension is offered
-        if ($extension_offered) {
-            $has_extension = (!empty($booking->tour_extension_added) && $booking->tour_extension_added == 1) ? 'X' : '';
-            array_splice($row, 5, 0, array($has_extension));
-        }
-        
-        fputcsv($output, $row);
     }
 }
 
 // #endregion
-
-/**
- * Quick export handler for dashboard finalization links
- * Uses GET parameters for simple one-click exports
- */
-add_action('admin_init', 'bst_handle_quick_finalization_export');
-
-function bst_handle_quick_finalization_export() {
-    // Check if this is a finalization export request
-    if (!isset($_GET['bst_action']) || $_GET['bst_action'] !== 'export_finalization') {
-        return;
-    }
-    
-    // Security check
-    if (!current_user_can('manage_options')) {
-        wp_die('Unauthorized', 'Error', array('response' => 403));
-    }
-    
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'bst_tour_booking';
-    
-    // Get filter parameters
-    $filter_tour_date_id = isset($_GET['tour_date_id']) ? intval($_GET['tour_date_id']) : 0;
-    
-    // Build query for finalization needed bookings
-    $where_conditions = array('booking_status = \'Booked\'');
-    $query_params = array();
-    
-    // Always filter by tour_date_id (already validated above)
-    $where_conditions[] = 'tour_date_id = %d';
-    $query_params[] = $filter_tour_date_id;
-    
-    // Add finalization criteria (no finalization entry)
-    $where_conditions[] = '(finalization_entry_id IS NULL OR finalization_entry_id = 0)';
-    
-    $where_clause = implode(' AND ', $where_conditions);
-    $query = "SELECT * FROM $table_name WHERE $where_clause ORDER BY tour_date_id ASC, id ASC";
-    
-    if (!empty($query_params)) {
-        $bookings = $wpdb->get_results($wpdb->prepare($query, $query_params));
-    } else {
-        $bookings = $wpdb->get_results($query);
-    }
-    
-    // Set up CSV output
-    header('Content-Type: text/csv; charset=utf-8');
-    $filename = 'finalization_list_' . date('Y-m-d_His') . '.csv';
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    
-    $output = fopen('php://output', 'w');
-    
-    // UTF-8 BOM
-    fprintf($output, chr(0xEF).chr(0xBB).chr(0xBF));
-    
-    // Generate CSV - pass tour_date_id and let function get all tour info
-    bst_export_finalization_list_csv($output, $bookings, $filter_tour_date_id);
-    
-    fclose($output);
-    exit;
-}
 
 // Future export handlers can be added here as needed
 // Example: Customer export, tour data export, etc.

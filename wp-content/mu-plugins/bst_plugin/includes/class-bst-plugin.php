@@ -565,8 +565,14 @@ class BST_Plugin {
         }
 
         if (!empty($selected_status)) {
-            $where_conditions[] = "booking_status = %s";
-            $where_params[] = $selected_status;
+            if ($selected_status === 'all_active') {
+                $where_conditions[] = "booking_status NOT IN (%s, %s)";
+                $where_params[] = 'Waiting List';
+                $where_params[] = 'Cancelled';
+            } else {
+                $where_conditions[] = "booking_status = %s";
+                $where_params[] = $selected_status;
+            }
         }
 
         if (!empty($search)) {
@@ -646,8 +652,15 @@ class BST_Plugin {
             $query_params[] = intval($_GET['filter_tour_date_id']);
         }
         if (isset($_GET['filter_status']) && !empty($_GET['filter_status'])) {
-            $where_conditions[] = "booking_status = %s";
-            $query_params[] = trim($_GET['filter_status']);
+            $fs = trim($_GET['filter_status']);
+            if ($fs === 'all_active') {
+                $where_conditions[] = "booking_status NOT IN (%s, %s)";
+                $query_params[] = 'Waiting List';
+                $query_params[] = 'Cancelled';
+            } else {
+                $where_conditions[] = "booking_status = %s";
+                $query_params[] = $fs;
+            }
         }
         if (isset($_GET['search']) && !empty($_GET['search'])) {
             $search = sanitize_text_field($_GET['search']);
@@ -754,8 +767,15 @@ class BST_Plugin {
             $query_params[] = intval($_GET['filter_tour_date_id']);
         }
         if (isset($_GET['filter_status']) && !empty($_GET['filter_status'])) {
-            $where_conditions[] = "booking_status = %s";
-            $query_params[] = trim($_GET['filter_status']);
+            $fs = trim($_GET['filter_status']);
+            if ($fs === 'all_active') {
+                $where_conditions[] = "booking_status NOT IN (%s, %s)";
+                $query_params[] = 'Waiting List';
+                $query_params[] = 'Cancelled';
+            } else {
+                $where_conditions[] = "booking_status = %s";
+                $query_params[] = $fs;
+            }
         }
         if (isset($_GET['search']) && !empty($_GET['search'])) {
             $search = sanitize_text_field($_GET['search']);
@@ -3949,8 +3969,8 @@ class BST_Plugin {
             $where_params[] = $filter_tour_date_id;
         }
 
-        // If a status filter is applied and it's not Booked or Finalized, no bookings to count
-        if (!empty($filter_status) && !in_array($filter_status, array('Booked', 'Finalized'))) {
+        // If a status filter is applied and it's not Booked, Finalized, or all_active, no bookings to count
+        if (!empty($filter_status) && !in_array($filter_status, array('Booked', 'Finalized', 'all_active'), true)) {
             wp_send_json_success(array('count' => 0, 'tour_info' => '', 'date_info' => ''));
             return;
         }
@@ -4054,8 +4074,8 @@ class BST_Plugin {
             $where_params[] = $filter_tour_date_id;
         }
 
-        // If a status filter is applied and it's not Booked or Finalized, no bookings to update
-        if (!empty($filter_status) && !in_array($filter_status, array('Booked', 'Finalized'))) {
+        // If a status filter is applied and it's not Booked, Finalized, or all_active, no bookings to update
+        if (!empty($filter_status) && !in_array($filter_status, array('Booked', 'Finalized', 'all_active'), true)) {
             wp_send_json_success(array('message' => 'No Booked or Finalized bookings found in the current selection.', 'updated_count' => 0));
             return;
         }
@@ -4163,15 +4183,26 @@ class BST_Plugin {
         }
 
         if (!empty($filter_status)) {
-            $where_conditions[] = "booking_status = %s";
-            $where_params[] = $filter_status;
+            if ($filter_status === 'all_active') {
+                $where_conditions[] = 'booking_status NOT IN (%s, %s)';
+                $where_params[] = 'Waiting List';
+                $where_params[] = 'Cancelled';
+            } else {
+                $where_conditions[] = "booking_status = %s";
+                $where_params[] = $filter_status;
+            }
         }
 
-        // Exclude certain statuses from email collection
-        $excluded_statuses = array('Cancelled', 'Waiting List', 'Transfer');
-        $placeholders = implode(',', array_fill(0, count($excluded_statuses), '%s'));
-        $where_conditions[] = "booking_status NOT IN ($placeholders)";
-        $where_params = array_merge($where_params, $excluded_statuses);
+        // Exclude certain statuses from email collection (all_active already drops WL/Cancelled)
+        if ($filter_status !== 'all_active') {
+            $excluded_statuses = array('Cancelled', 'Waiting List', 'Transfer');
+            $placeholders = implode(',', array_fill(0, count($excluded_statuses), '%s'));
+            $where_conditions[] = "booking_status NOT IN ($placeholders)";
+            $where_params = array_merge($where_params, $excluded_statuses);
+        } else {
+            $where_conditions[] = 'booking_status NOT IN (%s)';
+            $where_params[] = 'Transfer';
+        }
 
         $where_clause = !empty($where_conditions) ? ' WHERE ' . implode(' AND ', $where_conditions) : '';
         
