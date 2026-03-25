@@ -15,8 +15,36 @@ require_once plugin_dir_path(__DIR__) . 'includes/tour-dropdown-handlers.php';
 // Include customer actions (centralized CRUD operations)
 require_once plugin_dir_path(__DIR__) . 'includes/database/customer-actions.php';
 
-// Start the session if it hasn't been started already and headers not sent
+// Start the session if it hasn't been started already and headers not sent.
+// Some production requests can contain an invalid/overlong PHPSESSID value
+// (e.g. from a corrupted cookie or URL parameter), which triggers warnings
+// and can break the session read. We defensively ignore invalid IDs here.
 if (!session_id() && !headers_sent()) {
+    $sid_name = session_name();
+    $sid_re   = '/^[A-Za-z0-9\-\x2C]+$/'; // allowed: A-Z a-z 0-9 - ,
+
+    // Prefer cookies only (avoid using session id from URL params if configured).
+    // If the cookie contains an invalid value, we unset it below before session_start().
+    if (ini_get('session.use_only_cookies') !== '1') {
+        @ini_set('session.use_only_cookies', '1');
+    }
+
+    // If GET carries a session id, ignore it by unsetting.
+    if (isset($_GET[$sid_name])) {
+        $incoming = (string) $_GET[$sid_name];
+        if ($incoming !== '' && (!preg_match($sid_re, $incoming) || strlen($incoming) > 128)) {
+            unset($_GET[$sid_name]);
+        }
+    }
+
+    // If cookie carries an invalid session id, unset it so PHP generates a new one.
+    if (isset($_COOKIE[$sid_name])) {
+        $incoming = (string) $_COOKIE[$sid_name];
+        if ($incoming !== '' && (!preg_match($sid_re, $incoming) || strlen($incoming) > 128)) {
+            unset($_COOKIE[$sid_name]);
+        }
+    }
+
     session_start();
 }
 
