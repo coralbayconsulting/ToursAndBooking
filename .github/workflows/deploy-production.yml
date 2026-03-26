@@ -20,6 +20,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Use GitHub Environment based OIDC subject:
+    # repo:<org>/<repo>:environment:production
+    environment: production
     permissions:
       contents: read
       id-token: write
