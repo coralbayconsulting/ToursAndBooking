@@ -163,12 +163,14 @@ $transfer_bookings = $wpdb->get_results("
     ORDER BY b.created_date ASC
 ");
 
-// Get refunds due (bookings with negative balance due)
+// Get refunds due (negative balance OR pending refund payment)
 $refunds_due = $wpdb->get_results("
     SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, b.tour_text, b.tour_date_text, 
-           b.created_date, b.booking_status, b.tour_package_text, b.balance_due, b.tour_currency
+           b.created_date, b.booking_status, b.tour_package_text, b.balance_due, b.tour_currency,
+           b.refund_payment_status, b.refund_payment_amount
     FROM $booking_table b
     WHERE b.balance_due < 0
+       OR (b.refund_payment_status = 'Pending' AND COALESCE(b.refund_payment_amount, 0) > 0)
     ORDER BY b.balance_due ASC
 ");
 
@@ -558,7 +560,7 @@ if (!empty($waiting_list_bookings)) {
                 </ul>
             </div>
             <div class="dashboard-tile-footer">
-                <span style="color: #666; font-style: italic;">All bookings with negative balance requiring refund</span>
+                <span style="color: #666; font-style: italic;">Bookings with negative balance or pending refund payment</span>
             </div>
         </div>
         <?php endif; ?>

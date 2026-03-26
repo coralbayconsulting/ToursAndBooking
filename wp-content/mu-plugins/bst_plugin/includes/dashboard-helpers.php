@@ -88,10 +88,11 @@ function bst_get_dashboard_metrics() {
         AND (b.finalization_entry_id IS NULL OR b.finalization_entry_id = 0)
     ", $one_twenty_days_from_now, $one_twenty_days_from_now));
 
-    // 8. Refunds due (negative balance)
+    // 8. Refunds due (negative balance OR pending refund payment)
     $refunds_due_count = (int) $wpdb->get_var("
         SELECT COUNT(*) FROM $booking_table 
         WHERE balance_due < 0
+           OR (refund_payment_status = 'Pending' AND COALESCE(refund_payment_amount, 0) > 0)
     ");
 
     // 9. Web bookings in last 24 hours (exclude reservations + waiting list)

@@ -3833,12 +3833,8 @@ function bst_generate_bank_wire_instructions($region_code, $payment_type, $amoun
                 $html .= ' (You saved C&#36;' . number_format($discount_cad, 2) . ' with this bank transfer)';
             }
             $html .= '<br><em>Converted from <strong>&euro;' . number_format($amount_after_discount, 2) . '</strong> at current rate</em></td></tr>';
-            $html .= '<tr><td>Recipient:</td><td>' . esc_html($company_name) . ' c/o DCB<br>736 Meridian Road NE, T2A 2N7 Calgary, Alberta – Canada</td></tr>';
             $html .= '<tr><td>Account Name:</td><td>' . esc_html($company_name) . '</td></tr>';
             $html .= '<tr><td>Interac e-Transfer:</td><td>claudio@bluestradatours.com</td></tr>';
-            $html .= '<tr><td>Bank account number:</td><td>992269720</td></tr>';
-            $html .= '<tr><td>Transit number:</td><td>10009</td></tr>';
-            $html .= '<tr><td>Financial institution:</td><td>352</td></tr>';
             $html .= '<tr><td>Bank:</td><td>Digital Commerce Bank<br>736 Meridian Road NE, T2A 2N7 Calgary, Alberta – Canada<br><em style="font-size: 0.9em; color: #666;">(Serviced via Airwallex)</em></td></tr>';
             $html .= '</table>';
             
@@ -3846,8 +3842,7 @@ function bst_generate_bank_wire_instructions($region_code, $payment_type, $amoun
             $html .= '<div class="bwi-notes-heading"><strong>Canadian Bank Transfer Notes</strong></div>';
             $html .= '<ul>';
             $html .= '<li><strong>Interac e-Transfer (Recommended):</strong> Easiest method - just use the <strong>Interac e-Transfer email</strong> address shown above. Free or low cost and arrives instantly.<br><br><strong>Payment Limits:</strong> Most Canadian banks have daily Interac e-Transfer limits (typically C&#36;3,000-&#36;10,000 per day). Amounts over C&#36;3,000 may require special approval from your bank. If your payment exceeds your daily limit, you may need to split the transfer across multiple days. Contact your bank to confirm your specific limits and approval requirements.</li>';
-            $html .= '<li><strong>EFT Transfer:</strong> Use <strong>Account Number</strong> + <strong>Transit Number</strong> + <strong>Financial Institution Number</strong> if your bank doesn\'t support Interac or if your transfer exceeds Interac e-Transfer limits (limits vary by bank).</li>';
-            $html .= '<li style="margin-bottom: 0;"><strong>Important:</strong> If your bank doesn\'t allow you to complete this transfer online, you may be able to complete it in person at your bank branch. If you\'re unable to initiate a domestic transfer, please refer to the Alternate International Bank Wire option below.</li>';
+            $html .= '<li style="margin-bottom: 0;"><strong>Important:</strong> This CAD payment option is via Interac e-Transfer only. If you\'re unable to complete an Interac transfer, please refer to the Alternate International Bank Wire option below.</li>';
             $html .= '</ul></div>';
             
             // Add international fallback
