@@ -234,15 +234,19 @@ function bst_export_bookings_excel_handler() {
         'Deposit Payment Method',
         'Deposit Payment Amount',
         'Deposit Payment Date',
+        'Deposit Payment Status',
         'Balance Payment Method',
         'Balance Payment Amount',
         'Balance Payment Date',
+        'Balance Payment Status',
         'Additional Payment Method',
         'Additional Payment Amount',
         'Additional Payment Date',
+        'Additional Payment Status',
         'Refund Payment Method',
         'Refund Payment Amount',
         'Refund Payment Date',
+        'Refund Payment Status',
         'How Heard',
         'How Heard Other',
         'Motor Club',
@@ -347,15 +351,19 @@ function bst_export_bookings_excel_handler() {
             $booking->deposit_payment_method,
             $booking->deposit_payment_amount,
             $booking->deposit_payment_date,
+            $booking->deposit_payment_status ?? '',
             $booking->balance_payment_method,
             $booking->balance_payment_amount,
             $booking->balance_payment_date ?? '',
+            $booking->balance_payment_status ?? '',
             $booking->additional_payment_method,
             $booking->additional_payment_amount,
             $booking->additional_payment_date ?? '',
+            $booking->additional_payment_status ?? '',
             $booking->refund_payment_method ?? '',
             $booking->refund_payment_amount ?? '',
             $booking->refund_payment_date ?? '',
+            $booking->refund_payment_status ?? '',
             $booking->how_heard,
             $booking->how_heard_other,
             $booking->motor_club,
@@ -403,138 +411,25 @@ function bst_export_bookings_excel_handler() {
  * Helper function to get original commission basis in booking currency (no conversion)
  */
 function bst_get_original_commission_basis($booking) {
-    $basis = 0;
-    
-    // For offline bookings, use total paid amount regardless of status
-    if ($booking->booking_method === 'Offline') {
-        // For offline bookings, basis is simply the total paid amount
-        $basis = floatval($booking->total_paid ?? 0);
-    } else {
-        // For online bookings, add uninvoiced payments to basis calculation
-        if ($booking->booking_status === 'Completed') {
-            if ($booking->deposit_payment_amount > 0 && (empty($booking->deposit_commission_invoice) || $booking->deposit_commission_invoice === '')) {
-                $basis += floatval($booking->deposit_payment_amount);
-            }
-            if ($booking->balance_payment_amount > 0 && (empty($booking->balance_commission_invoice) || $booking->balance_commission_invoice === '')) {
-                $basis += floatval($booking->balance_payment_amount);
-            }
-            if ($booking->additional_payment_amount > 0 && (empty($booking->additional_payment_commission_invoice) || $booking->additional_payment_commission_invoice === '')) {
-                $basis += floatval($booking->additional_payment_amount);
-            }
-        } elseif ($booking->booking_status === 'Booked') {
-            if (empty($booking->deposit_commission_invoice) || $booking->deposit_commission_invoice === '') {
-                $basis += floatval($booking->deposit_payment_amount ?? 0);
-            }
-        } elseif ($booking->booking_status === 'Finalized') {
-            if (empty($booking->balance_commission_invoice) || $booking->balance_commission_invoice === '') {
-                $basis += floatval($booking->balance_payment_amount ?? 0);
-            }
-            if ($booking->additional_payment_amount > 0 && (empty($booking->additional_payment_commission_invoice) || $booking->additional_payment_commission_invoice === '')) {
-                $basis += floatval($booking->additional_payment_amount);
-            }
-        }
+    if (function_exists('bst_commission_booking_net_basis_original_currency')) {
+        return bst_commission_booking_net_basis_original_currency($booking);
     }
-    
-    // Add refunds as negative basis (only if at least one payment was already invoiced)
-    // For offline bookings, refunds are already included in the total_paid amount, so don't subtract again
-    if ($booking->refund_payment_amount > 0 && $booking->booking_method !== 'Offline') {
-        $has_invoiced_payments = !empty($booking->deposit_commission_invoice) || 
-                                !empty($booking->balance_commission_invoice) || 
-                                !empty($booking->additional_payment_commission_invoice);
-        
-        if ($has_invoiced_payments) {
-            $refund_amount = floatval($booking->refund_payment_amount);
-            $basis -= $refund_amount; // Subtract refund (makes commission negative)
-        }
-    }
-    
-    return $basis;
+    return 0;
 }
 
 /**
  * Helper function to calculate commission basis for a booking
  */
 function bst_calculate_commission_basis($booking, $usd_rate) {
-    $eur_basis = 0;
-    $usd_basis = 0;
-    $currency = strtoupper(trim($booking->tour_currency ?? 'EUR'));
-    
-    // For offline bookings, use total paid amount regardless of status
-    if ($booking->booking_method === 'Offline') {
-        $total_paid = floatval($booking->total_paid ?? 0);
-        if ($currency === 'EUR') {
-            $eur_basis = $total_paid;
-        } elseif ($currency === 'USD') {
-            $usd_basis = $total_paid;
-        }
-    } else {
-        // For online bookings, add uninvoiced payments to basis calculation
-        if ($booking->booking_status === 'Completed') {
-            if ($booking->deposit_payment_amount > 0 && (empty($booking->deposit_commission_invoice) || $booking->deposit_commission_invoice === '')) {
-            if ($currency === 'EUR') {
-                $eur_basis += floatval($booking->deposit_payment_amount);
-            } elseif ($currency === 'USD') {
-                $usd_basis += floatval($booking->deposit_payment_amount);
-            }
-        }
-        if ($booking->balance_payment_amount > 0 && (empty($booking->balance_commission_invoice) || $booking->balance_commission_invoice === '')) {
-            if ($currency === 'EUR') {
-                $eur_basis += floatval($booking->balance_payment_amount);
-            } elseif ($currency === 'USD') {
-                $usd_basis += floatval($booking->balance_payment_amount);
-            }
-        }
-        if ($booking->additional_payment_amount > 0 && (empty($booking->additional_payment_commission_invoice) || $booking->additional_payment_commission_invoice === '')) {
-            if ($currency === 'EUR') {
-                $eur_basis += floatval($booking->additional_payment_amount);
-            } elseif ($currency === 'USD') {
-                $usd_basis += floatval($booking->additional_payment_amount);
-            }
-        }
-        } elseif ($booking->booking_status === 'Booked') {
-            if (empty($booking->deposit_commission_invoice) || $booking->deposit_commission_invoice === '') {
-                if ($currency === 'EUR') {
-                    $eur_basis += floatval($booking->deposit_payment_amount ?? 0);
-                } elseif ($currency === 'USD') {
-                    $usd_basis += floatval($booking->deposit_payment_amount ?? 0);
-                }
-            }
-        } elseif ($booking->booking_status === 'Finalized') {
-            if (empty($booking->balance_commission_invoice) || $booking->balance_commission_invoice === '') {
-            if ($currency === 'EUR') {
-                $eur_basis += floatval($booking->balance_payment_amount ?? 0);
-            } elseif ($currency === 'USD') {
-                $usd_basis += floatval($booking->balance_payment_amount ?? 0);
-            }
-        }
-        if ($booking->additional_payment_amount > 0 && (empty($booking->additional_payment_commission_invoice) || $booking->additional_payment_commission_invoice === '')) {
-            if ($currency === 'EUR') {
-                $eur_basis += floatval($booking->additional_payment_amount);
-            } elseif ($currency === 'USD') {
-                $usd_basis += floatval($booking->additional_payment_amount);
-            }
-        }
-        }
-        
-        // Add refunds as negative basis (only for web bookings and only if at least one payment was already invoiced)
-        if ($booking->refund_payment_amount > 0) {
-            $has_invoiced_payments = !empty($booking->deposit_commission_invoice) || 
-                                    !empty($booking->balance_commission_invoice) || 
-                                    !empty($booking->additional_payment_commission_invoice);
-            
-            if ($has_invoiced_payments) {
-                $refund_amount = floatval($booking->refund_payment_amount);
-                if ($currency === 'EUR') {
-                    $eur_basis -= $refund_amount; // Subtract refund (makes commission negative)
-                } elseif ($currency === 'USD') {
-                    $usd_basis -= $refund_amount; // Subtract refund (makes commission negative)
-                }
-            }
-        }
+    if (!function_exists('bst_commission_booking_net_basis_original_currency')) {
+        return 0;
     }
-    
-    // Calculate converted basis (EUR + USD converted to EUR by multiplying by exchange rate)
-    return $eur_basis + ($usd_basis * $usd_rate);
+    $basis = bst_commission_booking_net_basis_original_currency($booking);
+    $currency = strtoupper(trim($booking->tour_currency ?? 'EUR'));
+    if ($currency === 'USD') {
+        return $basis * floatval($usd_rate);
+    }
+    return $basis;
 }
 
 /**
@@ -594,148 +489,39 @@ function bst_write_commission_booking_row($output, $booking, $usd_rate) {
             $how_heard .= ($how_heard ? ': ' : '') . trim($booking->how_heard_other);
         }
         
-        // Determine export reason based on booking status and method
-        $export_reason = '';
-        if ($booking->booking_status === 'Completed') {
-            $missing_invoices = array();
-            if ($booking->deposit_payment_amount > 0 && (empty($booking->deposit_commission_invoice) || $booking->deposit_commission_invoice === '')) {
-                $missing_invoices[] = 'deposit';
-            }
-            if ($booking->balance_payment_amount > 0 && (empty($booking->balance_commission_invoice) || $booking->balance_commission_invoice === '')) {
-                $missing_invoices[] = 'balance';
-            }
-            if ($booking->additional_payment_amount > 0 && (empty($booking->additional_payment_commission_invoice) || $booking->additional_payment_commission_invoice === '')) {
-                $missing_invoices[] = 'additional payment';
-            }
-            
-            if (!empty($missing_invoices)) {
-                if (count($missing_invoices) === 1) {
-                    $export_reason = 'Completed: No ' . $missing_invoices[0] . ' commission invoice';
-                } else {
-                    $export_reason = 'Completed: No ' . implode(' or ', $missing_invoices) . ' commission invoice';
-                }
-            }
-        } elseif ($booking->booking_status === 'Booked' && $booking->booking_method !== 'Offline') {
-            if (empty($booking->deposit_commission_invoice) || $booking->deposit_commission_invoice === '') {
-                $export_reason = 'Booked (Online): No deposit commission invoice';
-            }
-        } elseif ($booking->booking_status === 'Finalized' && $booking->booking_method !== 'Offline') {
-            $missing_invoices = array();
-            if (empty($booking->balance_commission_invoice) || $booking->balance_commission_invoice === '') {
-                $missing_invoices[] = 'balance';
-            }
-            if ($booking->additional_payment_amount > 0 && (empty($booking->additional_payment_commission_invoice) || $booking->additional_payment_commission_invoice === '')) {
-                $missing_invoices[] = 'additional payment';
-            }
-            
-            if (!empty($missing_invoices)) {
-                if (count($missing_invoices) === 1) {
-                    $export_reason = 'Finalized (Online): No ' . $missing_invoices[0] . ' commission invoice';
-                } else {
-                    $export_reason = 'Finalized (Online): No ' . implode(' or ', $missing_invoices) . ' commission invoice';
-                }
-            }
-        }
-        
-        // Calculate "Paid On" field - list which payments need to be invoiced
+        // Commission export reason / "Paid on": payment line status + commission invoice fields + uninvoiced refund netting.
         $paid_on_payments = array();
-        
-        if ($booking->booking_status === 'Completed') {
-            // For completed bookings, check each payment type
-            if ($booking->deposit_payment_amount > 0 && (empty($booking->deposit_commission_invoice) || $booking->deposit_commission_invoice === '')) {
+        $missing_labels     = array();
+        if (function_exists('bst_commission_uninvoiced_inflow_amounts')) {
+            $nets = bst_commission_uninvoiced_inflow_amounts($booking);
+            if (floatval($nets['deposit'] ?? 0) > 0) {
                 $paid_on_payments[] = 'Deposit';
+                $missing_labels[]    = 'deposit';
             }
-            if ($booking->balance_payment_amount > 0 && (empty($booking->balance_commission_invoice) || $booking->balance_commission_invoice === '')) {
+            if (floatval($nets['balance'] ?? 0) > 0) {
                 $paid_on_payments[] = 'Balance';
+                $missing_labels[]    = 'balance';
             }
-            if ($booking->additional_payment_amount > 0 && (empty($booking->additional_payment_commission_invoice) || $booking->additional_payment_commission_invoice === '')) {
+            if (floatval($nets['additional'] ?? 0) > 0) {
                 $paid_on_payments[] = 'Additional';
-            }
-            
-            // For offline completed bookings, if all payments need invoicing, show "Total"
-            if ($booking->booking_method === 'Offline' && count($paid_on_payments) >= 2) {
-                $paid_on = 'Total';
-            } else {
-                $paid_on = implode(', ', $paid_on_payments);
-            }
-        } elseif ($booking->booking_status === 'Booked' && $booking->booking_method !== 'Offline') {
-            // Online booked bookings only need deposit invoiced
-            if (empty($booking->deposit_commission_invoice) || $booking->deposit_commission_invoice === '') {
-                $paid_on = 'Deposit';
-            } else {
-                $paid_on = '';
-            }
-        } elseif ($booking->booking_status === 'Finalized' && $booking->booking_method !== 'Offline') {
-            // Online finalized bookings may need balance and/or additional invoiced
-            if (empty($booking->balance_commission_invoice) || $booking->balance_commission_invoice === '') {
-                $paid_on_payments[] = 'Balance';
-            }
-            if ($booking->additional_payment_amount > 0 && (empty($booking->additional_payment_commission_invoice) || $booking->additional_payment_commission_invoice === '')) {
-                $paid_on_payments[] = 'Additional';
-            }
-            $paid_on = implode(', ', $paid_on_payments);
-        } else {
-            $paid_on = '';
-        }
-        
-        // Calculate commission basis amounts (sum of uninvoiced payments)
-        $eur_basis = 0;
-        $usd_basis = 0;
-        $currency = strtoupper(trim($booking->tour_currency ?? 'EUR'));
-        
-        // Add uninvoiced payments to basis calculation
-        if ($booking->booking_status === 'Completed') {
-            if ($booking->deposit_payment_amount > 0 && (empty($booking->deposit_commission_invoice) || $booking->deposit_commission_invoice === '')) {
-                if ($currency === 'EUR') {
-                    $eur_basis += floatval($booking->deposit_payment_amount);
-                } elseif ($currency === 'USD') {
-                    $usd_basis += floatval($booking->deposit_payment_amount);
-                }
-            }
-            if ($booking->balance_payment_amount > 0 && (empty($booking->balance_commission_invoice) || $booking->balance_commission_invoice === '')) {
-                if ($currency === 'EUR') {
-                    $eur_basis += floatval($booking->balance_payment_amount);
-                } elseif ($currency === 'USD') {
-                    $usd_basis += floatval($booking->balance_payment_amount);
-                }
-            }
-            if ($booking->additional_payment_amount > 0 && (empty($booking->additional_payment_commission_invoice) || $booking->additional_payment_commission_invoice === '')) {
-                if ($currency === 'EUR') {
-                    $eur_basis += floatval($booking->additional_payment_amount);
-                } elseif ($currency === 'USD') {
-                    $usd_basis += floatval($booking->additional_payment_amount);
-                }
-            }
-        } elseif ($booking->booking_status === 'Booked' && $booking->booking_method !== 'Offline') {
-            if (empty($booking->deposit_commission_invoice) || $booking->deposit_commission_invoice === '') {
-                if ($currency === 'EUR') {
-                    $eur_basis += floatval($booking->deposit_payment_amount ?? 0);
-                } elseif ($currency === 'USD') {
-                    $usd_basis += floatval($booking->deposit_payment_amount ?? 0);
-                }
-            }
-        } elseif ($booking->booking_status === 'Finalized' && $booking->booking_method !== 'Offline') {
-            if (empty($booking->balance_commission_invoice) || $booking->balance_commission_invoice === '') {
-                if ($currency === 'EUR') {
-                    $eur_basis += floatval($booking->balance_payment_amount ?? 0);
-                } elseif ($currency === 'USD') {
-                    $usd_basis += floatval($booking->balance_payment_amount ?? 0);
-                }
-            }
-            if ($booking->additional_payment_amount > 0 && (empty($booking->additional_payment_commission_invoice) || $booking->additional_payment_commission_invoice === '')) {
-                if ($currency === 'EUR') {
-                    $eur_basis += floatval($booking->additional_payment_amount);
-                } elseif ($currency === 'USD') {
-                    $usd_basis += floatval($booking->additional_payment_amount);
-                }
+                $missing_labels[]    = 'additional payment';
             }
         }
-        
-        // Calculate converted basis (EUR + USD converted to EUR by dividing by exchange rate)
-        $converted_basis = $eur_basis + ($usd_basis / $usd_rate);
-        
-        // Calculate commission to invoice (Commission Basis Converted * commission percent, rounded to 2 decimal places)
-        // Note: booking_commission_percent is already stored as decimal (0.05 for 5%), so use it directly
+        if (function_exists('bst_commission_refund_reduces_basis') && bst_commission_refund_reduces_basis($booking)) {
+            $paid_on_payments[] = 'Refund (reverse)';
+        }
+
+        $paid_on = implode(', ', $paid_on_payments);
+        $export_reason = '';
+        if (!empty($missing_labels)) {
+            $export_reason = count($missing_labels) === 1
+                ? 'No ' . $missing_labels[0] . ' commission invoice'
+                : 'No ' . implode(' or ', $missing_labels) . ' commission invoice';
+        } elseif (function_exists('bst_commission_refund_reduces_basis') && bst_commission_refund_reduces_basis($booking)) {
+            $export_reason = 'Refund: commission reversal not invoiced';
+        }
+
+        $converted_basis = bst_calculate_commission_basis($booking, $usd_rate);
         $commission_percent = floatval($booking->booking_commission_percent ?? 0);
         $commission_to_invoice = round($converted_basis * $commission_percent, 2);
         
@@ -1420,185 +1206,100 @@ function bst_calculate_monthly_commissions($bookings, $year) {
 /**
  * Allocate commission amounts to specific months.
  *
- * "Ready" logic mirrors bst_calculate_commission_basis() in xlsx-export-handler.php exactly:
- *   Offline           → total_paid commission, in tour-end-date month
- *   Booked (online)   → deposit commission if no deposit invoice
- *   Finalized (online)→ balance commission if no balance invoice; additional if no additional invoice
- *   Completed (online)→ deposit + balance + additional, each if no invoice
+ * Uses bst_commission_uninvoiced_inflow_amounts + invoice fields (same basis as bst_calculate_commission_basis).
+ * No paper/offline special case; no booking_status-based branching for deposit/balance/additional.
  *
  * Payment dates are used only to determine which month to place the amount in.
- * If a payment date falls outside the summary year, the amount is placed in month 1
- * so the roll-forward logic moves it to the current month (same net effect).
  */
 function bst_allocate_commission_by_month($booking, &$commission_data, $year, $total_tour_cost, $commission_percent, $usd_rate) {
-    $booking_method = $booking->booking_method ?? '';
-    $booking_status = $booking->booking_status ?? '';
     $fx = (strtoupper(trim($booking->tour_currency ?? 'EUR')) === 'USD') ? $usd_rate : 1.0;
 
-    // Place a commission amount into the right group/month/bucket.
-    // For 'ready' items: if the payment date is outside the summary year, use month 1
-    // so the roll-forward moves it to the current month.
-    $place = function($group, $date, $amount, $invoice_field, $bucket_if_uninvoiced) use (&$commission_data, $year) {
-        if ($amount <= 0) return;
-        $bucket = !empty($invoice_field) ? 'invoiced' : $bucket_if_uninvoiced;
-        if (!empty($date)) {
-            $m  = intval(date('n', strtotime($date)));
-            $yr = intval(date('Y', strtotime($date)));
+    $place = function ( $group, $date, $amount, $invoice_field, $bucket_if_uninvoiced ) use ( &$commission_data, $year ) {
+        if ( $amount <= 0 ) {
+            return;
+        }
+        $bucket = ! empty( $invoice_field ) ? 'invoiced' : $bucket_if_uninvoiced;
+        if ( ! empty( $date ) ) {
+            $m  = intval( date( 'n', strtotime( $date ) ) );
+            $yr = intval( date( 'Y', strtotime( $date ) ) );
         } else {
             $m  = 1;
             $yr = $year;
         }
-        // For invoiced amounts: must be in the summary year.
-        // For ready/uninvoiced: if from a past year, use month 1 of summary year so roll-forward catches it.
-        if ($bucket === 'invoiced') {
-            if ($yr != $year) return;
+        if ( 'invoiced' === $bucket ) {
+            if ( $yr !== (int) $year ) {
+                return;
+            }
         } else {
-            if ($yr > $year) return; // future year payment — skip
-            if ($yr < $year) $m = 1; // past year payment — roll forward via month 1
-            // A future date means the payment hasn't been received yet — treat as projected.
-            if ($bucket === 'ready' && !empty($date) && date('Y-m-d', strtotime($date)) > date('Y-m-d')) {
+            if ( $yr > $year ) {
+                return;
+            }
+            if ( $yr < $year ) {
+                $m = 1;
+            }
+            if ( 'ready' === $bucket && ! empty( $date ) && date( 'Y-m-d', strtotime( $date ) ) > date( 'Y-m-d' ) ) {
                 $bucket = 'uninvoiced';
             }
         }
-        $commission_data[$group]['months'][$m][$bucket] += $amount;
+        $commission_data[ $group ]['months'][ $m ][ $bucket ] += $amount;
     };
 
-    // -----------------------------------------------------------------------
-    // OFFLINE: full commission on tour-end-date month
-    // -----------------------------------------------------------------------
-    if ($booking_method === 'Offline') {
-        if ($booking->tour_end_date) {
-            $comm = round($total_tour_cost * $commission_percent, 2);
-            $inv  = $booking->deposit_commission_invoice ?? $booking->balance_commission_invoice ?? '';
-            $place('Balance', $booking->tour_end_date, $comm, $inv, 'ready');
-        }
-        return;
+    $dep_amt = floatval( $booking->deposit_payment_amount ?? 0 ) * $fx;
+    $bal_amt = floatval( $booking->balance_payment_amount ?? 0 ) * $fx;
+    $add_amt = floatval( $booking->additional_payment_amount ?? 0 ) * $fx;
+
+    $nets = array( 'deposit' => 0.0, 'balance' => 0.0, 'additional' => 0.0 );
+    if ( function_exists( 'bst_commission_uninvoiced_inflow_amounts' ) ) {
+        $nets = bst_commission_uninvoiced_inflow_amounts( $booking );
     }
 
-    // -----------------------------------------------------------------------
-    // WEB bookings — mirror bst_calculate_commission_basis() per status
-    // -----------------------------------------------------------------------
-    $dep_amt = floatval($booking->deposit_payment_amount ?? 0) * $fx;
-    $bal_amt = floatval($booking->balance_payment_amount ?? 0) * $fx;
-    $add_amt = floatval($booking->additional_payment_amount ?? 0) * $fx;
+    $line_defs = array(
+        array(
+            'group'   => 'Deposit',
+            'gross_fx' => $dep_amt,
+            'net_key' => 'deposit',
+            'date'    => 'deposit_payment_date',
+            'inv'     => 'deposit_commission_invoice',
+        ),
+        array(
+            'group'   => 'Balance',
+            'gross_fx' => $bal_amt,
+            'net_key' => 'balance',
+            'date'    => 'balance_payment_date',
+            'inv'     => 'balance_commission_invoice',
+        ),
+        array(
+            'group'   => 'Additional',
+            'gross_fx' => $add_amt,
+            'net_key' => 'additional',
+            'date'    => 'additional_payment_date',
+            'inv'     => 'additional_payment_commission_invoice',
+        ),
+    );
 
-    if ($booking_status === 'Booked') {
-        // Only deposit (balance not yet received)
-        if ($dep_amt > 0) {
-            $place('Deposit', $booking->deposit_payment_date ?? null,
-                round($dep_amt * $commission_percent, 2),
-                $booking->deposit_commission_invoice ?? '', 'ready');
+    foreach ( $line_defs as $L ) {
+        $gross = $L['gross_fx'];
+        if ( $gross <= 0 || ! function_exists( 'bst_commission_line_needs_invoice' ) ) {
+            continue;
         }
-        // Balance not yet received — project to due date as uninvoiced
-        $balance_due_date = bst_calculate_balance_due_date($booking);
-        if (empty($balance_due_date) && !empty($booking->tour_start_date)) {
-            $balance_due_date = date('Y-m-d', strtotime('-60 days', strtotime($booking->tour_start_date)));
-        }
-        if ($balance_due_date) {
-            $m  = intval(date('n', strtotime($balance_due_date)));
-            $yr = intval(date('Y', strtotime($balance_due_date)));
-            if ($yr === $year) {
-                $remaining   = $total_tour_cost - $dep_amt;
-                $bal_comm    = round($remaining * $commission_percent, 2);
-                $inv         = $booking->balance_commission_invoice ?? '';
-                $commission_data['Balance']['months'][$m][!empty($inv) ? 'invoiced' : 'uninvoiced'] += $bal_comm;
-            }
-        }
-
-    } elseif ($booking_status === 'Finalized') {
-        // Deposit was previously invoiced when Booked — only balance + additional
-        if ($bal_amt > 0) {
-            $place('Balance', $booking->balance_payment_date ?? null,
-                round($bal_amt * $commission_percent, 2),
-                $booking->balance_commission_invoice ?? '', 'ready');
-        }
-        if ($add_amt > 0) {
-            $place('Additional', $booking->additional_payment_date ?? null,
-                round($add_amt * $commission_percent, 2),
-                $booking->additional_payment_commission_invoice ?? '', 'ready');
-        }
-        // Deposit — already invoiced, just record it
-        if ($dep_amt > 0) {
-            $place('Deposit', $booking->deposit_payment_date ?? null,
-                round($dep_amt * $commission_percent, 2),
-                $booking->deposit_commission_invoice ?? '', 'ready');
-        }
-
-    } elseif ($booking_status === 'Completed') {
-        // All payment types
-        if ($dep_amt > 0) {
-            $place('Deposit', $booking->deposit_payment_date ?? null,
-                round($dep_amt * $commission_percent, 2),
-                $booking->deposit_commission_invoice ?? '', 'ready');
-        }
-        if ($bal_amt > 0) {
-            $place('Balance', $booking->balance_payment_date ?? null,
-                round($bal_amt * $commission_percent, 2),
-                $booking->balance_commission_invoice ?? '', 'ready');
-        }
-        if ($add_amt > 0) {
-            $place('Additional', $booking->additional_payment_date ?? null,
-                round($add_amt * $commission_percent, 2),
-                $booking->additional_payment_commission_invoice ?? '', 'ready');
-        }
-
-    } elseif ($booking_status === 'Reserved' || $booking_status === 'Pending') {
-        // Deposit: ready if actually received, uninvoiced if not
-        if ($dep_amt > 0 && !empty($booking->deposit_payment_date)) {
-            $place('Deposit', $booking->deposit_payment_date,
-                round($dep_amt * $commission_percent, 2),
-                $booking->deposit_commission_invoice ?? '', 'ready');
-        } else {
-            // Project deposit to booking_date + 7 days
-            $calc_dep  = bst_calculate_deposit($booking->tour_id, $total_tour_cost, $booking->package_people ?? 1);
-            $dep_ratio = ($total_tour_cost > 0) ? ($calc_dep / $total_tour_cost) : 0;
-            $dep_comm  = round($total_tour_cost * $commission_percent * $dep_ratio, 2);
-            $proj_date = !empty($booking->booking_date)
-                ? date('Y-m-d', strtotime($booking->booking_date . ' +7 days'))
-                : null;
-            if ($proj_date) {
-                $m  = intval(date('n', strtotime($proj_date)));
-                $yr = intval(date('Y', strtotime($proj_date)));
-                if ($yr === $year) {
-                    $commission_data['Deposit']['months'][$m]['uninvoiced'] += $dep_comm;
-                }
-            }
-            // Balance projected to due date
-            $calc_dep2        = bst_calculate_deposit($booking->tour_id, $total_tour_cost, $booking->package_people ?? 1);
-            $balance_due_date = bst_calculate_balance_due_date($booking);
-            if (empty($balance_due_date) && !empty($booking->tour_start_date)) {
-                $balance_due_date = date('Y-m-d', strtotime('-60 days', strtotime($booking->tour_start_date)));
-            }
-            if ($balance_due_date) {
-                $m  = intval(date('n', strtotime($balance_due_date)));
-                $yr = intval(date('Y', strtotime($balance_due_date)));
-                if ($yr === $year) {
-                    $remaining = $total_tour_cost - $calc_dep2;
-                    $bal_comm  = round($remaining * $commission_percent, 2);
-                    $inv       = $booking->balance_commission_invoice ?? '';
-                    $commission_data['Balance']['months'][$m][!empty($inv) ? 'invoiced' : 'uninvoiced'] += $bal_comm;
-                }
-            }
+        $inv   = $booking->{ $L['inv'] } ?? '';
+        $pdate = $booking->{ $L['date'] } ?? null;
+        $nk    = $L['net_key'];
+        if ( ! empty( $inv ) ) {
+            $place( $L['group'], $pdate, round( $gross * $commission_percent, 2 ), $inv, 'ready' );
+        } elseif ( floatval( $nets[ $nk ] ?? 0 ) > 0 ) {
+            $place( $L['group'], $pdate, round( floatval( $nets[ $nk ] ) * $fx * $commission_percent, 2 ), '', 'ready' );
         }
     }
 
-    // REFUND — applies to any status where at least one payment was invoiced
-    $ref_amt = floatval($booking->refund_payment_amount ?? 0) * $fx;
-    if ($ref_amt > 0) {
-        $has_refund_date = !empty($booking->refund_payment_date);
-        $refund_date     = $has_refund_date ? $booking->refund_payment_date : date('Y-m-d', strtotime('+7 days'));
-        $m  = intval(date('n', strtotime($refund_date)));
-        $yr = intval(date('Y', strtotime($refund_date)));
-        if ($yr === $year) {
-            $ref_comm = round($ref_amt * $commission_percent, 2);
-            $invoiced = !empty($booking->refund_commission_invoice);
-            if ($invoiced) {
-                $commission_data['Refund']['months'][$m]['invoiced'] += $ref_comm;
-            } elseif ($has_refund_date) {
-                $commission_data['Refund']['months'][$m]['ready'] += $ref_comm;
-            } else {
-                $commission_data['Refund']['months'][$m]['uninvoiced'] += $ref_comm;
-            }
+    $ref_amt = floatval( $booking->refund_payment_amount ?? 0 ) * $fx;
+    if ( $ref_amt > 0 ) {
+        $ref_comm    = round( $ref_amt * $commission_percent, 2 );
+        $refund_date = ! empty( $booking->refund_payment_date ) ? $booking->refund_payment_date : date( 'Y-m-d', strtotime( '+7 days' ) );
+        if ( ! empty( $booking->refund_commission_invoice ) ) {
+            $place( 'Refund', $refund_date, $ref_comm, $booking->refund_commission_invoice, 'ready' );
+        } elseif ( function_exists( 'bst_commission_refund_reduces_basis' ) && bst_commission_refund_reduces_basis( $booking ) ) {
+            $place( 'Refund', $refund_date, $ref_comm, '', 'ready' );
         }
     }
 }
@@ -1631,11 +1332,15 @@ function bst_get_annual_commission_data($year) {
             b.coupon_amount,
             b.additional_charge,
             b.deposit_payment_amount,
+            b.deposit_payment_status,
             b.balance_payment_amount,
+            b.balance_payment_status,
             b.additional_payment_amount,
             b.additional_payment_date,
+            b.additional_payment_status,
             b.refund_payment_amount,
             b.refund_payment_date,
+            b.refund_payment_status,
             b.deposit_commission_invoice,
             b.balance_commission_invoice,
             b.additional_payment_commission_invoice,

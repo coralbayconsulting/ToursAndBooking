@@ -11,6 +11,10 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+if ( defined( 'BST_PLUGIN_DIR' ) && ! function_exists( 'bst_payment_line_received_for_display' ) ) {
+    require_once BST_PLUGIN_DIR . 'includes/booking-payment-status.php';
+}
+
 // Note: All styles are inline in the HTML generation functions below
 // for email compatibility and consistent rendering. No separate CSS file needed.
 
@@ -715,23 +719,23 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
             $is_bank_wire = ($payment_method === 'Bank Wire');
             
             if ($is_bank_wire) {
-                // Check if payment has been received (in booking record)
-                $received_amount = floatval($booking->balance_payment_amount ?? 0);
-                $received_date = $booking->balance_payment_date;
+                // Received vs pending: use stored line payment status (not amount+date alone)
+                $received_amount   = floatval($booking->balance_payment_amount ?? 0);
                 $received_discount = floatval($booking->balance_payment_discount ?? 0);
-                
-                if ($received_amount > 0 && !empty($received_date)) {
-                    // Payment received - use actual amounts from booking
-                    $display_amount = $received_amount;
+                $line_received     = function_exists( 'bst_payment_line_received_for_display' )
+                    && bst_payment_line_received_for_display( $booking->balance_payment_status ?? '', $received_amount );
+
+                if ( $line_received ) {
+                    $display_amount   = $received_amount;
                     $payment_discount = $received_discount;
-                    $pending_note = '';
-                    $booking_status = 'Booked - Received Bank Wire';
+                    $pending_note     = '';
+                    $booking_status   = 'Booked - Received Bank Wire';
                 } else {
                     // Payment pending - use calculated amounts from GF fields
-                    $display_amount = $balance_after_discount;
+                    $display_amount   = $balance_after_discount;
                     $payment_discount = $discount_amount;
-                    $pending_note = ' (Pending Bank Transfer)';
-                    $booking_status = 'Pending';
+                    $pending_note     = ' (Pending Bank Transfer)';
+                    $booking_status   = 'Pending';
                 }
                 $amount_label = 'Balance Payment:';
             } else {
@@ -781,17 +785,16 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
             $is_bank_wire = ($payment_method === 'Bank Wire');
             
             if ($is_bank_wire) {
-                // Check if payment has been received (in booking record)
-                $received_amount = floatval($booking->deposit_payment_amount ?? 0);
-                $received_date = $booking->deposit_payment_date;
+                $received_amount   = floatval($booking->deposit_payment_amount ?? 0);
                 $received_discount = floatval($booking->deposit_payment_discount ?? 0);
-                
-                if ($received_amount > 0 && !empty($received_date)) {
-                    // Payment received - use actual amounts from booking
-                    $display_amount = $received_amount;
+                $line_received     = function_exists( 'bst_payment_line_received_for_display' )
+                    && bst_payment_line_received_for_display( $booking->deposit_payment_status ?? '', $received_amount );
+
+                if ( $line_received ) {
+                    $display_amount   = $received_amount;
                     $payment_discount = $received_discount;
-                    $pending_note = '';
-                    $booking_status = 'Booked - Received Bank Wire';
+                    $pending_note     = '';
+                    $booking_status   = 'Booked - Received Bank Wire';
                 } else {
                     // Payment pending - calculate from entry
                     if ($deposit_undiscounted > 0 && $discount_percent > 0) {
@@ -995,8 +998,8 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
         
         // Display balance due - show for both GF9 and GF10
         if ($is_finalization) {
-            // GF10 - Check if Bank Wire payment is pending
-            if ($is_bank_wire && !empty($pending_note)) {
+            // GF10 - Check if Bank Wire payment is pending (no booking row: entry-only; no line status yet)
+            if ( $payment_method_raw === 'Bank Wire' && ! empty( $pending_note ) ) {
                 // Payment pending - after this payment is received, balance will be 0
                 $html .= '<tr><td>Remaining Balance:</td>';
                 $html .= '<td><strong>' . esc_html($currency_symbol . '0.00') . '</strong>' . $pending_note . '</td></tr>';
@@ -1142,27 +1145,23 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
         
         if ($payment_method_raw === 'Bank Wire') {
             if ($form_id == 10) {
-                // GF10 - Balance payment
+                // GF10 - Balance payment: use line payment status when booking exists
                 if ($booking) {
-                    // Check if balance payment has been received
-                    $received_amount = floatval($booking->balance_payment_amount ?? 0);
-                    $received_date = $booking->balance_payment_date;
-                    // Show instructions only if payment NOT received
-                    $show_instructions = ($received_amount == 0 || empty($received_date));
+                    $amt = floatval( $booking->balance_payment_amount ?? 0 );
+                    $received          = function_exists( 'bst_payment_line_received_for_display' )
+                        && bst_payment_line_received_for_display( $booking->balance_payment_status ?? '', $amt );
+                    $show_instructions = ! $received;
                 } else {
-                    // No booking, payment is pending
                     $show_instructions = true;
                 }
             } else {
                 // GF9 - Deposit payment
                 if ($booking) {
-                    // Check if deposit payment has been received
-                    $received_amount = floatval($booking->deposit_payment_amount ?? 0);
-                    $received_date = $booking->deposit_payment_date;
-                    // Show instructions only if payment NOT received
-                    $show_instructions = ($received_amount == 0 || empty($received_date));
+                    $amt = floatval( $booking->deposit_payment_amount ?? 0 );
+                    $received          = function_exists( 'bst_payment_line_received_for_display' )
+                        && bst_payment_line_received_for_display( $booking->deposit_payment_status ?? '', $amt );
+                    $show_instructions = ! $received;
                 } else {
-                    // No booking yet, payment is pending
                     $show_instructions = true;
                 }
             }
@@ -1555,28 +1554,36 @@ function bst_booking_details_shortcode($atts) {
     $has_coupon = $data['has_coupon'];
     $has_extension = $data['has_extension'];
     
-    // Check for pending Bank Wire payments
+    // Check for pending Bank Wire payments (line status, not amount==0 alone)
     $pending_deposit_eur = 0;
     $pending_balance_eur = 0;
-    
-    // Pending deposit: deposit_payment_method is Bank Wire AND deposit_payment_amount is 0
-    if (!empty($booking->deposit_payment_method) && 
-        $booking->deposit_payment_method === 'Bank Wire' && 
-        floatval($booking->deposit_payment_amount) == 0 &&
-        $entry) {
-        $deposit_undiscounted = floatval(rgar($entry, '177'));
-        $deposit_discount = floatval(rgar($entry, '229'));
-        $pending_deposit_eur = $deposit_undiscounted - $deposit_discount;
+
+    $dep_amt = floatval( $booking->deposit_payment_amount ?? 0 );
+    $bal_amt = floatval( $booking->balance_payment_amount ?? 0 );
+    $dep_pending = function_exists( 'bst_payment_line_received_for_display' )
+        ? ! bst_payment_line_received_for_display( $booking->deposit_payment_status ?? '', $dep_amt )
+        : ( $dep_amt == 0 );
+    $bal_pending = function_exists( 'bst_payment_line_received_for_display' )
+        ? ! bst_payment_line_received_for_display( $booking->balance_payment_status ?? '', $bal_amt )
+        : ( $bal_amt == 0 );
+
+    if ( ! empty( $booking->deposit_payment_method ) &&
+        $booking->deposit_payment_method === 'Bank Wire' &&
+        $dep_pending &&
+        $entry ) {
+        $deposit_undiscounted = floatval( rgar( $entry, '177' ) );
+        $deposit_discount     = floatval( rgar( $entry, '229' ) );
+        $pending_deposit_eur  = $deposit_undiscounted - $deposit_discount;
     }
-    
-    // Pending balance: balance_payment_method is Bank Wire AND balance_payment_amount is 0
-    if (!empty($booking->balance_payment_method) && 
-        $booking->balance_payment_method === 'Bank Wire' && 
-        floatval($booking->balance_payment_amount) == 0) {
-        // The pending balance is the current balance_due minus any pending deposit
-        // Note: balance_due already includes the payment discount, so don't subtract it again
-        $pending_balance_eur = $booking->balance_due - $pending_deposit_eur;
+
+    if ( ! empty( $booking->balance_payment_method ) &&
+        $booking->balance_payment_method === 'Bank Wire' &&
+        $bal_pending ) {
+        $pending_balance_eur = floatval( $booking->balance_due ?? 0 ) - $pending_deposit_eur;
     }
+
+    // Same pending note as admin financials tile (Pending/Processing inflow lines)
+    $pending_payment_note_html = function_exists( 'bst_booking_pending_payment_note_html' ) ? bst_booking_pending_payment_note_html( $booking ) : '';
     
     // Calculate balance due date using centralized helper function
     $balance_due_date_formatted = bst_calculate_balance_due_date($booking);
@@ -2192,6 +2199,7 @@ function bst_booking_details_shortcode($atts) {
                         <?php elseif ($pending_balance_eur > 0): ?>
                             (Awaiting <?php echo esc_html($currency_symbol . number_format($pending_balance_eur, 2)); ?> Balance Payment via Bank Transfer)
                         <?php endif; ?>
+                        <?php echo $pending_payment_note_html; ?>
                     </td>
                 </tr>
                 <?php if (!empty($booking->payment_discount_amount) && floatval($booking->payment_discount_amount) > 0): ?>
@@ -2209,6 +2217,7 @@ function bst_booking_details_shortcode($atts) {
                         <?php elseif ($pending_balance_eur > 0): ?>
                             (<?php echo esc_html($currency_symbol . number_format($booking->balance_due - $pending_balance_eur, 2)); ?> after Balance Payment received)
                         <?php endif; ?>
+                        <?php echo $pending_payment_note_html; ?>
                     </td>
                 </tr>
             </table>
@@ -2972,13 +2981,17 @@ function bst_booking_invoice_shortcode($atts) {
                 $region_code = rgar($entry, '280', 'Other');
                 $card_type = ($region_code === 'Other') ? 'EUR' : $region_code;
             }
+            $bal_stored = floatval( $booking->balance_payment_amount ?? 0 );
+            $is_bal_pending = ( $payment_method === 'Bank Wire' && function_exists( 'bst_payment_line_received_for_display' ) )
+                ? ! bst_payment_line_received_for_display( $booking->balance_payment_status ?? '', $bal_stored )
+                : ( $payment_method === 'Bank Wire' && $bal_stored == 0 );
             $payments[] = array(
                 'label'      => 'balance',
                 'amount'     => $balance_amount,
                 'date'       => $booking->balance_payment_date ?? '',
                 'method'     => $payment_method,
                 'card_type'  => $card_type,
-                'is_pending' => ($payment_method === 'Bank Wire' && floatval($booking->balance_payment_amount) == 0)
+                'is_pending' => $is_bal_pending,
             );
         }
     }
@@ -3345,7 +3358,9 @@ function bst_booking_invoice_shortcode($atts) {
 
 /**
  * Generate expandable bank wire instructions section
- * Checks if any payments use Bank Wire and if they are pending (no received date)
+ * Checks if any payments use Bank Wire and if they are still pending.
+ * For a real DB booking, "pending" uses per-line payment status (see bst_payment_line_received_for_display).
+ * For entry-only context (no booking row), pending is inferred from missing received date on the pseudo-booking.
  * Auto-expands based on page context and pending status
  * 
  * @param object $booking The booking object
@@ -3393,7 +3408,13 @@ function bst_generate_bank_wire_section($booking, $entry = null, $always_open = 
     // Check deposit payment
     if (!empty($booking->deposit_payment_method) && $booking->deposit_payment_method === 'Bank Wire') {
         $has_bank_wire = true;
-        $is_pending = empty($booking->deposit_payment_date);
+        $dep_amt_wire = isset($booking->deposit_payment_amount) ? floatval($booking->deposit_payment_amount) : 0.0;
+        if (function_exists('bst_payment_line_received_for_display')) {
+            // Real booking: trust line status + amount; entry-only pseudo-booking has no amount/status → stays "pending".
+            $is_pending = ! bst_payment_line_received_for_display($booking->deposit_payment_status ?? null, $dep_amt_wire);
+        } else {
+            $is_pending = empty($booking->deposit_payment_date);
+        }
         if ($is_pending) {
             $has_pending_wire = true;
         }
@@ -3408,7 +3429,12 @@ function bst_generate_bank_wire_section($booking, $entry = null, $always_open = 
     // Check balance payment
     if (!empty($booking->balance_payment_method) && $booking->balance_payment_method === 'Bank Wire') {
         $has_bank_wire = true;
-        $is_pending = empty($booking->balance_payment_date);
+        $bal_amt_wire = isset($booking->balance_payment_amount) ? floatval($booking->balance_payment_amount) : 0.0;
+        if (function_exists('bst_payment_line_received_for_display')) {
+            $is_pending = ! bst_payment_line_received_for_display($booking->balance_payment_status ?? null, $bal_amt_wire);
+        } else {
+            $is_pending = empty($booking->balance_payment_date);
+        }
         if ($is_pending) {
             $has_pending_wire = true;
         }
@@ -3480,14 +3506,20 @@ function bst_generate_bank_wire_section($booking, $entry = null, $always_open = 
                 $region_code = rgar($payment_entry, '232', 'Other');
             }
             
-            // Get amount and discount based on payment type
+            // Get amount and discount based on payment type (prefer stored booking amounts when set)
             $amount = 0;
             $discount = 0;
             if ($payment['form_id'] == 9) {
-                $amount = floatval(rgar($payment_entry, '230', 0));
+                $amount = floatval( $booking->deposit_payment_amount ?? 0 );
+                if ( $amount <= 0 ) {
+                    $amount = floatval( rgar( $payment_entry, '230', 0 ) );
+                }
                 $discount = floatval(rgar($payment_entry, '229', 0));
             } elseif ($payment['form_id'] == 10) {
-                $amount = floatval(rgar($payment_entry, '279', 0));
+                $amount = floatval( $booking->balance_payment_amount ?? 0 );
+                if ( $amount <= 0 ) {
+                    $amount = floatval( rgar( $payment_entry, '279', 0 ) );
+                }
                 $discount = floatval(rgar($payment_entry, '278', 0));
             }
             
@@ -3589,6 +3621,17 @@ function bst_map_country_to_region($country) {
     
     // US variations
     if (in_array($country, array('US', 'USA', 'UNITED STATES', 'UNITED STATES OF AMERICA'))) {
+        return 'USD';
+    }
+
+    // US-affiliated territories (Gravity Forms country labels) — USD bank wire, not EUR/Other
+    $us_territories_usd = array(
+        'US MINOR OUTLYING ISLANDS',
+        'VIRGIN ISLANDS, U.S.',
+        'VIRGIN ISLANDS, U.S', // without trailing period
+        'VIRGIN ISLANDS, US',
+    );
+    if (in_array($country, $us_territories_usd, true)) {
         return 'USD';
     }
     
@@ -4704,22 +4747,33 @@ function bst_generate_booking_status_html($booking, $encoded_id = '', $include_a
     $has_coupon = $data['has_coupon'];
     $has_extension = $data['has_extension'];
     
-    // Check for pending Bank Wire payments
+    // Check for pending Bank Wire payments (use line payment status, not amount==0 alone)
     $pending_deposit_eur = 0;
     $pending_balance_eur = 0;
-    
-    if (!empty($booking->deposit_payment_method) && 
-        $booking->deposit_payment_method === 'Bank Wire' && 
-        floatval($booking->deposit_payment_amount) == 0 &&
-        $entry) {
-        $pending_deposit_eur = floatval(rgar($entry, '177'));
+
+    $dep_amt = floatval( $booking->deposit_payment_amount ?? 0 );
+    $bal_amt = floatval( $booking->balance_payment_amount ?? 0 );
+    $dep_pending = function_exists( 'bst_payment_line_received_for_display' )
+        ? ! bst_payment_line_received_for_display( $booking->deposit_payment_status ?? '', $dep_amt )
+        : ( $dep_amt == 0 );
+    $bal_pending = function_exists( 'bst_payment_line_received_for_display' )
+        ? ! bst_payment_line_received_for_display( $booking->balance_payment_status ?? '', $bal_amt )
+        : ( $bal_amt == 0 );
+
+    if ( ! empty( $booking->deposit_payment_method ) &&
+        $booking->deposit_payment_method === 'Bank Wire' &&
+        $dep_pending &&
+        $entry ) {
+        $pending_deposit_eur = floatval( rgar( $entry, '177' ) );
     }
-    
-    if (!empty($booking->balance_payment_method) && 
-        $booking->balance_payment_method === 'Bank Wire' && 
-        floatval($booking->balance_payment_amount) == 0) {
-        $pending_balance_eur = $booking->balance_due - $pending_deposit_eur;
+
+    if ( ! empty( $booking->balance_payment_method ) &&
+        $booking->balance_payment_method === 'Bank Wire' &&
+        $bal_pending ) {
+        $pending_balance_eur = floatval( $booking->balance_due ?? 0 ) - $pending_deposit_eur;
     }
+
+    $pending_payment_note_html = function_exists( 'bst_booking_pending_payment_note_html' ) ? bst_booking_pending_payment_note_html( $booking ) : '';
     
     // Get booking date
     $booking_date = !empty($booking->created_at) ? $booking->created_at : '';
@@ -4866,6 +4920,7 @@ function bst_generate_booking_status_html($booking, $encoded_id = '', $include_a
                         <?php elseif ($pending_balance_eur > 0): ?>
                             (<span class="bs-pending-text">Awaiting <?php echo esc_html($currency_symbol . number_format($pending_balance_eur, 2)); ?> Balance Payment via Bank Transfer</span>)
                         <?php endif; ?>
+                        <?php echo $pending_payment_note_html; ?>
                     </td>
                 </tr>
                 <tr>
@@ -4877,6 +4932,7 @@ function bst_generate_booking_status_html($booking, $encoded_id = '', $include_a
                         <?php elseif ($pending_balance_eur > 0): ?>
                             (<span class="bs-pending-text"><?php echo esc_html($currency_symbol . number_format($booking->balance_due - $pending_balance_eur, 2)); ?> after Balance Payment received</span>)
                         <?php endif; ?>
+                        <?php echo $pending_payment_note_html; ?>
                     </td>
                 </tr>
             </table>

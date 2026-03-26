@@ -112,8 +112,9 @@ $payment_failed_bookings = $wpdb->get_results("
 // - any bank wire payment method set but amount not yet received
 $bank_wire_pending = $wpdb->get_results("
     SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, b.tour_text, b.tour_date_text, b.created_date,
-           b.deposit_payment_method, b.deposit_payment_amount, b.balance_payment_method, b.balance_payment_amount,
-           b.additional_payment_method, b.additional_payment_amount,
+           b.deposit_payment_method, b.deposit_payment_amount, b.deposit_payment_status,
+           b.balance_payment_method, b.balance_payment_amount, b.balance_payment_status,
+           b.additional_payment_method, b.additional_payment_amount, b.additional_payment_status,
            b.booking_status, b.finalization_entry_id, b.tour_package_text, b.tour_price, b.net_tour_price, b.balance_due, b.tour_currency,
            b.tour_id, b.package_people, b.booking_entry_id,
            gf9.date_created as booking_date, gf10.date_created as finalization_date
@@ -124,7 +125,10 @@ $bank_wire_pending = $wpdb->get_results("
         b.booking_status = 'Pending' OR
         (b.deposit_payment_method = 'Bank Wire' AND (b.deposit_payment_amount IS NULL OR b.deposit_payment_amount = 0)) OR
         (b.balance_payment_method = 'Bank Wire' AND (b.balance_payment_amount IS NULL OR b.balance_payment_amount = 0)) OR
-        (b.additional_payment_method = 'Bank Wire' AND (b.additional_payment_amount IS NULL OR b.additional_payment_amount = 0))
+        (b.additional_payment_method = 'Bank Wire' AND (b.additional_payment_amount IS NULL OR b.additional_payment_amount = 0)) OR
+        (b.deposit_payment_method = 'Bank Wire' AND b.deposit_payment_status IN ('Pending', 'Processing')) OR
+        (b.balance_payment_method = 'Bank Wire' AND b.balance_payment_status IN ('Pending', 'Processing')) OR
+        (b.additional_payment_method = 'Bank Wire' AND b.additional_payment_status IN ('Pending', 'Processing'))
     )
     ORDER BY b.created_date ASC 
     LIMIT 10
@@ -736,35 +740,72 @@ if (!empty($waiting_list_bookings)) {
                 <ul class="dashboard-booking-list">
                     <?php foreach ($bank_wire_pending as $booking): ?>
                     <?php 
-                    $missing_payments = [];
+                    $missing_payments = array();
 
-                    // Check deposit
-                    if ($booking->deposit_payment_method === 'Bank Wire' && 
-                        (empty($booking->deposit_payment_amount) || $booking->deposit_payment_amount == 0)) {
-                        $deposit_amount = bst_calculate_deposit($booking->tour_id ?? 0, $booking->net_tour_price, $booking->package_people ?? 2);
-                        $reference_date = $booking->booking_date ?: $booking->created_date;
-                        $days_since = floor((time() - strtotime($reference_date)) / (24 * 60 * 60));
-                        $missing_payments[] = array('type' => 'Deposit', 'amount' => $deposit_amount, 'context' => "booked {$days_since} days ago");
+                    $bst_wire_status_pending = static function ( $status ) {
+                        return in_array( trim( (string) $status ), array( 'Pending', 'Processing' ), true );
+                    };
+
+                    // Deposit bank wire
+                    if ( $booking->deposit_payment_method === 'Bank Wire' ) {
+                        $dep_st = isset( $booking->deposit_payment_status ) ? (string) $booking->deposit_payment_status : '';
+                        $dep_amt = floatval( $booking->deposit_payment_amount ?? 0 );
+                        if ( 'Paid' !== $dep_st && 'Failed' !== $dep_st ) {
+                            if ( $dep_amt <= 0 || $bst_wire_status_pending( $dep_st ) ) {
+                                $deposit_amount = $dep_amt > 0
+                                    ? $dep_amt
+                                    : bst_calculate_deposit( $booking->tour_id ?? 0, $booking->net_tour_price, $booking->package_people ?? 2 );
+                                $reference_date = $booking->booking_date ?: $booking->created_date;
+                                $days_since = floor( ( time() - strtotime( $reference_date ) ) / ( 24 * 60 * 60 ) );
+                                $missing_payments[] = array(
+                                    'type'    => 'Deposit',
+                                    'amount'  => $deposit_amount,
+                                    'context' => "booked {$days_since} days ago",
+                                );
+                            }
+                        }
                     }
 
-                    // Check balance
-                    if ($booking->balance_payment_method === 'Bank Wire' && 
-                        (empty($booking->balance_payment_amount) || $booking->balance_payment_amount == 0)) {
-                        $reference_date = $booking->finalization_date ?: $booking->created_date;
-                        $days_since = floor((time() - strtotime($reference_date)) / (24 * 60 * 60));
-                        $missing_payments[] = array('type' => 'Balance', 'amount' => $booking->balance_due, 'context' => "finalized {$days_since} days ago");
+                    // Balance / finalization bank wire
+                    if ( $booking->balance_payment_method === 'Bank Wire' ) {
+                        $bal_st = isset( $booking->balance_payment_status ) ? (string) $booking->balance_payment_status : '';
+                        $bal_amt = floatval( $booking->balance_payment_amount ?? 0 );
+                        if ( 'Paid' !== $bal_st && 'Failed' !== $bal_st ) {
+                            if ( $bal_amt <= 0 || $bst_wire_status_pending( $bal_st ) ) {
+                                $pending_bal = $bal_amt > 0 ? $bal_amt : floatval( $booking->balance_due ?? 0 );
+                                $reference_date = $booking->finalization_date ?: $booking->created_date;
+                                $days_since = floor( ( time() - strtotime( $reference_date ) ) / ( 24 * 60 * 60 ) );
+                                $missing_payments[] = array(
+                                    'type'    => 'Finalization',
+                                    'amount'  => $pending_bal,
+                                    'context' => "finalized {$days_since} days ago",
+                                );
+                            }
+                        }
                     }
 
-                    // Check additional payment
-                    if ($booking->additional_payment_method === 'Bank Wire' && 
-                        (empty($booking->additional_payment_amount) || $booking->additional_payment_amount == 0)) {
-                        $missing_payments[] = array('type' => 'Additional', 'amount' => null, 'context' => null);
+                    // Additional bank wire
+                    if ( $booking->additional_payment_method === 'Bank Wire' ) {
+                        $add_st = isset( $booking->additional_payment_status ) ? (string) $booking->additional_payment_status : '';
+                        $add_amt = floatval( $booking->additional_payment_amount ?? 0 );
+                        if ( 'Paid' !== $add_st && 'Failed' !== $add_st ) {
+                            if ( $add_amt <= 0 || $bst_wire_status_pending( $add_st ) ) {
+                                $missing_payments[] = array(
+                                    'type'    => 'Additional',
+                                    'amount'  => $add_amt > 0 ? $add_amt : null,
+                                    'context' => null,
+                                );
+                            }
+                        }
                     }
 
-                    // Fallback for Pending status with no method detected yet
-                    if (empty($missing_payments) && $booking->booking_status === 'Pending') {
-                        $days_since = floor((time() - strtotime($booking->created_date)) / (24 * 60 * 60));
-                        $missing_payments[] = array('type' => 'Deposit', 'amount' => null, 'context' => "booked {$days_since} days ago");
+                    if ( empty( $missing_payments ) && $booking->booking_status === 'Pending' ) {
+                        $days_since = floor( ( time() - strtotime( $booking->created_date ) ) / ( 24 * 60 * 60 ) );
+                        $missing_payments[] = array(
+                            'type'    => 'Bank transfer',
+                            'amount'  => null,
+                            'context' => "submitted {$days_since} days ago",
+                        );
                     }
 
                     // Build currency symbol
@@ -799,12 +840,18 @@ if (!empty($waiting_list_bookings)) {
                                 <?php if (!empty($missing_payments)): ?>
                                     <?php foreach ($missing_payments as $pmt): ?>
                                         <div>
-                                            Awaiting <?php echo $pmt['type']; ?> payment<?php
-                                            if ($pmt['amount'] !== null) {
-                                                echo ': ' . $currency_symbol . number_format($pmt['amount'], 0);
+                                            <?php
+                                            $ptype = $pmt['type'] ?? '';
+                                            if ( 'Bank transfer' === $ptype ) {
+                                                echo 'Awaiting bank transfer';
+                                            } else {
+                                                echo 'Awaiting ' . esc_html( strtolower( $ptype ) ) . ' payment';
                                             }
-                                            if ($pmt['context'] !== null) {
-                                                echo ' (' . $pmt['context'] . ')';
+                                            if ( isset( $pmt['amount'] ) && $pmt['amount'] !== null && floatval( $pmt['amount'] ) > 0 ) {
+                                                echo ': ' . esc_html( $currency_symbol . number_format( floatval( $pmt['amount'] ), 2 ) );
+                                            }
+                                            if ( ! empty( $pmt['context'] ) ) {
+                                                echo ' (' . esc_html( $pmt['context'] ) . ')';
                                             }
                                             ?>
                                         </div>

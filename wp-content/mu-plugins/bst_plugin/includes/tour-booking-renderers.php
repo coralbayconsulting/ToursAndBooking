@@ -13,6 +13,10 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+if ( ! function_exists( 'bst_booking_pending_payment_note_html' ) && defined( 'BST_PLUGIN_DIR' ) ) {
+    require_once BST_PLUGIN_DIR . 'includes/booking-payment-status.php';
+}
+
 /**
  * Helper functions for tile rendering (shared utilities)
  */
@@ -649,9 +653,10 @@ function bst_render_financials_tile_content($booking) {
         $html .= '<div class="pricing-value">' . esc_html(bst_format_currency(bst_calculate_total_due($booking->net_tour_price ?? 0, $booking->additional_charge ?? 0), $booking->tour_currency ?? 'EUR')) . '</div>';
     }
     
-    // Total Paid
+    // Total Paid (optional: pending breakdown — same note as Balance Due when wires/cards are unsettled)
+    $pending_note = function_exists( 'bst_booking_pending_payment_note_html' ) ? bst_booking_pending_payment_note_html( $booking ) : '';
     $html .= '<div class="pricing-label">Total Paid:</div>';
-    $html .= '<div class="pricing-value">' . esc_html(bst_format_currency($booking->total_paid ?? 0, $booking->tour_currency ?? 'EUR')) . '</div>';
+    $html .= '<div class="pricing-value">' . esc_html( bst_format_currency( $booking->total_paid ?? 0, $booking->tour_currency ?? 'EUR' ) ) . $pending_note . '</div>';
     
     // Payment Discount (only show if has value)
     if (!empty($booking->payment_discount_amount) && $booking->payment_discount_amount > 0) {
@@ -671,13 +676,13 @@ function bst_render_financials_tile_content($booking) {
         }
     }
     
-    $html .= '<div class="pricing-value">' . $balance_due_display . '</div>';
+    $html .= '<div class="pricing-value">' . $balance_due_display . $pending_note . '</div>';
     
     // Close pricing matrix container
     $html .= '</div>';
     
-    // Add payment information table
-    $html .= '<div class="payment-matrix">';
+    // Payment table (view): fixed layout, no horizontal scroll — see .bst-financials-payment-table--view CSS
+    $html .= '<div class="payment-matrix bst-payment-matrix bst-financials-payment-wrap">';
     
     // Helper function to check if a payment row has meaningful data
     $has_payment_data = function($booking, $type) {
@@ -711,12 +716,13 @@ function bst_render_financials_tile_content($booking) {
     if (empty($visible_payments)) {
         $html .= '<p style="font-style: italic; color: #666; margin: 20px 0;">There are no payments on this booking</p>';
     } else {
-        $html .= '<table>';
+        $html .= '<table class="bst-financials-payment-table bst-financials-payment-table--view">';
         $html .= '<thead>';
         $html .= '<tr>';
         $html .= '<th>Type</th>';
         $html .= '<th>Method</th>';
         $html .= '<th>Amount</th>';
+        $html .= '<th>Status</th>';
         $html .= '<th>Discount</th>';
         $html .= '<th>Date</th>';
         $html .= '<th>CBC Invoice</th>';
@@ -760,8 +766,10 @@ function bst_render_financials_tile_content($booking) {
             // Convert Bank Wire to Bank Transfer for display
             $method = ($method === 'Bank Wire') ? 'Bank Transfer' : $method;
             $html .= '<td>' . esc_html(($method && $method !== '') ? $method : '-') . '</td>';
-            $amount = !empty($booking->deposit_payment_amount) ? bst_format_currency($booking->deposit_payment_amount, $booking->tour_currency ?? 'EUR') : '-';
-            $html .= '<td>' . esc_html($amount) . '</td>';
+            $d_amt = floatval( $booking->deposit_payment_amount ?? 0 );
+            $amount = $d_amt > 0 ? bst_format_currency( $d_amt, $booking->tour_currency ?? 'EUR' ) : '-';
+            $html .= '<td>' . $amount . '</td>';
+            $html .= '<td>' . esc_html( function_exists( 'bst_payment_status_label_for_display' ) ? ( bst_payment_status_label_for_display( $booking->deposit_payment_status ?? '' ) ?: '-' ) : '-' ) . '</td>';
             $discount = !empty($booking->deposit_payment_discount) ? bst_format_currency($booking->deposit_payment_discount, $booking->tour_currency ?? 'EUR') : '-';
             $html .= '<td>' . esc_html($discount) . '</td>';
             $html .= '<td>' . esc_html($format_payment_date($booking->deposit_payment_date ?? '')) . '</td>';
@@ -788,8 +796,10 @@ function bst_render_financials_tile_content($booking) {
             // Convert Bank Wire to Bank Transfer for display
             $method = ($method === 'Bank Wire') ? 'Bank Transfer' : $method;
             $html .= '<td>' . esc_html(($method && $method !== '') ? $method : '-') . '</td>';
-            $amount = !empty($booking->balance_payment_amount) ? bst_format_currency($booking->balance_payment_amount, $booking->tour_currency ?? 'EUR') : '-';
-            $html .= '<td>' . esc_html($amount) . '</td>';
+            $b_amt = floatval( $booking->balance_payment_amount ?? 0 );
+            $amount = $b_amt > 0 ? bst_format_currency( $b_amt, $booking->tour_currency ?? 'EUR' ) : '-';
+            $html .= '<td>' . $amount . '</td>';
+            $html .= '<td>' . esc_html( function_exists( 'bst_payment_status_label_for_display' ) ? ( bst_payment_status_label_for_display( $booking->balance_payment_status ?? '' ) ?: '-' ) : '-' ) . '</td>';
             $discount = !empty($booking->balance_payment_discount) ? bst_format_currency($booking->balance_payment_discount, $booking->tour_currency ?? 'EUR') : '-';
             $html .= '<td>' . esc_html($discount) . '</td>';
             $html .= '<td>' . esc_html($format_payment_date($booking->balance_payment_date ?? '')) . '</td>';
@@ -816,8 +826,10 @@ function bst_render_financials_tile_content($booking) {
             // Convert Bank Wire to Bank Transfer for display
             $method = ($method === 'Bank Wire') ? 'Bank Transfer' : $method;
             $html .= '<td>' . esc_html(($method && $method !== '') ? $method : '-') . '</td>';
-            $amount = !empty($booking->additional_payment_amount) ? bst_format_currency($booking->additional_payment_amount, $booking->tour_currency ?? 'EUR') : '-';
-            $html .= '<td>' . esc_html($amount) . '</td>';
+            $a_amt = floatval( $booking->additional_payment_amount ?? 0 );
+            $amount = $a_amt > 0 ? bst_format_currency( $a_amt, $booking->tour_currency ?? 'EUR' ) : '-';
+            $html .= '<td>' . $amount . '</td>';
+            $html .= '<td>' . esc_html( function_exists( 'bst_payment_status_label_for_display' ) ? ( bst_payment_status_label_for_display( $booking->additional_payment_status ?? '' ) ?: '-' ) : '-' ) . '</td>';
             $discount = !empty($booking->additional_payment_discount) ? bst_format_currency($booking->additional_payment_discount, $booking->tour_currency ?? 'EUR') : '-';
             $html .= '<td>' . esc_html($discount) . '</td>';
             $html .= '<td>' . esc_html($format_payment_date($booking->additional_payment_date ?? '')) . '</td>';
@@ -832,8 +844,10 @@ function bst_render_financials_tile_content($booking) {
             $html .= '<td><strong>Refund</strong></td>';
             $method = $booking->refund_payment_method ?? '';
             $html .= '<td>' . esc_html(($method && $method !== '') ? $method : '-') . '</td>';
-            $amount = !empty($booking->refund_payment_amount) ? '-' . bst_format_currency($booking->refund_payment_amount, $booking->tour_currency ?? 'EUR') : '-';
-            $html .= '<td>' . esc_html($amount) . '</td>';
+            $r_amt = floatval( $booking->refund_payment_amount ?? 0 );
+            $amount = $r_amt > 0 ? '-' . bst_format_currency($r_amt, $booking->tour_currency ?? 'EUR') : '-';
+            $html .= '<td>' . $amount . '</td>';
+            $html .= '<td>' . esc_html( function_exists( 'bst_payment_status_label_for_display' ) ? ( bst_payment_status_label_for_display( $booking->refund_payment_status ?? '' ) ?: '-' ) : '-' ) . '</td>';
             $html .= '<td>-</td>';
             $html .= '<td>' . esc_html($format_payment_date($booking->refund_payment_date ?? '')) . '</td>';
             $invoice = $booking->refund_commission_invoice ?? '';

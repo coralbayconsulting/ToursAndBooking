@@ -507,6 +507,92 @@ input[type="date"]::-webkit-clear-button {
 .payment-matrix td:nth-child(3) {
     text-align: right;
 }
+/*
+ * Financials payment table — VIEW (read-only tile): 100% width, no horizontal scroll, no wrap (ellipsis if needed).
+ */
+.tile-view-content .bst-financials-payment-wrap {
+    overflow-x: visible;
+    max-width: 100%;
+}
+.tile-view-content .bst-financials-payment-table--view {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.tile-view-content .bst-financials-payment-table--view th,
+.tile-view-content .bst-financials-payment-table--view td {
+    padding: 4px 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+.tile-view-content .bst-financials-payment-table--view th:nth-child(1),
+.tile-view-content .bst-financials-payment-table--view td:nth-child(1) { width: 8%; }
+.tile-view-content .bst-financials-payment-table--view th:nth-child(2),
+.tile-view-content .bst-financials-payment-table--view td:nth-child(2) { width: 17%; }
+.tile-view-content .bst-financials-payment-table--view th:nth-child(3),
+.tile-view-content .bst-financials-payment-table--view td:nth-child(3) { width: 14%; }
+.tile-view-content .bst-financials-payment-table--view th:nth-child(4),
+.tile-view-content .bst-financials-payment-table--view td:nth-child(4) { width: 11%; }
+.tile-view-content .bst-financials-payment-table--view th:nth-child(5),
+.tile-view-content .bst-financials-payment-table--view td:nth-child(5) { width: 9%; }
+.tile-view-content .bst-financials-payment-table--view th:nth-child(6),
+.tile-view-content .bst-financials-payment-table--view td:nth-child(6) { width: 13%; }
+.tile-view-content .bst-financials-payment-table--view th:nth-child(7),
+.tile-view-content .bst-financials-payment-table--view td:nth-child(7) { width: 18%; }
+.tile-view-content .bst-financials-payment-table--view td:nth-child(3) {
+    text-align: right;
+}
+/*
+ * EDIT mode: same fixed grid — fits tile width without horizontal scroll; inputs use min-width 0 inside cells.
+ */
+.tile-edit-form .bst-financials-payment-table--edit {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.tile-edit-form .bst-financials-payment-table--edit th,
+.tile-edit-form .bst-financials-payment-table--edit td {
+    padding: 4px 5px;
+    vertical-align: middle;
+    overflow: hidden;
+}
+.tile-edit-form .bst-financials-payment-table--edit th:nth-child(1),
+.tile-edit-form .bst-financials-payment-table--edit td:nth-child(1) { width: 8%; }
+.tile-edit-form .bst-financials-payment-table--edit th:nth-child(2),
+.tile-edit-form .bst-financials-payment-table--edit td:nth-child(2) { width: 17%; }
+.tile-edit-form .bst-financials-payment-table--edit th:nth-child(3),
+.tile-edit-form .bst-financials-payment-table--edit td:nth-child(3) { width: 14%; }
+.tile-edit-form .bst-financials-payment-table--edit th:nth-child(4),
+.tile-edit-form .bst-financials-payment-table--edit td:nth-child(4) { width: 11%; }
+.tile-edit-form .bst-financials-payment-table--edit th:nth-child(5),
+.tile-edit-form .bst-financials-payment-table--edit td:nth-child(5) { width: 9%; }
+/* Edit only: wider Date (YYYY-MM-DD), narrower Invoice (max e.g. CBC9999) — display/view widths unchanged */
+.tile-edit-form .bst-financials-payment-table--edit th:nth-child(6),
+.tile-edit-form .bst-financials-payment-table--edit td:nth-child(6) { width: 18%; }
+.tile-edit-form .bst-financials-payment-table--edit th:nth-child(7),
+.tile-edit-form .bst-financials-payment-table--edit td:nth-child(7) { width: 13%; }
+.tile-edit-form .bst-financials-payment-table--edit td:nth-child(3) input {
+    text-align: right;
+}
+.tile-edit-form .bst-financials-payment-table--edit input,
+.tile-edit-form .bst-financials-payment-table--edit select {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+.tile-edit-form .bst-financials-payment-scroll {
+    overflow-x: visible;
+    max-width: 100%;
+}
 .text-format {
     background: #f8f8f8;
     padding: 10px;
@@ -1736,8 +1822,8 @@ jQuery(document).ready(function($) {
         }
     });
     
-    // Real-time calculations for financials
-    $(document).on('input change', '[data-tile="financials"] input[type="number"], [data-tile="financials"] select[name="tour_currency"]', function() {
+    // Real-time calculations for financials (pending note is view-only on the tile, not in edit mode)
+    $(document).on('input change', '[data-tile="financials"] input[type="number"], [data-tile="financials"] select[name="tour_currency"], [data-tile="financials"] select[name$="_payment_status"]', function() {
         updateFinancialsCalculations($(this).closest('[data-tile="financials"]'));
     });
     
@@ -1775,7 +1861,7 @@ jQuery(document).ready(function($) {
         var balanceDiscount = parseFloat($editForm.find('input[name="balance_payment_discount"]').val()) || 0;
         var additionalDiscount = parseFloat($editForm.find('input[name="additional_payment_discount"]').val()) || 0;
         var totalDiscount = depositDiscount + balanceDiscount + additionalDiscount;
-        
+
         // Get currency
         var currency = $editForm.find('select[name="tour_currency"]').val() || 'EUR';
         
@@ -2455,15 +2541,17 @@ jQuery(document).ready(function($) {
             <div class="edit-form-section">
                 <h4>Payment Information</h4>
                 
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <div class="bst-payment-matrix bst-financials-payment-scroll" style="width:100%;">
+                <table class="bst-financials-payment-table bst-financials-payment-table--edit" style="width: 100%; border-collapse: collapse; font-size: 12px;">
                     <thead>
                         <tr style="background: #f0f0f0;">
-                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600; width: 10%;">Type</th>
-                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600; width: 20%;">Method</th>
-                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600; width: 15%;">Amount</th>
-                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600; width: 15%;">Discount</th>
-                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600; width: 20%;">Date</th>
-                            <th class="payment-invoice-col" style="padding: 4px; border: 1px solid #ddd; font-weight: 600; width: 20%;">Invoice</th>
+                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600;">Type</th>
+                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600;">Method</th>
+                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600;">Amount</th>
+                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600;">Status</th>
+                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600;">Discount</th>
+                            <th style="padding: 4px; border: 1px solid #ddd; font-weight: 600;">Date</th>
+                            <th class="payment-invoice-col" style="padding: 4px; border: 1px solid #ddd; font-weight: 600;">Invoice</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2481,6 +2569,16 @@ jQuery(document).ready(function($) {
                             </td>
                             <td style="padding: 4px; border: 1px solid #ddd;">
                                 <input type="number" step="0.01" name="deposit_payment_amount" value="${booking.deposit_payment_amount || ''}" style="width: 100%; text-align: right;">
+                            </td>
+                            <td style="padding: 4px; border: 1px solid #ddd;">
+                                <select name="deposit_payment_status" style="width: 100%; max-width: 100%;">
+                                    <option value="">-</option>
+                                    <option value="Paid" ${booking.deposit_payment_status === 'Paid' ? 'selected' : ''}>Paid</option>
+                                    <option value="Pending" ${booking.deposit_payment_status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="Failed" ${booking.deposit_payment_status === 'Failed' ? 'selected' : ''}>Failed</option>
+                                    <option value="Processing" ${booking.deposit_payment_status === 'Processing' ? 'selected' : ''}>Processing</option>
+                                    <option value="Transferred" ${booking.deposit_payment_status === 'Transferred' ? 'selected' : ''}>Transferred</option>
+                                </select>
                             </td>
                             <td style="padding: 4px; border: 1px solid #ddd;">
                                 <input type="number" step="0.01" name="deposit_payment_discount" value="${booking.deposit_payment_discount || ''}" style="width: 100%; text-align: right;">
@@ -2512,6 +2610,16 @@ jQuery(document).ready(function($) {
                                 <input type="number" step="0.01" name="balance_payment_amount" value="${booking.balance_payment_amount || ''}" style="width: 100%; text-align: right;">
                             </td>
                             <td style="padding: 4px; border: 1px solid #ddd;">
+                                <select name="balance_payment_status" style="width: 100%; max-width: 100%;">
+                                    <option value="">-</option>
+                                    <option value="Paid" ${booking.balance_payment_status === 'Paid' ? 'selected' : ''}>Paid</option>
+                                    <option value="Pending" ${booking.balance_payment_status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="Failed" ${booking.balance_payment_status === 'Failed' ? 'selected' : ''}>Failed</option>
+                                    <option value="Processing" ${booking.balance_payment_status === 'Processing' ? 'selected' : ''}>Processing</option>
+                                    <option value="Transferred" ${booking.balance_payment_status === 'Transferred' ? 'selected' : ''}>Transferred</option>
+                                </select>
+                            </td>
+                            <td style="padding: 4px; border: 1px solid #ddd;">
                                 <input type="number" step="0.01" name="balance_payment_discount" value="${booking.balance_payment_discount || ''}" style="width: 100%; text-align: right;">
                             </td>
                             <td style="padding: 4px; border: 1px solid #ddd;">
@@ -2538,6 +2646,16 @@ jQuery(document).ready(function($) {
                             </td>
                             <td style="padding: 4px; border: 1px solid #ddd;">
                                 <input type="number" step="0.01" name="additional_payment_amount" value="${booking.additional_payment_amount || ''}" style="width: 100%; text-align: right;">
+                            </td>
+                            <td style="padding: 4px; border: 1px solid #ddd;">
+                                <select name="additional_payment_status" style="width: 100%; max-width: 100%;">
+                                    <option value="">-</option>
+                                    <option value="Paid" ${booking.additional_payment_status === 'Paid' ? 'selected' : ''}>Paid</option>
+                                    <option value="Pending" ${booking.additional_payment_status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="Failed" ${booking.additional_payment_status === 'Failed' ? 'selected' : ''}>Failed</option>
+                                    <option value="Processing" ${booking.additional_payment_status === 'Processing' ? 'selected' : ''}>Processing</option>
+                                    <option value="Transferred" ${booking.additional_payment_status === 'Transferred' ? 'selected' : ''}>Transferred</option>
+                                </select>
                             </td>
                             <td style="padding: 4px; border: 1px solid #ddd;">
                                 <input type="number" step="0.01" name="additional_payment_discount" value="${booking.additional_payment_discount || ''}" style="width: 100%; text-align: right;">
@@ -2567,6 +2685,16 @@ jQuery(document).ready(function($) {
                             <td style="padding: 4px; border: 1px solid #ddd;">
                                 <input type="number" step="0.01" name="refund_payment_amount" value="${booking.refund_payment_amount || ''}" style="width: 100%; text-align: right;">
                             </td>
+                            <td style="padding: 4px; border: 1px solid #ddd;">
+                                <select name="refund_payment_status" style="width: 100%; max-width: 100%;">
+                                    <option value="">-</option>
+                                    <option value="Paid" ${booking.refund_payment_status === 'Paid' ? 'selected' : ''}>Paid</option>
+                                    <option value="Pending" ${booking.refund_payment_status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="Failed" ${booking.refund_payment_status === 'Failed' ? 'selected' : ''}>Failed</option>
+                                    <option value="Processing" ${booking.refund_payment_status === 'Processing' ? 'selected' : ''}>Processing</option>
+                                    <option value="Transferred" ${booking.refund_payment_status === 'Transferred' ? 'selected' : ''}>Transferred</option>
+                                </select>
+                            </td>
                             <td style="padding: 4px; border: 1px solid #ddd;">-</td>
                             <td style="padding: 4px; border: 1px solid #ddd;">
                                 <input type="text" name="refund_payment_date" value="${formatDateForInput(booking.refund_payment_date)}" 
@@ -2580,6 +2708,7 @@ jQuery(document).ready(function($) {
                         </tr>
                     </tbody>
                 </table>
+                </div>
             </div>
         `;
     }
