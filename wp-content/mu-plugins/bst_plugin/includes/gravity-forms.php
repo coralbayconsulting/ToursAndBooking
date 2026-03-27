@@ -874,6 +874,8 @@ function bst_gf9_process_booking_logic($entry, $form) {
             $tour_package_text = rgar($entry, '138');
             $vehicle1 = rgar($entry, '140');
             $vehicle2 = rgar($entry, '142');
+            $vehicle1_id = absint( rgar( $entry, 'vehicle1id' ) );
+            $vehicle2_id = absint( rgar( $entry, 'vehicle2id' ) );
             $package_people = rgar($entry, '200');
             $package_rooms = rgar($entry, '201');
             $package_vehicles = rgar($entry, '212');
@@ -1011,6 +1013,13 @@ function bst_gf9_process_booking_logic($entry, $form) {
                 'vehicle2' => $vehicle2,
                 'coupon_code' => $coupon_code
             ));
+
+            if ( empty( $vehicle1_id ) && ! empty( $update_data['vehicle1'] ) && function_exists( 'bst_vehicle_base_name_from_text' ) ) {
+                $vehicle1_id = bst_get_or_create_vehicle_id_by_name( bst_vehicle_base_name_from_text( $update_data['vehicle1'] ) );
+            }
+            if ( empty( $vehicle2_id ) && ! empty( $update_data['vehicle2'] ) && function_exists( 'bst_vehicle_base_name_from_text' ) ) {
+                $vehicle2_id = bst_get_or_create_vehicle_id_by_name( bst_vehicle_base_name_from_text( $update_data['vehicle2'] ) );
+            }
             
             // Use centralized update function
             $update_data_full = array(
@@ -1030,6 +1039,8 @@ function bst_gf9_process_booking_logic($entry, $form) {
                 'tour_package_text' => $update_data['tour_package_text'],
                 'vehicle1' => $update_data['vehicle1'],
                 'vehicle2' => $update_data['vehicle2'],
+                'vehicle1_id' => $vehicle1_id,
+                'vehicle2_id' => $vehicle2_id,
                 'package_people' => $package_people,
                 'package_rooms' => $package_rooms,
                 'package_vehicles' => $package_vehicles,

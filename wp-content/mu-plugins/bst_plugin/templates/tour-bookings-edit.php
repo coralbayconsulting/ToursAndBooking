@@ -2902,6 +2902,24 @@ jQuery(document).ready(function($) {
                 }
             }
             
+            // Vehicle selects use CPT id as option value; POST needs vehicle*_id plus legacy display text (incl. price suffix).
+            var $v1Opt = $tile.find('#vehicle1 option:selected');
+            if ($v1Opt.length && $v1Opt.val()) {
+                data.vehicle1_id = parseInt($v1Opt.val(), 10) || 0;
+                data.vehicle1 = $v1Opt.attr('data-text') || $v1Opt.text() || '';
+            } else {
+                data.vehicle1_id = 0;
+                data.vehicle1 = '';
+            }
+            var $v2Opt = $tile.find('#vehicle2 option:selected');
+            if ($v2Opt.length && $v2Opt.val()) {
+                data.vehicle2_id = parseInt($v2Opt.val(), 10) || 0;
+                data.vehicle2 = $v2Opt.attr('data-text') || $v2Opt.text() || '';
+            } else {
+                data.vehicle2_id = 0;
+                data.vehicle2 = '';
+            }
+            
             // Don't override vehicle_choices - use the value from the form field which preserves the saved value
             // vehicle_choices represents how many vehicles need to be chosen, not how many the package includes
             
@@ -3423,6 +3441,7 @@ jQuery(document).ready(function($) {
     
     function loadVehicles($tile, tourId, packageId) {
         var booking = window.bstBookingData || {};
+        var vehicleChoices = parseInt(booking.vehicle_choices, 10) || 0;
         var $vehicle1Select = $tile.find('#vehicle1');
         var $vehicle2Select = $tile.find('#vehicle2');
         
@@ -3461,48 +3480,58 @@ jQuery(document).ready(function($) {
                     // Populate vehicle dropdowns based on which ones are visible (not user's saved choice)
                     if (response.data.length >= 1) {
                         response.data.forEach(function(vehicle) {
-                            // Use vehicle.text (the display name) as the value instead of vehicle.value (which contains pricing)
-                            var option = '<option value="' + vehicle.text + '" data-price="' + (vehicle.price || 0) + '">' + vehicle.text + '</option>';
+                            var vid = vehicle.vehicle_id ? String(vehicle.vehicle_id) : '';
+                            var vtext = vehicle.text || '';
+                            var $opt = $('<option></option>')
+                                .attr('value', vid)
+                                .attr('data-price', vehicle.price || 0)
+                                .attr('data-text', vtext)
+                                .text(vtext);
                             
                             // Populate vehicle1 if it's visible
                             if ($vehicle1Select.closest('.edit-form-field').is(':visible')) {
-                                $vehicle1Select.append(option);
+                                $vehicle1Select.append($opt.clone());
                             }
                             
                             // Populate vehicle2 if it's visible
                             if ($vehicle2Select.closest('.edit-form-field').is(':visible')) {
-                                $vehicle2Select.append(option);
+                                $vehicle2Select.append($opt.clone());
                             }
                         });
                         
                         // Don't modify visibility - respect the initial HTML state set during generation
                         
-                        // Set selected values if they exist
-                        if (booking.vehicle1) {
-                            // First try exact match
-                            $vehicle1Select.val(booking.vehicle1);
-                            // If no exact match, try starts with match
-                            if ($vehicle1Select.val() === '' || $vehicle1Select.val() === null) {
-                                $vehicle1Select.find('option').each(function() {
-                                    if ($(this).val() && $(this).val().toLowerCase().startsWith(booking.vehicle1.toLowerCase())) {
-                                        $vehicle1Select.val($(this).val());
-                                        return false; // Break the loop
+                        // Set selected values: prefer saved CPT id; fall back to legacy full text / prefix match.
+                        function selectVehicleDropdown($select, booking, slot) {
+                            var idKey = slot === 2 ? 'vehicle2_id' : 'vehicle1_id';
+                            var textKey = slot === 2 ? 'vehicle2' : 'vehicle1';
+                            var savedId = booking[idKey];
+                            var savedText = booking[textKey] || '';
+                            if (savedId) {
+                                $select.val(String(savedId));
+                                if ($select.val() === String(savedId)) {
+                                    return;
+                                }
+                            }
+                            if (savedText) {
+                                $select.val(savedText);
+                                if ($select.val() === savedText) {
+                                    return;
+                                }
+                                var prefix = savedText.toLowerCase().split('(')[0].trim();
+                                $select.find('option').each(function() {
+                                    var $o = $(this);
+                                    var lab = ($o.attr('data-text') || $o.text() || '').toLowerCase();
+                                    if ($o.val() && lab.indexOf(prefix) === 0) {
+                                        $select.val($o.val());
+                                        return false;
                                     }
                                 });
                             }
                         }
-                        if (booking.vehicle2 && vehicleChoices >= 2) {
-                            // First try exact match
-                            $vehicle2Select.val(booking.vehicle2);
-                            // If no exact match, try starts with match
-                            if ($vehicle2Select.val() === '' || $vehicle2Select.val() === null) {
-                                $vehicle2Select.find('option').each(function() {
-                                    if ($(this).val() && $(this).val().toLowerCase().startsWith(booking.vehicle2.toLowerCase())) {
-                                        $vehicle2Select.val($(this).val());
-                                        return false; // Break the loop
-                                    }
-                                });
-                            }
+                        selectVehicleDropdown($vehicle1Select, booking, 1);
+                        if (vehicleChoices >= 2) {
+                            selectVehicleDropdown($vehicle2Select, booking, 2);
                         }
                         
                         // Add change handlers for vehicle selection

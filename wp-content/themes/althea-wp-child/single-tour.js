@@ -254,6 +254,7 @@ jQuery(document).ready(function ($) {
                 value: item.value, // This contains the price for calculations
                 text: item.text, // This is the display text
                 "data-id": item["data-id"], // Vehicle class ID
+                "data-vehicle-id": item["vehicle_id"] || "",
               })
             );
             if (numVehicles == 2) {
@@ -262,6 +263,7 @@ jQuery(document).ready(function ($) {
                   value: item.value, // This contains the price for calculations  
                   text: item.text, // This is the display text
                   "data-id": item["data-id"], // Vehicle class ID
+                  "data-vehicle-id": item["vehicle_id"] || "",
                 })
               );
             }
@@ -586,6 +588,11 @@ jQuery(document).ready(function ($) {
     }
 
     // Add hidden input fields for each Gravity Forms field
+    const vehicle1Id = hasVehicleChoices ? (vehicleDropdown1.find("option:selected").data("vehicle-id") || "") : "";
+    const vehicle2Id = (vehicleDropdown2Container.is(":visible") && vehicleDropdown2.val() && vehicleDropdown2.prop('selectedIndex') !== 0)
+      ? (vehicleDropdown2.find("option:selected").data("vehicle-id") || "")
+      : "";
+
     const formData = {
       'tour_id': tourId,
       'tourtext': tourTitle,
@@ -599,6 +606,8 @@ jQuery(document).ready(function ($) {
       'package_vehicles': packageVehicles,
       'vehicle1text': hasVehicleChoices ? vehicle1Text : '',
       'vehicle2text': hasVehicleChoices ? vehicle2Text : '', 
+      'vehicle1id': vehicle1Id ? String(vehicle1Id) : '',
+      'vehicle2id': vehicle2Id ? String(vehicle2Id) : '',
       'vehicle_choices': hasVehicleChoices ? (vehicle2Text ? '2' : '1') : '0',
       'tourprice': tourPrice.toFixed(2), 
       'deposit': depositAmount.toFixed(2),

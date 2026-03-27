@@ -25,6 +25,8 @@ class BST_Plugin {
         require_once BST_PLUGIN_DIR . 'includes/database/create-tables.php';
         require_once BST_PLUGIN_DIR . 'includes/database/database-utils.php';
         require_once BST_PLUGIN_DIR . 'includes/database/tour-booking-actions.php'; 
+        require_once BST_PLUGIN_DIR . 'includes/custom-post-types.php';
+        require_once BST_PLUGIN_DIR . 'includes/vehicle-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/rating-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/dashboard-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/tour-type-helpers.php';
@@ -485,6 +487,7 @@ class BST_Plugin {
                 'edit-tags.php?taxonomy=tour-type-code&post_type=tour', // Tour Type Codes (taxonomy for types)
                 'edit.php?post_type=tour',                // Tours (content using the types)
                 'edit.php?post_type=tour-date',           // Tour Dates (dates for the tours)
+                'edit.php?post_type=vehicle',             // Vehicles (under Tour Dates)
                 'edit.php?post_type=source-code',         // Source Codes
                 'edit-tags.php?taxonomy=tour-rating&post_type=tour',    // Tour Ratings
                 'edit.php?post_type=email-template',      // Email Templates
@@ -1024,9 +1027,21 @@ class BST_Plugin {
     // Enqueue admin scripts
     public function enqueue_admin_scripts($hook) {
         $screen = get_current_screen();
+        $screen_id = isset($screen->id) ? (string) $screen->id : '';
+        $screen_post_type = isset($screen->post_type) ? (string) $screen->post_type : '';
+
+        // Do not run BST admin enhancement scripts on ACF/SCF field-group editors.
+        // These screens manage field definitions and can break if unrelated admin scripts run.
+        if (
+            false !== strpos($screen_id, 'acf-field-group') ||
+            false !== strpos($screen_id, 'scf-field-group') ||
+            'acf-field-group' === $screen_post_type
+        ) {
+            return;
+        }
 
         // Enqueue scripts for Tour Dates meta box on Tour edit/new pages
-        if ($hook == 'post.php' || $hook == 'post-new.php') {
+        if (($hook == 'post.php' || $hook == 'post-new.php') && ($screen_post_type === 'tour' || $screen_post_type === 'tour-date')) {
             // Use a more reliable URL path for Azure
             $script_url = content_url('mu-plugins/bst_plugin/js/tour-dates-admin.js');
             $script_path = WP_CONTENT_DIR . '/mu-plugins/bst_plugin/js/tour-dates-admin.js';
@@ -4736,3 +4751,4 @@ class BST_Plugin {
         ));
     }
 }
+

@@ -341,6 +341,7 @@ function get_vehicle_data() {
     // Fetch vehicle pricing data from the selected tour
     $vehicle_pricing = get_field('vehicle_pricing', $tour_id);
     $data = array();
+    $vehicle_row_order = 0;
     // No need to add "Select a..." option here as it's static in HTML
 
     // Step through the classes
@@ -360,17 +361,58 @@ function get_vehicle_data() {
                 }
                 // No indication when price is 0 - just show vehicle name
                 
-                $vehicle_name = $vehicle_item['vehicle'] . $formatted_price;
+                $vehicle_base = isset($vehicle_item['vehicle']) ? (string) $vehicle_item['vehicle'] : '';
+                $vehicle_id = function_exists('bst_get_or_create_vehicle_id_by_name')
+                    ? bst_get_or_create_vehicle_id_by_name($vehicle_base)
+                    : 0;
+
+                if ($vehicle_id > 0 && function_exists('bst_vehicle_is_available_for_booking')
+                    && ! bst_vehicle_is_available_for_booking($vehicle_id)) {
+                    continue;
+                }
+
+                $vehicle_name = $vehicle_base . $formatted_price;
                 
                 $data[] = array(
                     'text' => $vehicle_name, // Clean vehicle name without price
                     'value' => $price, // Price for calculations
                     'price' => $price,
-                    'data-id' => $class // Vehicle class ID
+                    'data-id' => $class, // Vehicle class ID
+                    'vehicle_id' => $vehicle_id,
+                    '_order' => $vehicle_row_order++,
                 );
             }
         }
     }
+
+    if (count($data) > 1) {
+        usort(
+            $data,
+            static function ($a, $b) {
+                $ida = isset($a['vehicle_id']) ? (int) $a['vehicle_id'] : 0;
+                $idb = isset($b['vehicle_id']) ? (int) $b['vehicle_id'] : 0;
+                $sa = 0.0;
+                $sb = 0.0;
+                if ($ida && function_exists('get_field')) {
+                    $v = get_field('listing_sort_order', $ida);
+                    $sa = is_numeric($v) ? (float) $v : 0.0;
+                }
+                if ($idb && function_exists('get_field')) {
+                    $v = get_field('listing_sort_order', $idb);
+                    $sb = is_numeric($v) ? (float) $v : 0.0;
+                }
+                if ($sa !== $sb) {
+                    return $sa <=> $sb;
+                }
+                return ((int) ($a['_order'] ?? 0)) <=> ((int) ($b['_order'] ?? 0));
+            }
+        );
+    }
+
+    foreach ($data as $i => $row) {
+        unset($data[$i]['_order']);
+    }
+
     wp_send_json_success($data);
 }
 

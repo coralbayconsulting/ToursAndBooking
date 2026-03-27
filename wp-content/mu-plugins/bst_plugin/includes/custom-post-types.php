@@ -765,6 +765,30 @@ function disable_date_filters($disable, $post_type) {
     return $disable;
 }
 
+// Vehicle (normalized inventory entity)
+add_action('init', function () {
+    register_post_type('vehicle', array(
+        'labels' => array(
+            'name' => __('Vehicles'),
+            'singular_name' => __('Vehicle'),
+            'add_new_item' => __('Add New Vehicle'),
+            'edit_item' => __('Edit Vehicle'),
+            'new_item' => __('New Vehicle'),
+            'view_item' => __('View Vehicle'),
+            'search_items' => __('Search Vehicles'),
+        ),
+        'public' => false,
+        'show_ui' => true,
+        'show_in_menu' => 'bst-plugin',
+        'menu_position' => 26,
+        'menu_icon' => 'dashicons-car',
+        'supports' => array('title'),
+        'has_archive' => false,
+        'rewrite' => false,
+        'show_in_rest' => false,
+    ));
+}, 20);
+
 // Suppress Yoast SEO and Readability filters for tour, tour-date, tour-type, and source-code post types
 add_action('restrict_manage_posts', function() {
     global $typenow;

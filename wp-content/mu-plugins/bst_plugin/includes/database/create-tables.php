@@ -90,6 +90,8 @@ function create_tour_booking_tables() {
             tour_date_text VARCHAR(40),
             tour_package_id BIGINT(20) UNSIGNED,
             tour_package_text VARCHAR(20),
+            vehicle1_id BIGINT(20) UNSIGNED,
+            vehicle2_id BIGINT(20) UNSIGNED,
             vehicle1 VARCHAR(100),
             vehicle2 VARCHAR(100),
             tour_extension_added BOOLEAN DEFAULT FALSE,

@@ -1,6 +1,6 @@
 {
     "key": "group_6781b21fb4ca6",
-    "title": "Tours",
+    "title": "Tour",
     "fields": [
         {
             "key": "field_678d94efcb0cb",
@@ -1382,5 +1382,5 @@
     "description": "",
     "show_in_rest": 1,
     "display_title": "",
-    "modified": 1774118249
+    "modified": 1774572939
 }

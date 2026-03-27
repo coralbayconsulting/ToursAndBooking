@@ -1029,6 +1029,8 @@ function bst_update_tile() {
                 'tour_package_text' => sanitize_text_field($_POST['tour_package_text'] ?? ''),
                 'tour_text' => sanitize_text_field($_POST['tour_text'] ?? ''),
                 'tour_date_text' => sanitize_text_field($_POST['tour_date_text'] ?? ''),
+                'vehicle1_id' => intval($_POST['vehicle1_id'] ?? 0),
+                'vehicle2_id' => intval($_POST['vehicle2_id'] ?? 0),
                 'vehicle1' => sanitize_text_field($_POST['vehicle1'] ?? ''),
                 'vehicle2' => sanitize_text_field($_POST['vehicle2'] ?? ''),
                 'tour_extension_added' => ($_POST['tour_extension_added'] ?? '') === '1' ? 1 : 0,
@@ -1044,6 +1046,14 @@ function bst_update_tile() {
                 'package_vehicles' => intval($_POST['package_vehicles'] ?? 0),
                 'vehicle_choices' => intval($_POST['vehicle_choices'] ?? 0)
             );
+
+            // Backfill IDs from legacy text when possible.
+            if ( empty( $data['vehicle1_id'] ) && ! empty( $data['vehicle1'] ) && function_exists( 'bst_vehicle_base_name_from_text' ) ) {
+                $data['vehicle1_id'] = bst_get_or_create_vehicle_id_by_name( bst_vehicle_base_name_from_text( $data['vehicle1'] ) );
+            }
+            if ( empty( $data['vehicle2_id'] ) && ! empty( $data['vehicle2'] ) && function_exists( 'bst_vehicle_base_name_from_text' ) ) {
+                $data['vehicle2_id'] = bst_get_or_create_vehicle_id_by_name( bst_vehicle_base_name_from_text( $data['vehicle2'] ) );
+            }
             break;
 
         case 'invoicing':

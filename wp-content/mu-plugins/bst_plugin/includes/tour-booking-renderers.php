@@ -16,6 +16,9 @@ if (!defined('ABSPATH')) {
 if ( ! function_exists( 'bst_booking_pending_payment_note_html' ) && defined( 'BST_PLUGIN_DIR' ) ) {
     require_once BST_PLUGIN_DIR . 'includes/booking-payment-status.php';
 }
+if ( ! function_exists( 'bst_booking_vehicle_display_text' ) && defined( 'BST_PLUGIN_DIR' ) ) {
+    require_once BST_PLUGIN_DIR . 'includes/vehicle-helpers.php';
+}
 
 /**
  * Helper functions for tile rendering (shared utilities)
@@ -875,18 +878,36 @@ function bst_render_tour_package_tile_content($booking) {
     $html = '<div class="tile-view-content">';
     
     // Tour with ID link
-    $html .= '<div class="view-item"><strong>Tour:</strong> ' . esc_html($booking->tour_text ?? '');
+    $tour_title = '';
+    if ( ! empty( $booking->tour_id ) ) {
+        $p = get_post( (int) $booking->tour_id );
+        if ( $p && 'tour' === $p->post_type ) {
+            $tour_title = $p->post_title;
+        }
+    }
+    if ( '' === $tour_title ) {
+        $tour_title = (string) ( $booking->tour_text ?? '' );
+    }
+    $html .= '<div class="view-item"><strong>Tour:</strong> ' . esc_html($tour_title);
     if (!empty($booking->tour_id)) {
         $html .= ' (ID: <a href="' . esc_url(admin_url('post.php?post=' . $booking->tour_id . '&action=edit')) . '" target="_blank" title="Edit tour record">' . esc_html($booking->tour_id) . '</a>)';
     }
     $html .= '</div>';
     
     // Tour Date with ID link
-    $html .= '<div class="view-item"><strong>Tour Date:</strong> ' . esc_html($booking->tour_date_text ?? '');
+    $tour_date_display = '';
     if (!empty($booking->tour_date_id)) {
         $tour_date_id = explode('|', $booking->tour_date_id)[0];
+        $td = get_post( (int) $tour_date_id );
+        if ( $td && 'tour-date' === $td->post_type ) {
+            $tour_date_display = $td->post_title;
+        }
         $html .= ' (ID: <a href="' . esc_url(admin_url('post.php?post=' . $tour_date_id . '&action=edit')) . '" target="_blank" title="Edit tour date record">' . esc_html($tour_date_id) . '</a>)';
     }
+    if ( '' === $tour_date_display ) {
+        $tour_date_display = (string) ( $booking->tour_date_text ?? '' );
+    }
+    $html = str_replace('<div class="view-item"><strong>Tour Date:</strong> ', '<div class="view-item"><strong>Tour Date:</strong> ' . esc_html($tour_date_display), $html);
     $html .= '</div>';
     
     // Package with price removal
@@ -899,13 +920,15 @@ function bst_render_tour_package_tile_content($booking) {
     }
     $html .= '</div>';
     
-    // Vehicles
-    if (!empty($booking->vehicle1) || !empty($booking->vehicle2)) {
-        if (!empty($booking->vehicle1)) {
-            $html .= '<div class="view-item"><strong>Vehicle 1:</strong> ' . esc_html($booking->vehicle1) . '</div>';
+    // Vehicles (prefer normalized IDs; keep legacy text as fallback)
+    $v1 = function_exists('bst_booking_vehicle_display_text') ? bst_booking_vehicle_display_text($booking, 1) : ($booking->vehicle1 ?? '');
+    $v2 = function_exists('bst_booking_vehicle_display_text') ? bst_booking_vehicle_display_text($booking, 2) : ($booking->vehicle2 ?? '');
+    if ( ! empty( $v1 ) || ! empty( $v2 ) ) {
+        if ( ! empty( $v1 ) ) {
+            $html .= '<div class="view-item"><strong>Vehicle 1:</strong> ' . esc_html($v1) . '</div>';
         }
-        if (!empty($booking->vehicle2)) {
-            $html .= '<div class="view-item"><strong>Vehicle 2:</strong> ' . esc_html($booking->vehicle2) . '</div>';
+        if ( ! empty( $v2 ) ) {
+            $html .= '<div class="view-item"><strong>Vehicle 2:</strong> ' . esc_html($v2) . '</div>';
         }
     }
     
