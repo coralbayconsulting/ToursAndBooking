@@ -1056,12 +1056,25 @@ jQuery(document).ready(function ($) {
     // Get the schedule HTML
     var scheduleHTML = originalScheduleHTML;
     
-    // Find all instances of Day X (and anything after it before the colon)
+    // Find the first day marker in the content.
+    // If the schedule starts at Day 1, that should map to the tour start date.
+    // If it starts at Day 0, Day 0 maps to the start date.
+    var firstDayMatch = scheduleHTML.match(/<strong>Day\s+(\d+)[^<]*<\/strong>/i);
+    var baseDayNumber = firstDayMatch ? parseInt(firstDayMatch[1], 10) : 0;
+    if (isNaN(baseDayNumber)) {
+      baseDayNumber = 0;
+    }
+
+    // Replace all Day X labels with actual calendar dates.
     // Pattern: <strong>Day 0</strong>, <strong>Day 1-ext</strong>, etc.
     scheduleHTML = scheduleHTML.replace(/<strong>Day\s+(\d+)[^<]*<\/strong>/gi, function(match, dayNum) {
       // Calculate the date for this day
       var currentDate = new Date(tourStartDate);
-      currentDate.setDate(currentDate.getDate() + parseInt(dayNum));
+      var dayNumber = parseInt(dayNum, 10);
+      if (isNaN(dayNumber)) {
+        dayNumber = baseDayNumber;
+      }
+      currentDate.setDate(currentDate.getDate() + (dayNumber - baseDayNumber));
       
       // Format as "30 Aug" (day + abbreviated month)
       var day = currentDate.getDate();
