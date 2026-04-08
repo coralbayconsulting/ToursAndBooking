@@ -1530,7 +1530,7 @@ function bst_export_custom_list_handler() {
     $sort_order    = isset($_POST['sort_order']) ? $_POST['sort_order'] : 'desc';
     
     // Validate list type
-    if (!in_array($list_type, array('rooming', 'vehicle', 'shirt'), true)) {
+    if (!in_array($list_type, array('rooming', 'vehicle', 'shirt', 'travel_details'), true)) {
         wp_die('Invalid list type', 'Error', array('response' => 400));
     }
     
@@ -1574,6 +1574,8 @@ function bst_export_custom_list_handler() {
         bst_export_rooming_list_csv($output, $bookings, $filter_tour_date_id);
     } elseif ($list_type === 'vehicle') {
         bst_export_vehicle_list_csv($output, $bookings, $filter_tour_date_id);
+    } elseif ($list_type === 'travel_details') {
+        bst_export_travel_details_list_csv($output, $bookings, $filter_tour_date_id);
     } else {
         bst_export_shirt_size_list_csv($output, $bookings, $filter_tour_date_id);
     }
@@ -1803,6 +1805,99 @@ function bst_export_vehicle_list_csv($output, $bookings, $tour_date_id) {
         }
         
         fputcsv($output, $row);
+    }
+}
+
+/**
+ * Generate travel details list CSV (guest 1/2 name, phone, travel details; same tour header as rooming/vehicle).
+ */
+function bst_export_travel_details_list_csv( $output, $bookings, $tour_date_id ) {
+    $tour_name   = '';
+    $tour_dates  = '';
+    $tour_id     = 0;
+
+    if ( $tour_date_id > 0 ) {
+        $tour_date_post = get_post( $tour_date_id );
+
+        if ( $tour_date_post ) {
+            $tour_id = get_field( 'tour', $tour_date_id );
+
+            if ( $tour_id ) {
+                $tour_post = get_post( $tour_id );
+                $tour_name = $tour_post ? $tour_post->post_title : '';
+            }
+
+            $start_date = get_field( 'start_date', $tour_date_id );
+            $end_date   = get_field( 'end_date', $tour_date_id );
+
+            if ( $start_date && $end_date ) {
+                $tour_dates = date( 'j M', strtotime( $start_date ) ) . ' - ' . date( 'j M Y', strtotime( $end_date ) );
+            }
+        }
+    }
+
+    $extension_offered = false;
+    $extension_name    = '';
+    $extension_dates   = '';
+
+    if ( $tour_id > 0 ) {
+        $extension_offered = get_field( 'extension_offered', $tour_id );
+        if ( $extension_offered ) {
+            $extension_name = get_field( 'extension_title', $tour_id ) ?: 'Extension';
+        }
+    }
+
+    if ( $tour_date_id > 0 && $extension_offered ) {
+        $extension_days = get_field( 'extension_driving_days', $tour_id );
+        $tour_end_date  = get_field( 'end_date', $tour_date_id );
+        if ( $extension_days && $tour_end_date ) {
+            $ext_start = date( 'j M Y', strtotime( $tour_end_date ) );
+            $ext_end   = date( 'j M Y', strtotime( $tour_end_date . ' +' . $extension_days . ' days' ) );
+            $extension_dates = $ext_start . ' - ' . $ext_end;
+        }
+    }
+
+    fputcsv( $output, array( 'Tour:', $tour_name ) );
+    fputcsv( $output, array( 'Tour Dates:', $tour_dates ) );
+    if ( $extension_offered ) {
+        fputcsv( $output, array( 'Extension:', $extension_name ) );
+        fputcsv( $output, array( 'Extension Dates:', $extension_dates ) );
+    }
+    fputcsv( $output, array() );
+
+    fputcsv(
+        $output,
+        array(
+            'Guest 1 name',
+            'Guest 1 phone',
+            'Guest 1 travel details',
+            'Guest 2 name',
+            'Guest 2 phone',
+            'Guest 2 travel details',
+        )
+    );
+
+    foreach ( $bookings as $booking ) {
+        $g1 = trim( ( $booking->guest1_first_name ?? '' ) . ' ' . ( $booking->guest1_last_name ?? '' ) );
+        $g2 = trim( ( $booking->guest2_first_name ?? '' ) . ' ' . ( $booking->guest2_last_name ?? '' ) );
+        $p1_raw = isset( $booking->guest1_phone ) ? trim( (string) $booking->guest1_phone ) : '';
+        $p2_raw = isset( $booking->guest2_phone ) ? trim( (string) $booking->guest2_phone ) : '';
+        $p1     = ( '' !== $p1_raw && function_exists( 'bst_format_phone_international' ) ) ? bst_format_phone_international( $p1_raw ) : $p1_raw;
+        $p2     = ( '' !== $p2_raw && function_exists( 'bst_format_phone_international' ) ) ? bst_format_phone_international( $p2_raw ) : $p2_raw;
+        $t1 = isset( $booking->guest1_travel_details ) ? trim( (string) $booking->guest1_travel_details ) : '';
+        $t2 = isset( $booking->guest2_travel_details ) ? trim( (string) $booking->guest2_travel_details ) : '';
+
+        fputcsv(
+            $output,
+            array(
+                $g1,
+                $p1,
+                $t1,
+                $g2,
+                $p2,
+                $t2,
+            )
+        );
     }
 }
 

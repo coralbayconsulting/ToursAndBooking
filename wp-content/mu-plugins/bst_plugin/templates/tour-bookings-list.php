@@ -545,6 +545,7 @@ $filtered_bookings = $tour_bookings;
                         <option value="rooming">Rooming List</option>
                         <option value="vehicle">Vehicle List</option>
                         <option value="shirt">Shirt Size List</option>
+                        <option value="travel_details">Travel Details List</option>
                     </select>
                     
                     <button type="submit" class="button button-primary">
