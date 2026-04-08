@@ -828,6 +828,9 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
         if ($payment_method_display === 'Bank Wire') {
             $payment_method_display = 'Bank Transfer';
         }
+        if ( '' === trim( (string) $payment_method_display ) ) {
+            $payment_method_display = 'N/A';
+        }
         $html .= '<tr><td>Payment Method:</td>';
         $html .= '<td>' . esc_html($payment_method_display) . '</td></tr>';
         
@@ -908,6 +911,9 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
         // Convert Bank Wire to Bank Transfer for display
         if ($payment_method_display === 'Bank Wire') {
             $payment_method_display = 'Bank Transfer';
+        }
+        if ( '' === trim( (string) $payment_method_display ) ) {
+            $payment_method_display = 'N/A';
         }
         $html .= '<tr><td>Payment Method:</td>';
         $html .= '<td>' . esc_html($payment_method_display) . '</td></tr>';

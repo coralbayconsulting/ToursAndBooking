@@ -394,6 +394,50 @@ function bst_calculate_balance_due($net_tour_price, $total_paid, $payment_discou
     return floatval($net_tour_price) + floatval($additional_charge) - floatval($total_paid) - floatval($payment_discount_amount);
 }
 
+/**
+ * GF10: balance due from entry + DB booking (same inputs as finalization).
+ * Used when payment method is Credit Card: gform_after_submission normally defers to
+ * gform_post_payment_completed, which does not run when there is no charge ($0 balance).
+ *
+ * @param array $entry Gravity Forms entry.
+ * @return float|null Balance due, or null if booking cannot be resolved.
+ */
+function bst_gf10_estimate_balance_due_from_entry( $entry ) {
+    $tour_booking_id = rgar( $entry, '261' );
+    if ( ! $tour_booking_id || ! is_numeric( $tour_booking_id ) ) {
+        return null;
+    }
+    global $wpdb;
+    $tour_booking = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}bst_tour_booking WHERE id = %d",
+            intval( $tour_booking_id )
+        )
+    );
+    if ( ! $tour_booking ) {
+        return null;
+    }
+    $payment_method         = rgar( $entry, '118' );
+    $existing_total_paid    = floatval( rgar( $entry, '193' ) );
+    if ( 0.0 === $existing_total_paid ) {
+        $existing_total_paid = floatval( $tour_booking->total_paid ?? 0 );
+    }
+    $net_tour_price = floatval( rgar( $entry, '192' ) );
+    if ( 0.0 === $net_tour_price ) {
+        $net_tour_price = floatval( $tour_booking->net_tour_price ?? 0 );
+    }
+    $additional_charge = floatval( rgar( $entry, '285' ) );
+    if ( 0.0 === $additional_charge ) {
+        $additional_charge = floatval( $tour_booking->additional_charge ?? 0 );
+    }
+    $balance_payment_discount = ( 'Bank Wire' === $payment_method ) ? floatval( rgar( $entry, '278' ) ) : 0;
+    $deposit_discount         = floatval( $tour_booking->deposit_payment_discount ?? 0 );
+    $additional_discount      = floatval( $tour_booking->additional_payment_discount ?? 0 );
+    $payment_discount_amount  = $deposit_discount + $balance_payment_discount + $additional_discount;
+
+    return bst_calculate_balance_due( $net_tour_price, $existing_total_paid, $payment_discount_amount, $additional_charge );
+}
+
 // --- Helper function for GF10 payment calculations with finalization logic ---
 function bst_calculate_gf10_payment_details($entry, $existing_total_paid = 0, $net_tour_price = 0, $additional_charge = 0, $context = 'submission', $bank_wire_discount = 0, $existing_payment_discount = 0) {
     // Check if balance is already paid in full (or overpaid)
@@ -1765,14 +1809,19 @@ add_action('gform_after_update_entry_10', 'bst_gf10_handle_admin_update', 10, 2)
 function bst_gf10_handle_submission($entry, $form) {
     $payment_method = rgar($entry, '118');
     
-    // For Credit Card payments, skip here - will be handled by gform_post_payment_completed.
-    // When balance is 0 the payment field is not shown, so payment_method will be blank,
-    // which falls through to process the booking update without touching payment fields.
+    // Credit Card: finalization normally runs in gform_post_payment_completed after Stripe.
+    // With $0 balance there is often no charge, so that hook may never run; some forms still post
+    // "Credit Card" from a hidden/default field — finalize here so the booking still updates.
+    // (Empty payment method always falls through below — typical for $0 balance, no card section.)
     if ($payment_method === 'Credit Card') {
+        $balance_due = bst_gf10_estimate_balance_due_from_entry( $entry );
+        if ( null !== $balance_due && $balance_due <= 0 ) {
+            bst_gf10_process_finalization_logic( $entry, $form );
+        }
         return;
     }
     
-    // Call the common processing logic for Bank Wire and blank/zero-balance cases
+    // Bank Wire and other non-card paths (or empty payment method when no card section shown)
     bst_gf10_process_finalization_logic($entry, $form);
 }
 
@@ -2201,7 +2250,8 @@ function bst_gf10_process_finalization_logic($entry, $form) {
         }
     }
     
-    // Always set the balance payment method if provided, regardless of payment completion
+    // Balance line: only persist when there is a real payment method to record (Bank Wire, card, etc.).
+    // Zero-balance finalization has no method and must clear any stale balance_* values from older edits.
     if (!empty($payment_method)) {
         $update_data['balance_payment_method'] = $payment_method;
         $update_data['balance_payment_amount'] = $payment_amount;
@@ -2211,9 +2261,13 @@ function bst_gf10_process_finalization_logic($entry, $form) {
         $update_data['total_paid'] = $total_paid;
         $update_data['balance_due'] = $balance_due;
     } else {
-        // No payment method (zero balance case) - still update totals
-        $update_data['total_paid'] = $total_paid;
-        $update_data['balance_due'] = $balance_due;
+        $update_data['balance_payment_method']   = '';
+        $update_data['balance_payment_amount']   = 0;
+        $update_data['balance_payment_date']     = null;
+        $update_data['balance_payment_status']   = null;
+        $update_data['balance_payment_discount'] = 0;
+        $update_data['total_paid']                 = $total_paid;
+        $update_data['balance_due']                = $balance_due;
     }
     
     // Use centralized update function
