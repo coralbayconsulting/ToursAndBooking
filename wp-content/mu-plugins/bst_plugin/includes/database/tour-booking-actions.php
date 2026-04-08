@@ -168,8 +168,17 @@ function bst_create_booking_notification($booking_id, $booking_data, $action, $s
         }
     }
     
-    // Format tour info
-    $tour_info = ($booking_data['tour_text'] ?? 'Tour') . ' (' . ($booking_data['tour_date_text'] ?? 'Date') . ') - ' . ($booking_data['tour_package_text'] ?? 'Package');
+    // Format tour info from normalized IDs.
+    $tour_title = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking_data['tour_id'] ?? 0) : '';
+    $tour_date  = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking_data['tour_date_id'] ?? 0) : '';
+    $package    = function_exists('bst_live_package_name') ? bst_live_package_name($booking_data['tour_package_id'] ?? 0) : '';
+    $tour_info  = $tour_title !== '' ? $tour_title : 'Tour';
+    if ($tour_date !== '') {
+        $tour_info .= ' (' . $tour_date . ')';
+    }
+    if ($package !== '') {
+        $tour_info .= ' - ' . $package;
+    }
     
     // Add pending status highlighting if applicable
     $status_note = '';
@@ -343,7 +352,7 @@ function bst_create_tour_booking($data, $context = 'manual') {
                 $booking_entry_id = isset($data['booking_entry_id']) ? $data['booking_entry_id'] : 'unknown';
                 $guest_name = (isset($data['guest1_first_name']) ? $data['guest1_first_name'] : '') . ' ' . 
                              (isset($data['guest1_last_name']) ? $data['guest1_last_name'] : '');
-                $tour_info = isset($data['tour_text']) ? $data['tour_text'] : 'Unknown Tour';
+                $tour_info = function_exists('bst_live_tour_title') ? bst_live_tour_title($data['tour_id'] ?? 0) : 'Unknown Tour';
                 
                 BST_Plugin::add_notification(
                     'database_insert_failed_' . $booking_entry_id . '_' . time(),
@@ -372,7 +381,7 @@ function bst_create_tour_booking($data, $context = 'manual') {
             $booking_entry_id = isset($data['booking_entry_id']) ? $data['booking_entry_id'] : 'unknown';
             $guest_name = (isset($data['guest1_first_name']) ? $data['guest1_first_name'] : '') . ' ' . 
                          (isset($data['guest1_last_name']) ? $data['guest1_last_name'] : '');
-            $tour_info = isset($data['tour_text']) ? $data['tour_text'] : 'Unknown Tour';
+            $tour_info = function_exists('bst_live_tour_title') ? bst_live_tour_title($data['tour_id'] ?? 0) : 'Unknown Tour';
             
             // Get stack trace
             $stack_trace = $e->getTraceAsString();
@@ -1026,13 +1035,8 @@ function bst_update_tile() {
                 'tour_id' => intval($_POST['tour_id'] ?? 0),
                 'tour_date_id' => intval($_POST['tour_date_id'] ?? 0),
                 'tour_package_id' => intval($_POST['tour_package_id'] ?? 0),
-                'tour_package_text' => sanitize_text_field($_POST['tour_package_text'] ?? ''),
-                'tour_text' => sanitize_text_field($_POST['tour_text'] ?? ''),
-                'tour_date_text' => sanitize_text_field($_POST['tour_date_text'] ?? ''),
                 'vehicle1_id' => intval($_POST['vehicle1_id'] ?? 0),
                 'vehicle2_id' => intval($_POST['vehicle2_id'] ?? 0),
-                'vehicle1' => sanitize_text_field($_POST['vehicle1'] ?? ''),
-                'vehicle2' => sanitize_text_field($_POST['vehicle2'] ?? ''),
                 'tour_extension_added' => ($_POST['tour_extension_added'] ?? '') === '1' ? 1 : 0,
                 'tour_extension_text' => sanitize_text_field($_POST['tour_extension_text'] ?? ''),
                 'tour_extension_date_text' => sanitize_text_field($_POST['tour_extension_date_text'] ?? ''),
@@ -1046,14 +1050,6 @@ function bst_update_tile() {
                 'package_vehicles' => intval($_POST['package_vehicles'] ?? 0),
                 'vehicle_choices' => intval($_POST['vehicle_choices'] ?? 0)
             );
-
-            // Backfill IDs from legacy text when possible.
-            if ( empty( $data['vehicle1_id'] ) && ! empty( $data['vehicle1'] ) && function_exists( 'bst_vehicle_base_name_from_text' ) ) {
-                $data['vehicle1_id'] = bst_get_or_create_vehicle_id_by_name( bst_vehicle_base_name_from_text( $data['vehicle1'] ) );
-            }
-            if ( empty( $data['vehicle2_id'] ) && ! empty( $data['vehicle2'] ) && function_exists( 'bst_vehicle_base_name_from_text' ) ) {
-                $data['vehicle2_id'] = bst_get_or_create_vehicle_id_by_name( bst_vehicle_base_name_from_text( $data['vehicle2'] ) );
-            }
             break;
 
         case 'invoicing':
@@ -1337,7 +1333,6 @@ function bst_create_booking() {
     $booking_data['package_rooms'] = floatval($_POST['package_rooms'] ?? 0);
     $booking_data['package_vehicles'] = intval($_POST['package_vehicles'] ?? 0);
     $booking_data['vehicle_choices'] = sanitize_text_field($_POST['vehicle_choices'] ?? '');
-    $booking_data['tour_package_text'] = sanitize_text_field($_POST['tour_package_text'] ?? '');
     
     // Notes
     $booking_data['notes'] = sanitize_textarea_field($_POST['notes'] ?? '');
@@ -1363,39 +1358,6 @@ function bst_create_booking() {
     }
     $booking_data['data_source'] = $data_source;
     
-    // Get tour and date text for display (only if not already provided)
-    if (empty($booking_data['tour_text'])) {
-        $tour_post = get_post($booking_data['tour_id']);
-        $booking_data['tour_text'] = $tour_post ? $tour_post->post_title : '';
-    }
-    
-    if (empty($booking_data['tour_date_text'])) {
-        $tour_date_post = get_post($booking_data['tour_date_id']);
-        if ($tour_date_post) {
-            // Use the standardized tour date title directly - it's already in format "Tour Name (Date Range)"
-            // Extract just the date range part from within the parentheses
-            if (preg_match('/\((.*)\)$/', $tour_date_post->post_title, $matches)) {
-                $booking_data['tour_date_text'] = $matches[1];
-            } else {
-                // Fallback to full title if format doesn't match expected pattern
-                $booking_data['tour_date_text'] = $tour_date_post->post_title;
-            }
-        }
-    }
-    
-    // Get package text if package selected and not already provided
-    if ($booking_data['tour_package_id'] > 0 && empty($booking_data['tour_package_text'])) {
-        $packages = get_field('packages', $booking_data['tour_id']);
-        if ($packages && is_array($packages)) {
-            foreach ($packages as $index => $pkg) {
-                $pkg_id = isset($pkg['package_id']) ? $pkg['package_id'] : ($index + 1);
-                if ($pkg_id == $booking_data['tour_package_id']) {
-                    $booking_data['tour_package_text'] = $pkg['package_name'] ?? '';
-                    break;
-                }
-            }
-        }
-    }
     
     // Calculate customer ID and commission based on email address (unless already provided)
     $customer_id_provided = !empty($_POST['customer_id']) ? intval($_POST['customer_id']) : null;
@@ -1637,13 +1599,9 @@ function bst_create_waiting_list_booking() {
     // Vehicle choices
     $booking_data['vehicle_choices'] = intval($_POST['vehicle_choices'] ?? 0);
     
-    // Vehicle selections (actual vehicle IDs)
-    if (!empty($_POST['vehicle1'])) {
-        $booking_data['vehicle1'] = sanitize_text_field($_POST['vehicle1']);
-    }
-    if (!empty($_POST['vehicle2'])) {
-        $booking_data['vehicle2'] = sanitize_text_field($_POST['vehicle2']);
-    }
+    // Vehicle selections (normalized IDs only)
+    $booking_data['vehicle1_id'] = intval($_POST['vehicle1_id'] ?? ($_POST['vehicle1id'] ?? ($_POST['vehicle1'] ?? 0)));
+    $booking_data['vehicle2_id'] = intval($_POST['vehicle2_id'] ?? ($_POST['vehicle2id'] ?? ($_POST['vehicle2'] ?? 0)));
     
     // Extension information
     if (!empty($_POST['tour_extension_added']) && $_POST['tour_extension_added'] === '1') {
@@ -1655,9 +1613,6 @@ function bst_create_waiting_list_booking() {
     if (!empty($_POST['tour_extension_date_text'])) {
         $booking_data['tour_extension_date_text'] = sanitize_text_field($_POST['tour_extension_date_text']);
     }
-    
-    // Package text (from JavaScript)
-    $booking_data['tour_package_text'] = sanitize_text_field($_POST['tour_package_text'] ?? '');
     
     // Notes
     $booking_data['notes'] = sanitize_textarea_field($_POST['notes'] ?? '');
@@ -1674,22 +1629,6 @@ function bst_create_waiting_list_booking() {
     $booking_data['balance_due'] = $booking_data['tour_price'];
     $booking_data['deposit_payment_amount'] = 0;
     
-    // Get tour text
-    $tour_post = get_post($booking_data['tour_id']);
-    $booking_data['tour_text'] = $tour_post ? $tour_post->post_title : '';
-    
-    // Get tour date text
-    $tour_date_post = get_post($booking_data['tour_date_id']);
-    if ($tour_date_post) {
-        // Use the standardized tour date title directly - it's already in format "Tour Name (Date Range)"
-        // Extract just the date range part from within the parentheses
-        if (preg_match('/\((.*)\)$/', $tour_date_post->post_title, $matches)) {
-            $booking_data['tour_date_text'] = $matches[1];
-        } else {
-            // Fallback to full title if format doesn't match expected pattern
-            $booking_data['tour_date_text'] = $tour_date_post->post_title;
-        }
-    }
     
     // Get package details from ACF for people/rooms/vehicles only
     if ($booking_data['tour_package_id'] > 0) {
@@ -1857,7 +1796,16 @@ function bst_create_waiting_list_booking_with_notification($booking_data) {
         }
         
         // Format tour info like the tour bookings list
-        $tour_info = ($booking_data['tour_text'] ?? 'Tour') . ' (' . ($booking_data['tour_date_text'] ?? 'Date') . ') - ' . ($booking_data['tour_package_text'] ?? 'Package');
+        $tour_title = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking_data['tour_id'] ?? 0) : '';
+        $tour_date  = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking_data['tour_date_id'] ?? 0) : '';
+        $package    = function_exists('bst_live_package_name') ? bst_live_package_name($booking_data['tour_package_id'] ?? 0) : '';
+        $tour_info  = $tour_title !== '' ? $tour_title : 'Tour';
+        if ($tour_date !== '') {
+            $tour_info .= ' (' . $tour_date . ')';
+        }
+        if ($package !== '') {
+            $tour_info .= ' - ' . $package;
+        }
         $booking_link = admin_url('admin.php?page=view_booking&booking_id=' . $booking_id);
         
         $message = sprintf(

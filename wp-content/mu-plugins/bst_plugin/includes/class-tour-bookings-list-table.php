@@ -276,7 +276,7 @@ class BST_Tour_Bookings_List_Table extends WP_List_Table {
                 $order_clause = 'guest1_first_name, guest1_last_name';
                 break;
             case 'tour':
-                $order_clause = 'tour_text';
+                $order_clause = 'tour_id';
                 break;
         }
         
@@ -417,31 +417,10 @@ class BST_Tour_Bookings_List_Table extends WP_List_Table {
      * Tour column with date and package info
      */
     public function column_tour($item) {
-        $tour_label = $item->tour_text;
+        $tour_label = function_exists('bst_live_tour_title') ? bst_live_tour_title($item->tour_id ?? 0) : '';
         $tour_date_id = $item->tour_date_id;
-        $tour_date_text = $item->tour_date_text;
+        $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($item->tour_date_id ?? 0) : '';
         $paren = '';
-        
-        if (!empty($tour_date_id)) {
-            $parts = explode('|', $tour_date_id);
-            $tour_date_id_val = trim($parts[0]);
-            $tour_date_post = get_post($tour_date_id_val);
-            
-            if ($tour_date_post && $tour_date_post->post_type === 'tour-date') {
-                $start_date = get_post_meta($tour_date_id_val, 'start_date', true);
-                $end_date = get_post_meta($tour_date_id_val, 'end_date', true);
-                
-                if ($start_date && $end_date) {
-                    $tour_date_text = (date('M', strtotime($start_date)) == date('M', strtotime($end_date)))
-                        ? date('j', strtotime($start_date)) . '-' . date('j M Y', strtotime($end_date))
-                        : date('j M', strtotime($start_date)) . ' - ' . date('j M Y', strtotime($end_date));
-                } elseif ($start_date) {
-                    $tour_date_text = date('j M Y', strtotime($start_date));
-                } else {
-                    $tour_date_text = $tour_date_post->post_title;
-                }
-            }
-        }
         
         $date_label = $tour_date_text !== '' ? $tour_date_text : $tour_date_id;
         if ($date_label) {
@@ -449,7 +428,8 @@ class BST_Tour_Bookings_List_Table extends WP_List_Table {
         }
         
         // Build the tour display text (no auto suffix)
-        $tour_display = esc_html($tour_label . ($paren ? ' (' . $paren . ')' : '') . ' - ' . $item->tour_package_text);
+        $package_label = function_exists('bst_live_package_name') ? bst_live_package_name($item->tour_package_id ?? 0) : '';
+        $tour_display = esc_html($tour_label . ($paren ? ' (' . $paren . ')' : '') . ' - ' . $package_label);
         return $tour_display;
     }
 

@@ -11,11 +11,11 @@
 require_once plugin_dir_path(__FILE__) . '../includes/database/tour-booking-actions.php';
 require_once plugin_dir_path(__FILE__) . '../includes/tour-booking-renderers.php';
 
-// Fetch all tours for dropdown
+// Fetch all tours for dropdown (any status except those excluded by WP for `any`, e.g. trash)
 $tours = get_posts([
     'post_type' => 'tour',
     'posts_per_page' => -1,
-    'post_status' => 'publish',
+    'post_status' => function_exists( 'bst_post_statuses_for_admin_scan' ) ? bst_post_statuses_for_admin_scan( 'tour' ) : 'any',
     'orderby' => 'title',
     'order' => 'ASC'
 ]);
@@ -2866,42 +2866,6 @@ jQuery(document).ready(function($) {
             data.payment_discount_amount = depositDiscount + balanceDiscount + additionalDiscount;
             data.balance_due = (data.net_tour_price + additionalCharge) - data.total_paid - data.payment_discount_amount;
         } else if (tileType === 'tour_package') {
-            // Package-related derived values
-            if (data.tour_package_id) {
-                // Get package text from selected option
-                var $selectedPackageOption = $tile.find('#tour_package_id option:selected');
-                var packageText = $selectedPackageOption.text();
-                if (packageText && packageText !== 'Select a Package') {
-                    // Remove price information from package text
-                    packageText = packageText.replace(/\s*-\s*[€$]\s?[0-9,]+\.?\d*/g, '').trim();
-                    // Remove anything in parentheses (like "Sold Out", "Full", etc.)
-                    packageText = packageText.replace(/\s*\([^)]*\)\s*/g, '').trim();
-                    data.tour_package_text = packageText;
-                }
-            }
-            
-            // Handle tour text - remove anything in parentheses like "(Sold Out)"
-            if (data.tour_id) {
-                var $selectedTourOption = $tile.find('#tour_id option:selected');
-                var tourText = $selectedTourOption.text();
-                if (tourText && tourText !== 'Select a Tour') {
-                    // Remove anything in parentheses (like "Sold Out", "Full", etc.)
-                    tourText = tourText.replace(/\s*\([^)]*\)\s*/g, '').trim();
-                    data.tour_text = tourText;
-                }
-            }
-            
-            // Handle tour date text - remove anything in parentheses like "(Sold Out)"
-            if (data.tour_date_id) {
-                var $selectedTourDateOption = $tile.find('#tour_date_id option:selected');
-                var tourDateText = $selectedTourDateOption.text();
-                if (tourDateText && tourDateText !== 'Select a Tour Date') {
-                    // Remove anything in parentheses (like "Sold Out", "Full", etc.)
-                    tourDateText = tourDateText.replace(/\s*\([^)]*\)\s*/g, '').trim();
-                    data.tour_date_text = tourDateText;
-                }
-            }
-            
             // Vehicle selects use CPT id as option value; POST needs vehicle*_id plus legacy display text (incl. price suffix).
             var $v1Opt = $tile.find('#vehicle1 option:selected');
             if ($v1Opt.length && $v1Opt.val()) {
@@ -3193,13 +3157,11 @@ jQuery(document).ready(function($) {
             '</div>';
         }
         
-        // Add transmission fields conditionally based on tour taxonomy or tour text
+        // Add transmission fields conditionally based on normalized tour metadata.
         var showTransmissionFields = false;
         
-        // Check if tour_type_code is "driving" or tour text starts with "Miata"
+        // Check if tour_type_code is "driving".
         if (booking.tour_type_code && booking.tour_type_code.toLowerCase() === 'driving') {
-            showTransmissionFields = true;
-        } else if (booking.tour_text && booking.tour_text.toLowerCase().startsWith('miata')) {
             showTransmissionFields = true;
         }
         
@@ -3279,7 +3241,6 @@ jQuery(document).ready(function($) {
             
             if (tourId) {
                 loadTourDates($tile, tourId);
-                loadPackages($tile, tourId); // Load packages immediately when tour is selected
             } else {
                 // Clear dependent dropdowns
                 $tile.find('#tour_date_id').html('<option value="">Select a Tour Date</option>');
@@ -3291,9 +3252,15 @@ jQuery(document).ready(function($) {
         $tile.find('#tour_date_id').on('change', function() {
             var tourId = $tile.find('#tour_id').val();
             var tourDateId = $(this).val();
-            
-            // No need to reload packages since they're already loaded when tour was selected
-            // Packages are tour-specific, not tour-date-specific
+            if (tourId) {
+                loadPackages($tile, tourId, tourDateId);
+                var pkgId = $tile.find('#tour_package_id').val();
+                if (pkgId) {
+                    var $opt = $tile.find('#tour_package_id option:selected');
+                    updateTourPrice($tile, $opt);
+                    updatePackageDetails($tile, $opt);
+                }
+            }
         });
         
         $tile.find('#tour_package_id').on('change', function() {
@@ -3336,10 +3303,9 @@ jQuery(document).ready(function($) {
         
         $tourSelect.html(options);
         
-        // If there's a pre-selected tour, load its dates and packages
+        // If there's a pre-selected tour, load dates first; loadPackages runs after dates load (needs date for availability).
         if (booking.tour_id) {
             loadTourDates($tile, booking.tour_id);
-            loadPackages($tile, booking.tour_id);
         }
     }
     
@@ -3376,6 +3342,10 @@ jQuery(document).ready(function($) {
                         options += '<option value="' + date.id + '"' + selected + '>' + date.name + '</option>';
                     });
                     $dateSelect.html(options);
+                    var tourIdNow = $tile.find('#tour_id').val();
+                    if (tourIdNow) {
+                        loadPackages($tile, tourIdNow, $dateSelect.val() || '');
+                    }
                 } else {
                     $dateSelect.html('<option value="">No dates available</option>');
                 }
@@ -3504,29 +3474,9 @@ jQuery(document).ready(function($) {
                         // Set selected values: prefer saved CPT id; fall back to legacy full text / prefix match.
                         function selectVehicleDropdown($select, booking, slot) {
                             var idKey = slot === 2 ? 'vehicle2_id' : 'vehicle1_id';
-                            var textKey = slot === 2 ? 'vehicle2' : 'vehicle1';
                             var savedId = booking[idKey];
-                            var savedText = booking[textKey] || '';
                             if (savedId) {
                                 $select.val(String(savedId));
-                                if ($select.val() === String(savedId)) {
-                                    return;
-                                }
-                            }
-                            if (savedText) {
-                                $select.val(savedText);
-                                if ($select.val() === savedText) {
-                                    return;
-                                }
-                                var prefix = savedText.toLowerCase().split('(')[0].trim();
-                                $select.find('option').each(function() {
-                                    var $o = $(this);
-                                    var lab = ($o.attr('data-text') || $o.text() || '').toLowerCase();
-                                    if ($o.val() && lab.indexOf(prefix) === 0) {
-                                        $select.val($o.val());
-                                        return false;
-                                    }
-                                });
                             }
                         }
                         selectVehicleDropdown($vehicle1Select, booking, 1);
@@ -3577,14 +3527,12 @@ jQuery(document).ready(function($) {
         
         // Don't modify visibility - respect the initial HTML state
         
-        // Recalculate tour price without vehicle costs
-        var currency = window.bstBookingData?.tour_currency || 'EUR';
-        if (currency === 'EUR') {
-            var baseTourPrice = parseFloat(window.bstBookingData?.tour_price) || 0;
-            if (baseTourPrice > 0) {
-                var $tourPriceField = $tile.find('#tour_price');
-                $tourPriceField.val('€ ' + baseTourPrice.toFixed(2));
-            }
+        // Recalculate tour price without vehicle costs (same display rules as updateTourPrice)
+        var baseTourPrice = parseFloat(window.bstBookingData?.tour_price) || 0;
+        if (baseTourPrice > 0) {
+            var currency = window.bstBookingData?.tour_currency || 'EUR';
+            var currencySymbol = currency === 'USD' ? '$' : '€';
+            $tile.find('#tour_price').val(currencySymbol + ' ' + baseTourPrice.toFixed(2));
         }
     }
     
@@ -3624,24 +3572,16 @@ jQuery(document).ready(function($) {
             // Get the booking currency or default to EUR
             var currencySymbol = currency === 'USD' ? '$' : '€';
             
-            // Store base tour price in global booking data
+            // Store base tour price in global booking data (package only; vehicle/extension layered in calculateCompleteTourPrice)
             if (window.bstBookingData) {
                 window.bstBookingData.tour_price = price.toFixed(2);
             }
             
-            // For EUR currency, add vehicle costs if vehicles are selected
-            if (currency === 'EUR') {
-                // Format and display the base price initially
-                $tourPriceField.val(currencySymbol + ' ' + price.toFixed(2));
-                
-                // Recalculate with vehicle costs if vehicles are available
-                setTimeout(function() {
-                    recalculateTourPriceWithVehicles($tile);
-                }, 100); // Small delay to ensure vehicle dropdowns are populated
-            } else {
-                // For non-EUR currencies, just show the base price
-                $tourPriceField.val(currencySymbol + ' ' + price.toFixed(2));
-            }
+            // Show base price, then add vehicle (and extension) costs for any currency
+            $tourPriceField.val(currencySymbol + ' ' + price.toFixed(2));
+            setTimeout(function() {
+                recalculateTourPriceWithVehicles($tile);
+            }, 100); // Small delay to ensure vehicle dropdowns are populated
         } else {
             $tourPriceField.val('TBD');
         }
@@ -3652,12 +3592,8 @@ jQuery(document).ready(function($) {
     // Central function to calculate complete tour price from scratch
     function calculateCompleteTourPrice($tile) {
         var currency = window.bstBookingData?.tour_currency || 'EUR';
+        var currencySymbol = currency === 'USD' ? '$' : '€';
         var $tourPriceField = $tile.find('#tour_price');
-        
-        // Only add vehicle costs for EUR currency
-        if (currency !== 'EUR') {
-            return;
-        }
         
         // Get base tour price from booking data (package price only)
         var baseTourPrice = parseFloat(window.bstBookingData?.tour_price) || 0;
@@ -3687,7 +3623,6 @@ jQuery(document).ready(function($) {
         }
         
         // Update display
-        var currencySymbol = '€';
         $tourPriceField.val(currencySymbol + ' ' + totalPrice.toFixed(2));
         
         // Update global booking data

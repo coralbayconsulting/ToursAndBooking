@@ -350,6 +350,9 @@ function get_vehicle_data() {
             $class = $vehicle['class'];
             $price = isset($vehicle['vehicle_price_addition']) ? floatval($vehicle['vehicle_price_addition']) : 0;
             
+            if (empty($vehicle['vehicles']) || !is_array($vehicle['vehicles'])) {
+                continue;
+            }
             foreach ($vehicle['vehicles'] as $vehicle_item) {
                 // Format the price addition with currency symbol
                 $formatted_price = '';
@@ -359,22 +362,33 @@ function get_vehicle_data() {
                     $sign = ($price > 0) ? '+' : '-';
                     $formatted_price = ' (' . $sign . $symbol . number_format($abs_price, 0) . ')';
                 }
-                // No indication when price is 0 - just show vehicle name
-                
-                $vehicle_base = isset($vehicle_item['vehicle']) ? (string) $vehicle_item['vehicle'] : '';
-                $vehicle_id = function_exists('bst_get_or_create_vehicle_id_by_name')
-                    ? bst_get_or_create_vehicle_id_by_name($vehicle_base)
-                    : 0;
+
+                $linked_id = isset($vehicle_item['vehicle_id']) ? $vehicle_item['vehicle_id'] : 0;
+                if (is_array($linked_id) && isset($linked_id['ID'])) {
+                    $linked_id = (int) $linked_id['ID'];
+                } else {
+                    $linked_id = (int) $linked_id;
+                }
+
+                // Booking lists use the Vehicle CPT title only (repeater text field is legacy / being removed).
+                if ($linked_id <= 0) {
+                    continue;
+                }
+                $vp = get_post($linked_id);
+                if (!$vp || 'vehicle' !== $vp->post_type) {
+                    continue;
+                }
+                $vehicle_id = $linked_id;
 
                 if ($vehicle_id > 0 && function_exists('bst_vehicle_is_available_for_booking')
                     && ! bst_vehicle_is_available_for_booking($vehicle_id)) {
                     continue;
                 }
 
-                $vehicle_name = $vehicle_base . $formatted_price;
-                
+                $vehicle_name = get_the_title($vehicle_id) . $formatted_price;
+
                 $data[] = array(
-                    'text' => $vehicle_name, // Clean vehicle name without price
+                    'text' => $vehicle_name,
                     'value' => $price, // Price for calculations
                     'price' => $price,
                     'data-id' => $class, // Vehicle class ID

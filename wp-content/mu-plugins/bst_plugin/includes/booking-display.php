@@ -532,9 +532,9 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
     
     // If tour fields are empty (GF10 uses different field numbers), get from booking
     if (empty($tour_text) && $booking) {
-        $tour_text = $booking->tour_text;
-        $tour_date_text = $booking->tour_date_text;
-        $tour_package_text = $booking->tour_package_text;
+        $tour_text = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
+        $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
+        $tour_package_text = function_exists('bst_live_package_name') ? bst_live_package_name($booking->tour_package_id ?? 0) : '';
         $extension_added = !empty($booking->tour_extension_added) ? $booking->tour_extension_added : '';
         $extension_text = !empty($booking->tour_extension_text) ? $booking->tour_extension_text : '';
         $extension_date_text = !empty($booking->tour_extension_date_text) ? $booking->tour_extension_date_text : '';
@@ -2101,9 +2101,10 @@ function bst_booking_details_shortcode($atts) {
                 <tr>
                     <td class="label-col">Tour:</td>
                     <td class="value-col"><?php 
-                        $tour_display = $booking->tour_text;
-                        if (!empty($booking->tour_date_text)) {
-                            $tour_display .= ' (' . $booking->tour_date_text . ')';
+                        $tour_display = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
+                        $live_tour_date = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
+                        if ($live_tour_date !== '') {
+                            $tour_display .= ' (' . $live_tour_date . ')';
                         }
                         echo esc_html($tour_display); 
                     ?></td>
@@ -2122,7 +2123,7 @@ function bst_booking_details_shortcode($atts) {
                 <?php endif; ?>
                 <tr>
                     <td class="label-col">Package:</td>
-                    <td class="value-col"><?php echo esc_html($booking->tour_package_text); ?></td>
+                    <td class="value-col"><?php echo esc_html(function_exists('bst_live_package_name') ? bst_live_package_name($booking->tour_package_id ?? 0) : ''); ?></td>
                 </tr>
                 <?php if (!empty($booking->participant_sex)): ?>
                 <tr>
@@ -2871,9 +2872,9 @@ function bst_booking_invoice_shortcode($atts) {
     $company_tax_vat = get_option('bst_company_tax_vat', '01290220076');
     
     // Get tour information - format like admin booking list
-    $tour_name_short = $booking->tour_text ?? '';
+    $tour_name_short = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
     $tour_year = $booking->tour_year ?? '';
-    $tour_dates = $booking->tour_date_text ?? '';
+    $tour_dates = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
     $tour_package_type = $booking->tour_package_type ?? '';
     $tour_name_display = $tour_name_short;
     if (!empty($tour_year)) {
@@ -4608,8 +4609,8 @@ function bst_replace_booking_merge_tags($text, $form, $entry, $url_encode, $esc_
                 $tour_date_text = rgar($original_entry, '141');
                 $extension_added = rgar($original_entry, '224');
             } else {
-                $tour_text = $booking->tour_text;
-                $tour_date_text = $booking->tour_date_text;
+                $tour_text = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
+                $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
                 $extension_added = '';
             }
         } else {
@@ -4654,8 +4655,8 @@ function bst_replace_booking_merge_tags($text, $form, $entry, $url_encode, $esc_
                 $tour_date_text = rgar($original_entry, '141');
                 $extension_added = rgar($original_entry, '224');
             } else {
-                $tour_text = $booking->tour_text;
-                $tour_date_text = $booking->tour_date_text;
+                $tour_text = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
+                $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
                 $extension_added = '';
             }
         } else {
@@ -4851,9 +4852,10 @@ function bst_generate_booking_status_html($booking, $encoded_id = '', $include_a
                 <tr>
                     <td>Tour:</td>
                     <td><?php 
-                        $tour_display = $booking->tour_text;
-                        if (!empty($booking->tour_date_text)) {
-                            $tour_display .= ' (' . $booking->tour_date_text . ')';
+                        $tour_display = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
+                        $live_tour_date = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
+                        if ($live_tour_date !== '') {
+                            $tour_display .= ' (' . $live_tour_date . ')';
                         }
                         echo esc_html($tour_display); 
                     ?></td>
@@ -4872,7 +4874,7 @@ function bst_generate_booking_status_html($booking, $encoded_id = '', $include_a
                 <?php endif; ?>
                 <tr>
                     <td>Package:</td>
-                    <td><?php echo esc_html($booking->tour_package_text); ?></td>
+                    <td><?php echo esc_html(function_exists('bst_live_package_name') ? bst_live_package_name($booking->tour_package_id ?? 0) : ''); ?></td>
                 </tr>
                 <?php if (!empty($booking->vehicle1)): ?>
                 <tr>
@@ -5230,9 +5232,9 @@ function bst_generate_entry_summary_table($entry_id, $include_admin_links = fals
         }
         
         if ($booking) {
-            $tour_text = $booking->tour_text;
-            $tour_date_text = $booking->tour_date_text;
-            $tour_package_text = $booking->tour_package_text;
+            $tour_text = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
+            $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
+            $tour_package_text = function_exists('bst_live_package_name') ? bst_live_package_name($booking->tour_package_id ?? 0) : '';
             $tour_currency = $booking->tour_currency;
         } else {
             $tour_text = '';

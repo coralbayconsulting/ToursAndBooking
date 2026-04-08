@@ -789,6 +789,394 @@ add_action('init', function () {
     ));
 }, 20);
 
+// Vehicle admin list helpers + columns, filter, and default title sort.
+function bst_vehicle_usage_normalize_name( $name ) {
+    $s = wp_strip_all_tags( (string) $name );
+    $s = strtolower( trim( preg_replace( '/\s+/u', ' ', $s ) ) );
+    return $s;
+}
+
+function bst_vehicle_usage_map() {
+    static $cache = null;
+    if ( null !== $cache ) {
+        return $cache;
+    }
+
+    $cache = array(
+        'by_id'   => array(),
+        'by_name' => array(),
+    );
+
+    if ( ! function_exists( 'get_field' ) ) {
+        return $cache;
+    }
+
+    $tour_ids = get_posts(
+        array(
+            'post_type'      => 'tour',
+            'post_status'    => function_exists( 'bst_post_statuses_for_admin_scan' ) ? bst_post_statuses_for_admin_scan( 'tour' ) : 'any',
+            'posts_per_page' => -1,
+            'fields'         => 'ids',
+        )
+    );
+
+    foreach ( $tour_ids as $tour_id ) {
+        $tour_id    = (int) $tour_id;
+        $tour_title = get_the_title( $tour_id );
+        $pricing    = get_field( 'vehicle_pricing', $tour_id, true );
+        if ( empty( $pricing ) || ! is_array( $pricing ) ) {
+            continue;
+        }
+
+        foreach ( $pricing as $row ) {
+            if ( empty( $row['vehicles'] ) || ! is_array( $row['vehicles'] ) ) {
+                continue;
+            }
+            foreach ( $row['vehicles'] as $vrow ) {
+                if ( ! is_array( $vrow ) ) {
+                    continue;
+                }
+
+                $linked_id = isset( $vrow['vehicle_id'] ) ? $vrow['vehicle_id'] : 0;
+                if ( is_array( $linked_id ) && isset( $linked_id['ID'] ) ) {
+                    $linked_id = (int) $linked_id['ID'];
+                } else {
+                    $linked_id = (int) $linked_id;
+                }
+
+                if ( $linked_id > 0 ) {
+                    if ( empty( $cache['by_id'][ $linked_id ] ) ) {
+                        $cache['by_id'][ $linked_id ] = array();
+                    }
+                    $cache['by_id'][ $linked_id ][ $tour_id ] = $tour_title;
+
+                    // For name-based "On Tours" matching, use the linked CPT title — not legacy repeater
+                    // text. That way F750GS shows every tour whose row points at it even if the old text
+                    // field still says "BMW 750GS", and those tours do not also attach to a typo CPT whose
+                    // title matches that legacy string.
+                    $vp = get_post( $linked_id );
+                    if ( $vp && 'vehicle' === $vp->post_type ) {
+                        $key = bst_vehicle_usage_normalize_name( get_the_title( $vp ) );
+                        if ( '' !== $key ) {
+                            if ( empty( $cache['by_name'][ $key ] ) ) {
+                                $cache['by_name'][ $key ] = array();
+                            }
+                            $cache['by_name'][ $key ][ $tour_id ] = $tour_title;
+                        }
+                    }
+                } else {
+                    $label = isset( $vrow['vehicle'] ) ? trim( (string) $vrow['vehicle'] ) : '';
+                    if ( '' !== $label && function_exists( 'bst_vehicle_base_name_from_text' ) ) {
+                        $label = bst_vehicle_base_name_from_text( $label );
+                    }
+                    $key = bst_vehicle_usage_normalize_name( $label );
+                    if ( '' !== $key ) {
+                        if ( empty( $cache['by_name'][ $key ] ) ) {
+                            $cache['by_name'][ $key ] = array();
+                        }
+                        $cache['by_name'][ $key ][ $tour_id ] = $tour_title;
+                    }
+                }
+            }
+        }
+    }
+
+    return $cache;
+}
+
+function bst_vehicle_usage_for_post( $vehicle_id, $vehicle_title ) {
+    $map   = bst_vehicle_usage_map();
+    $usage = array();
+
+    $vehicle_id = (int) $vehicle_id;
+    if ( $vehicle_id > 0 && ! empty( $map['by_id'][ $vehicle_id ] ) ) {
+        $usage = $map['by_id'][ $vehicle_id ];
+    }
+
+    $key = bst_vehicle_usage_normalize_name( $vehicle_title );
+    if ( '' !== $key && ! empty( $map['by_name'][ $key ] ) ) {
+        $usage = $usage + $map['by_name'][ $key ];
+    }
+
+    asort( $usage, SORT_NATURAL | SORT_FLAG_CASE );
+    return $usage;
+}
+
+/**
+ * Admin URL to edit a BST tour booking (custom admin page).
+ *
+ * @param int $booking_id Booking row id.
+ * @return string
+ */
+function bst_vehicle_admin_booking_edit_url( $booking_id ) {
+    return add_query_arg(
+        array(
+            'page'   => 'bst-tour-bookings',
+            'action' => 'edit',
+            'id'     => (int) $booking_id,
+        ),
+        admin_url( 'admin.php' )
+    );
+}
+
+/**
+ * Map vehicle post ID => sorted list of booking IDs referencing that vehicle (vehicle1_id or vehicle2_id).
+ * One query per request (cached) for the Vehicles list screen.
+ *
+ * @return array<int, int[]>
+ */
+function bst_vehicle_bookings_by_vehicle_map() {
+    static $cache = null;
+    if ( null !== $cache ) {
+        return $cache;
+    }
+
+    global $wpdb;
+    $cache = array();
+    $table = $wpdb->prefix . 'bst_tour_booking';
+    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is prefixed, not user input.
+    $rows = $wpdb->get_results( "SELECT id, vehicle1_id, vehicle2_id FROM {$table} WHERE vehicle1_id > 0 OR vehicle2_id > 0", ARRAY_A );
+    if ( empty( $rows ) || ! is_array( $rows ) ) {
+        return $cache;
+    }
+
+    foreach ( $rows as $row ) {
+        $bid = isset( $row['id'] ) ? (int) $row['id'] : 0;
+        if ( $bid <= 0 ) {
+            continue;
+        }
+        $v1 = isset( $row['vehicle1_id'] ) ? (int) $row['vehicle1_id'] : 0;
+        $v2 = isset( $row['vehicle2_id'] ) ? (int) $row['vehicle2_id'] : 0;
+        if ( $v1 > 0 ) {
+            if ( empty( $cache[ $v1 ] ) ) {
+                $cache[ $v1 ] = array();
+            }
+            $cache[ $v1 ][ $bid ] = $bid;
+        }
+        if ( $v2 > 0 && $v2 !== $v1 ) {
+            if ( empty( $cache[ $v2 ] ) ) {
+                $cache[ $v2 ] = array();
+            }
+            $cache[ $v2 ][ $bid ] = $bid;
+        }
+    }
+
+    foreach ( $cache as $vid => $ids ) {
+        $cache[ $vid ] = array_values( $ids );
+        sort( $cache[ $vid ], SORT_NUMERIC );
+    }
+
+    return $cache;
+}
+
+/**
+ * @param int $vehicle_id Vehicle CPT id.
+ * @return int[]
+ */
+function bst_vehicle_booking_ids_for_vehicle( $vehicle_id ) {
+    $vehicle_id = (int) $vehicle_id;
+    if ( $vehicle_id <= 0 ) {
+        return array();
+    }
+    $map = bst_vehicle_bookings_by_vehicle_map();
+    return isset( $map[ $vehicle_id ] ) ? $map[ $vehicle_id ] : array();
+}
+
+add_filter(
+    'manage_vehicle_posts_columns',
+    function ( $columns ) {
+        $ordered = array();
+        if ( isset( $columns['cb'] ) ) {
+            $ordered['cb'] = $columns['cb'];
+        }
+        $ordered['bst_vehicle_post_id'] = __( 'ID' );
+        if ( isset( $columns['title'] ) ) {
+            $ordered['title'] = $columns['title'];
+        }
+        $ordered['bst_vehicle_type']   = __( 'Type' );
+        $ordered['bst_vehicle_active'] = __( 'Available To Assign' );
+        $ordered['bst_vehicle_tours']    = __( 'On Tours' );
+        $ordered['bst_vehicle_bookings'] = __( 'Used on Booking' );
+        if ( isset( $columns['date'] ) ) {
+            $ordered['date'] = $columns['date'];
+        }
+        foreach ( $columns as $key => $label ) {
+            if ( isset( $ordered[ $key ] ) ) {
+                continue;
+            }
+            $ordered[ $key ] = $label;
+        }
+        return $ordered;
+    }
+);
+
+add_action(
+    'manage_vehicle_posts_custom_column',
+    function ( $column, $post_id ) {
+        if ( 'bst_vehicle_post_id' === $column ) {
+            echo (int) $post_id;
+            return;
+        }
+
+        if ( 'bst_vehicle_bookings' === $column ) {
+            $booking_ids = bst_vehicle_booking_ids_for_vehicle( (int) $post_id );
+            if ( empty( $booking_ids ) ) {
+                echo '&mdash;';
+                return;
+            }
+            $max_show = 8;
+            $slice    = array_slice( $booking_ids, 0, $max_show );
+            $parts    = array();
+            foreach ( $slice as $bid ) {
+                $bid  = (int) $bid;
+                $url  = bst_vehicle_admin_booking_edit_url( $bid );
+                $parts[] = '<a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">#' . esc_html( (string) $bid ) . '</a>';
+            }
+            $out = implode( ', ', $parts );
+            if ( count( $booking_ids ) > $max_show ) {
+                $out .= ' +' . ( count( $booking_ids ) - $max_show ) . ' ' . esc_html__( 'more' );
+            }
+            echo wp_kses(
+                $out,
+                array(
+                    'a' => array(
+                        'href'   => array(),
+                        'target' => array(),
+                        'rel'    => array(),
+                    ),
+                )
+            );
+            return;
+        }
+
+        if ( ! function_exists( 'get_field' ) ) {
+            echo '&mdash;';
+            return;
+        }
+
+        if ( 'bst_vehicle_type' === $column ) {
+            $t = get_field( 'vehicle_type', $post_id );
+            if ( 'motorcycle' === $t ) {
+                esc_html_e( 'Motorcycle' );
+            } elseif ( 'car' === $t ) {
+                esc_html_e( 'Car' );
+            } else {
+                echo '&mdash;';
+            }
+            return;
+        }
+
+        if ( 'bst_vehicle_active' === $column ) {
+            $active = get_field( 'vehicle_active', $post_id );
+            echo $active ? esc_html__( 'Yes' ) : esc_html__( 'No' );
+            return;
+        }
+
+        if ( 'bst_vehicle_tours' === $column ) {
+            $usage = bst_vehicle_usage_for_post( $post_id, get_the_title( $post_id ) );
+            if ( empty( $usage ) ) {
+                echo '&mdash;';
+                return;
+            }
+            $max_show = 4;
+            $count    = count( $usage );
+            $i        = 0;
+            $parts    = array();
+            foreach ( $usage as $tour_id => $tour_title ) {
+                if ( $i >= $max_show ) {
+                    break;
+                }
+                $tour_id = (int) $tour_id;
+                $url     = get_edit_post_link( $tour_id, 'raw' );
+                if ( $url ) {
+                    $parts[] = '<a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( $tour_title ) . '</a>';
+                } else {
+                    $parts[] = esc_html( $tour_title );
+                }
+                ++$i;
+            }
+            $out = implode( ', ', $parts );
+            if ( $count > $max_show ) {
+                $out .= ' +' . ( $count - $max_show ) . ' ' . esc_html__( 'more' );
+            }
+            echo wp_kses(
+                $out,
+                array(
+                    'a' => array(
+                        'href'   => array(),
+                        'target' => array(),
+                        'rel'    => array(),
+                    ),
+                )
+            );
+            return;
+        }
+
+        if ( 'bst_vehicle_type' !== $column && 'bst_vehicle_active' !== $column && 'bst_vehicle_tours' !== $column && 'bst_vehicle_bookings' !== $column ) {
+            return;
+        }
+    },
+    10,
+    2
+);
+
+add_action(
+    'pre_get_posts',
+    function ( $query ) {
+        if ( ! is_admin() || ! $query->is_main_query() ) {
+            return;
+        }
+        global $pagenow;
+        if ( 'edit.php' !== $pagenow || empty( $_GET['post_type'] ) || 'vehicle' !== $_GET['post_type'] ) {
+            return;
+        }
+
+        if ( empty( $_GET['orderby'] ) ) {
+            $query->set( 'orderby', 'title' );
+            $query->set( 'order', 'ASC' );
+        }
+
+        if ( empty( $_GET['bst_vehicle_type'] ) ) {
+            return;
+        }
+        $t = sanitize_text_field( wp_unslash( $_GET['bst_vehicle_type'] ) );
+        if ( ! in_array( $t, array( 'car', 'motorcycle' ), true ) ) {
+            return;
+        }
+        $meta_query   = $query->get( 'meta_query' );
+        $meta_query   = is_array( $meta_query ) ? $meta_query : array();
+        $meta_query[] = array(
+            'key'   => 'vehicle_type',
+            'value' => $t,
+        );
+        $query->set( 'meta_query', $meta_query );
+    }
+);
+
+add_action(
+    'restrict_manage_posts',
+    function () {
+        global $typenow;
+        if ( 'vehicle' !== $typenow ) {
+            return;
+        }
+        $sel = isset( $_GET['bst_vehicle_type'] ) ? sanitize_text_field( wp_unslash( $_GET['bst_vehicle_type'] ) ) : '';
+        echo '<select name="bst_vehicle_type" id="bst_vehicle_type">';
+        echo '<option value="">' . esc_html__( 'All types' ) . '</option>';
+        printf(
+            '<option value="car"%s>%s</option>',
+            selected( $sel, 'car', false ),
+            esc_html__( 'Car' )
+        );
+        printf(
+            '<option value="motorcycle"%s>%s</option>',
+            selected( $sel, 'motorcycle', false ),
+            esc_html__( 'Motorcycle' )
+        );
+        echo '</select>';
+    }
+);
+
 // Suppress Yoast SEO and Readability filters for tour, tour-date, tour-type, and source-code post types
 add_action('restrict_manage_posts', function() {
     global $typenow;

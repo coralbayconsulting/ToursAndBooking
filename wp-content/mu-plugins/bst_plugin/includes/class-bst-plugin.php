@@ -27,6 +27,9 @@ class BST_Plugin {
         require_once BST_PLUGIN_DIR . 'includes/database/tour-booking-actions.php'; 
         require_once BST_PLUGIN_DIR . 'includes/custom-post-types.php';
         require_once BST_PLUGIN_DIR . 'includes/vehicle-helpers.php';
+        require_once BST_PLUGIN_DIR . 'includes/vehicle-migration.php';
+        require_once BST_PLUGIN_DIR . 'includes/vehicle-tour-names-export.php';
+        require_once BST_PLUGIN_DIR . 'includes/vehicle-booking-remap.php';
         require_once BST_PLUGIN_DIR . 'includes/rating-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/dashboard-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/tour-type-helpers.php';
@@ -605,10 +608,10 @@ class BST_Plugin {
                 // For date sorting, use created_date field
                 $order_clause = " ORDER BY created_date $sort_order";
             } elseif ($sort_by === 'tour') {
-                // For tour sorting, use tour_text field
-                $order_clause = " ORDER BY tour_text $sort_order";
+                // For tour sorting, use live tour title from posts table.
+                $order_clause = " ORDER BY (SELECT post_title FROM {$wpdb->posts} p WHERE p.ID = {$tour_booking_table}.tour_id LIMIT 1) $sort_order";
             } else {
-                $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'tour_text', 'tour_date_text', 'booking_status', 'created_date');
+                $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'booking_status', 'created_date');
                 if (in_array($sort_by, $allowed_sort_columns)) {
                     $order_clause = " ORDER BY $sort_by $sort_order";
                 }
@@ -694,11 +697,11 @@ class BST_Plugin {
             // Sort by created date
             $order_sql = " ORDER BY created_date $sort_order";
         } elseif ($sort_by === 'tour') {
-            // Sort by tour text
-            $order_sql = " ORDER BY tour_text $sort_order";
+            // Sort by live tour title
+            $order_sql = " ORDER BY (SELECT post_title FROM {$wpdb->posts} p WHERE p.ID = {$tour_booking_table}.tour_id LIMIT 1) $sort_order";
         } else {
             // Fallback to safe column whitelist
-            $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'tour_text', 'tour_date_text', 'booking_status', 'created_date');
+            $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'booking_status', 'created_date');
             if (!in_array($sort_by, $allowed_sort_columns, true)) {
                 $sort_by = 'id';
             }
@@ -809,11 +812,11 @@ class BST_Plugin {
             // Sort by created date
             $order_sql = " ORDER BY created_date $sort_order";
         } elseif ($sort_by === 'tour') {
-            // Sort by tour text
-            $order_sql = " ORDER BY tour_text $sort_order";
+            // Sort by live tour title
+            $order_sql = " ORDER BY (SELECT post_title FROM {$wpdb->posts} p WHERE p.ID = {$tour_booking_table}.tour_id LIMIT 1) $sort_order";
         } else {
             // Fallback to safe column whitelist
-            $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'tour_text', 'tour_date_text', 'booking_status', 'created_date');
+            $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'booking_status', 'created_date');
             if (!in_array($sort_by, $allowed_sort_columns, true)) {
                 $sort_by = 'id';
             }
@@ -2257,13 +2260,7 @@ class BST_Plugin {
 
         $current_version = get_option('bst_plugin_version', '1.0.0');
         $force_rerun = isset($_POST['force']) && $_POST['force'] === 'true';
-        
-        // Check if cleanup already run for this version (unless force rerun)
-        $cleanup_status = get_option('bst_release_cleanup_status', array());
-        if (!$force_rerun && isset($cleanup_status[$current_version])) {
-            wp_send_json_error('Cleanup already completed for version ' . $current_version . '. Use force rerun to execute again.');
-            return;
-        }
+        $repair_repeater = isset($_POST['repair_repeater']) && $_POST['repair_repeater'] === 'true';
         
         // Get cleanup tasks for current version
         $cleanup_tasks = bst_get_release_cleanup_tasks();
@@ -2272,19 +2269,42 @@ class BST_Plugin {
             return;
         }
 
+        // Block repeat runs unless force or repair is checked (per-task completion, not legacy single timestamp).
+        if ( ! $force_rerun && ! $repair_repeater && function_exists( 'bst_release_cleanup_is_complete_for_tasks' )
+            && bst_release_cleanup_is_complete_for_tasks( $current_version, $cleanup_tasks ) ) {
+            wp_send_json_error(
+                'Cleanup already completed for version ' . $current_version . ' for all current tasks. Check "Force reset vehicle migration" or "Repair tour repeater links" to run again.'
+            );
+            return;
+        }
+
         global $wpdb;
         $results = array();
         
         try {
             // Execute cleanup tasks based on current version
-            $results = bst_execute_release_cleanup_tasks($cleanup_tasks, $current_version);
+            $results = bst_execute_release_cleanup_tasks($cleanup_tasks, $current_version, $force_rerun, $repair_repeater);
             
-            // Mark cleanup as completed (or update timestamp if force rerun)
-            $cleanup_status[$current_version] = time();
-            update_option('bst_release_cleanup_status', $cleanup_status);
+            // Mark each task complete under this version (preserves legacy metadata if present).
+            $cleanup_status = get_option( 'bst_release_cleanup_status', array() );
+            $bucket         = bst_release_cleanup_get_version_bucket( $current_version );
+            $ts             = time();
+            foreach ( $cleanup_tasks as $task ) {
+                if ( empty( $task['name'] ) ) {
+                    continue;
+                }
+                $bucket['tasks'][ bst_release_cleanup_task_slug( $task['name'] ) ] = $ts;
+            }
+            $cleanup_status[ $current_version ] = $bucket;
+            update_option( 'bst_release_cleanup_status', $cleanup_status );
             
             // Success message
             $rerun_note = $force_rerun ? ' (Force rerun executed)' : '';
+            if ( $repair_repeater && ! $force_rerun ) {
+                $rerun_note = ' (Tour repeater link repair executed)';
+            } elseif ( $repair_repeater && $force_rerun ) {
+                $rerun_note = ' (Force rerun + repeater repair executed)';
+            }
             $message = "Release data cleanup completed successfully for version {$current_version}{$rerun_note}! " . implode('. ', $results);
             wp_send_json_success($message);
             

@@ -38,7 +38,7 @@ function check_and_create_waiting_list_notifications($tour_date_id = null) {
     // Get waiting list bookings (optionally filtered by tour date)
     $waiting_list_bookings = $wpdb->get_results("
         SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, 
-               b.tour_text, b.tour_date_text, b.created_date, b.tour_package_text, 
+               b.created_date,
                b.tour_id, b.tour_date_id, b.package_vehicles, b.tour_package_id
         FROM $booking_table b
         WHERE b.booking_status = 'Waiting List' 

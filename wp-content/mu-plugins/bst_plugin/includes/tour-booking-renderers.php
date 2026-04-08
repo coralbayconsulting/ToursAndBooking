@@ -885,8 +885,8 @@ function bst_render_tour_package_tile_content($booking) {
             $tour_title = $p->post_title;
         }
     }
-    if ( '' === $tour_title ) {
-        $tour_title = (string) ( $booking->tour_text ?? '' );
+    if ( '' === $tour_title && function_exists( 'bst_live_tour_title' ) ) {
+        $tour_title = bst_live_tour_title( $booking->tour_id ?? 0 );
     }
     $html .= '<div class="view-item"><strong>Tour:</strong> ' . esc_html($tour_title);
     if (!empty($booking->tour_id)) {
@@ -894,25 +894,39 @@ function bst_render_tour_package_tile_content($booking) {
     }
     $html .= '</div>';
     
-    // Tour Date with ID link
-    $tour_date_display = '';
-    if (!empty($booking->tour_date_id)) {
-        $tour_date_id = explode('|', $booking->tour_date_id)[0];
-        $td = get_post( (int) $tour_date_id );
-        if ( $td && 'tour-date' === $td->post_type ) {
-            $tour_date_display = $td->post_title;
+    // Tour Date (label + human-readable text + edit link) — was broken: str_replace targeted HTML that did not exist.
+    $tour_date_id   = 0;
+    $tour_date_disp = '';
+    if ( ! empty( $booking->tour_date_id ) ) {
+        $raw_td = $booking->tour_date_id;
+        if ( is_string( $raw_td ) && strpos( $raw_td, '|' ) !== false ) {
+            $tour_date_id = (int) explode( '|', $raw_td, 2 )[0];
+        } else {
+            $tour_date_id = (int) $raw_td;
         }
-        $html .= ' (ID: <a href="' . esc_url(admin_url('post.php?post=' . $tour_date_id . '&action=edit')) . '" target="_blank" title="Edit tour date record">' . esc_html($tour_date_id) . '</a>)';
+        if ( $tour_date_id > 0 ) {
+            $td = get_post( $tour_date_id );
+            if ( $td && 'tour-date' === $td->post_type ) {
+                if ( preg_match( '/\((.*)\)\s*$/', $td->post_title, $m ) ) {
+                    $tour_date_disp = $m[1];
+                } else {
+                    $tour_date_disp = $td->post_title;
+                }
+            }
+        }
     }
-    if ( '' === $tour_date_display ) {
-        $tour_date_display = (string) ( $booking->tour_date_text ?? '' );
+    if ( '' === $tour_date_disp && function_exists( 'bst_live_tour_date_text' ) ) {
+        $tour_date_disp = bst_live_tour_date_text( $booking->tour_date_id ?? 0 );
     }
-    $html = str_replace('<div class="view-item"><strong>Tour Date:</strong> ', '<div class="view-item"><strong>Tour Date:</strong> ' . esc_html($tour_date_display), $html);
+    $html .= '<div class="view-item"><strong>Tour Date:</strong> ' . esc_html( $tour_date_disp );
+    if ( $tour_date_id > 0 ) {
+        $html .= ' (ID: <a href="' . esc_url( admin_url( 'post.php?post=' . $tour_date_id . '&action=edit' ) ) . '" target="_blank" title="Edit tour date record">' . esc_html( (string) $tour_date_id ) . '</a>)';
+    }
     $html .= '</div>';
     
     // Package with price removal
     $html .= '<div class="view-item"><strong>Package:</strong> ';
-    $package_text = $booking->tour_package_text ?? '';
+    $package_text = function_exists( 'bst_live_package_name' ) ? bst_live_package_name( $booking->tour_package_id ?? 0 ) : '';
     $package_display = preg_replace('/\s*-\s*[€$]\s?[0-9,]+\.?\d*/', '', $package_text);
     $html .= esc_html($package_display);
     if (!empty($booking->tour_package_id)) {
@@ -1300,7 +1314,9 @@ function bst_render_invoicing_tile_content($booking) {
     $html .= '<h4 class="tile-subsection-header">Tour Package</h4>';
     
     // Tour name and date with extension info
-    $tour_display = ($booking->tour_text ?? '') . ' (' . ($booking->tour_date_text ?? '') . ')';
+    $tour_title = function_exists( 'bst_live_tour_title' ) ? bst_live_tour_title( $booking->tour_id ?? 0 ) : '';
+    $tour_date_text = function_exists( 'bst_live_tour_date_text' ) ? bst_live_tour_date_text( $booking->tour_date_id ?? 0 ) : '';
+    $tour_display = $tour_title . ' (' . $tour_date_text . ')';
     if ($booking->tour_extension_added ?? false) {
         if (!empty($booking->tour_extension_text) && !empty($booking->tour_extension_date_text)) {
             // Remove price from extension text (anything in parentheses with € or $)

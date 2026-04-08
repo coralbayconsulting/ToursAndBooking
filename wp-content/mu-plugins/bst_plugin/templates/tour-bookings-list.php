@@ -274,10 +274,10 @@ $sort_order = isset($_GET['sort_order']) ? $_GET['sort_order'] : 'desc';
 $all_tours_list = array();
 $tour_dates_data = array();
 
-// Get all published tours
+// Get all tours (all statuses used in admin scan, not publish-only)
 $all_tours = get_posts(array(
     'post_type' => 'tour',
-    'post_status' => 'publish',
+    'post_status' => function_exists( 'bst_post_statuses_for_admin_scan' ) ? bst_post_statuses_for_admin_scan( 'tour' ) : 'any',
     'numberposts' => -1,
     'orderby' => 'title',
     'order' => 'ASC'
@@ -289,7 +289,7 @@ foreach ($all_tours as $tour) {
     // Get all tour dates for this tour
     $tour_dates = get_posts(array(
         'post_type' => 'tour-date',
-        'post_status' => 'publish',
+        'post_status' => function_exists( 'bst_post_statuses_for_admin_scan' ) ? bst_post_statuses_for_admin_scan( 'tour-date' ) : 'any',
         'numberposts' => -1,
         'meta_query' => array(
             array(
@@ -990,6 +990,20 @@ if ($selected_tour > 0 && $selected_date > 0 && !empty($filtered_bookings)) {
 </div>
 
 <?php if ($filtered_bookings) : ?>
+    <?php
+    // Resolve live package name from global settings by package ID (no tour_package_text fallback).
+    $bst_live_package_label = static function ( $package_id ) {
+        static $cache = array();
+        $package_id = (int) $package_id;
+        if ( $package_id <= 0 ) {
+            return '';
+        }
+        if ( ! isset( $cache[ $package_id ] ) ) {
+            $cache[ $package_id ] = (string) get_option( 'bst_package_' . $package_id . '_name', '' );
+        }
+        return $cache[ $package_id ];
+    };
+    ?>
     <div class="wp-list-table-container bookings-table-wrapper">
         <table class="wp-list-table widefat fixed striped" style="table-layout: auto; width: 100%;">
         <thead>
@@ -1142,9 +1156,15 @@ if ($selected_tour > 0 && $selected_date > 0 && !empty($filtered_bookings)) {
                     <!-- Booked Tour (composite field) -->
                     <td class="tour-column">
                         <?php
-                        $tour_label = $booking->tour_text;
+                        $tour_label = 'Unknown Tour';
+                        if ( ! empty( $booking->tour_id ) ) {
+                            $live_tour = get_post( (int) $booking->tour_id );
+                            if ( $live_tour && 'tour' === $live_tour->post_type ) {
+                                $tour_label = $live_tour->post_title;
+                            }
+                        }
                         $tour_date_id = $booking->tour_date_id;
-                        $tour_date_text = $booking->tour_date_text;
+                        $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
                         $paren = '';
                         if (!empty($tour_date_id)) {
                             $parts = explode('|', $tour_date_id);
@@ -1170,7 +1190,14 @@ if ($selected_tour > 0 && $selected_date > 0 && !empty($filtered_bookings)) {
                             $paren = $date_label;
                         }
                         
-                        $tour_display = $tour_label . ($paren ? ' (' . $paren . ')' : '') . ' - ' . $booking->tour_package_text;
+                        $package_label = $bst_live_package_label( $booking->tour_package_id ?? 0 );
+                        if ( '' === $package_label && ! empty( $booking->tour_package_id ) ) {
+                            $package_label = 'Unknown Package';
+                        }
+                        $tour_display = $tour_label . ($paren ? ' (' . $paren . ')' : '');
+                        if ( '' !== $package_label ) {
+                            $tour_display .= ' - ' . $package_label;
+                        }
                         if (!empty($booking->tour_extension_added) && $booking->tour_extension_added == 1) {
                             $tour_display .= ' (w/extension)';
                         }
@@ -1300,9 +1327,15 @@ if ($selected_tour > 0 && $selected_date > 0 && !empty($filtered_bookings)) {
                 <div class="mobile-tour-info">
                     <?php 
                     // Use same logic as desktop version
-                    $tour_label = $booking->tour_text ?? 'Unknown Tour';
+                    $tour_label = 'Unknown Tour';
+                    if (!empty($booking->tour_id)) {
+                        $live_tour = get_post((int) $booking->tour_id);
+                        if ($live_tour && $live_tour->post_type === 'tour') {
+                            $tour_label = $live_tour->post_title;
+                        }
+                    }
                     $tour_date_id = $booking->tour_date_id;
-                    $tour_date_text = $booking->tour_date_text;
+                    $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
                     $paren = '';
                     
                     if (!empty($tour_date_id)) {
@@ -1346,7 +1379,10 @@ if ($selected_tour > 0 && $selected_date > 0 && !empty($filtered_bookings)) {
                     }
                     
                     // Display tour info
-                    $package_text = $booking->tour_package_text ?? '';
+                    $package_text = $bst_live_package_label( $booking->tour_package_id ?? 0 );
+                    if ( '' === $package_text && ! empty( $booking->tour_package_id ) ) {
+                        $package_text = 'Unknown Package';
+                    }
                     $tour_display = $tour_label . ($paren ? ' (' . $paren . ')' : '');
                     if ($package_text) {
                         $tour_display .= ' - ' . $package_text;

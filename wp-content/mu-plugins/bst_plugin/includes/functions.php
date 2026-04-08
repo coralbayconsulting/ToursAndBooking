@@ -144,6 +144,59 @@ function format_currency($price, $currency = 'EUR') {
     return $formatter->formatCurrency($price, $currency);
 }
 
+function bst_live_tour_title( $tour_id ) {
+    $tour_id = (int) $tour_id;
+    if ( $tour_id <= 0 ) {
+        return '';
+    }
+    $p = get_post( $tour_id );
+    return ( $p && 'tour' === $p->post_type ) ? (string) $p->post_title : '';
+}
+
+function bst_live_tour_date_text( $tour_date_id ) {
+    $tour_date_id = (int) $tour_date_id;
+    if ( $tour_date_id <= 0 ) {
+        return '';
+    }
+    $p = get_post( $tour_date_id );
+    if ( ! $p || 'tour-date' !== $p->post_type ) {
+        return '';
+    }
+    $start_date = get_post_meta( $tour_date_id, 'start_date', true );
+    $end_date   = get_post_meta( $tour_date_id, 'end_date', true );
+    if ( $start_date && $end_date ) {
+        return ( date( 'M', strtotime( $start_date ) ) === date( 'M', strtotime( $end_date ) ) )
+            ? date( 'j', strtotime( $start_date ) ) . '-' . date( 'j M Y', strtotime( $end_date ) )
+            : date( 'j M', strtotime( $start_date ) ) . ' - ' . date( 'j M Y', strtotime( $end_date ) );
+    }
+    if ( $start_date ) {
+        return date( 'j M Y', strtotime( $start_date ) );
+    }
+    return (string) $p->post_title;
+}
+
+function bst_live_package_name( $package_id ) {
+    $package_id = (int) $package_id;
+    if ( $package_id <= 0 ) {
+        return '';
+    }
+    return (string) get_option( 'bst_package_' . $package_id . '_name', '' );
+}
+
+function bst_live_booking_tour_display( $booking ) {
+    $tour_title = bst_live_tour_title( $booking->tour_id ?? 0 );
+    $tour_date  = bst_live_tour_date_text( $booking->tour_date_id ?? 0 );
+    $package    = bst_live_package_name( $booking->tour_package_id ?? 0 );
+    $out = $tour_title;
+    if ( '' !== $tour_date ) {
+        $out .= ' (' . $tour_date . ')';
+    }
+    if ( '' !== $package ) {
+        $out .= ' - ' . $package;
+    }
+    return $out;
+}
+
 // Enqueue custom admin CSS for specific admin pages
 function bst_enqueue_custom_admin_css($hook) {
     global $typenow;
@@ -379,10 +432,12 @@ function bst_export_invoices_handler() {
         $name = trim(($booking->guest1_first_name ?? '') . ' ' . ($booking->guest1_last_name ?? ''));
 
         // Tour display
-        $tour_display = $booking->tour_text ?? '';
+        $tour_display = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
         if (!empty($booking->tour_year))         $tour_display .= ' (' . $booking->tour_year . ')';
-        if (!empty($booking->tour_date_text))    $tour_display .= ' (' . $booking->tour_date_text . ')';
-        if (!empty($booking->tour_package_type)) $tour_display .= ' – ' . $booking->tour_package_type;
+        $live_tour_date = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
+        $live_package   = function_exists('bst_live_package_name') ? bst_live_package_name($booking->tour_package_id ?? 0) : '';
+        if (!empty($live_tour_date))             $tour_display .= ' (' . $live_tour_date . ')';
+        if (!empty($live_package))               $tour_display .= ' – ' . $live_package;
 
         // Amounts
         $tour_packages  = floatval($booking->booking_tour_package_amount  ?? 0);

@@ -184,10 +184,10 @@ function bst_invoices_sort_link( $col_key, $current_sort_by, $current_sort_order
             );
 
             // --- Tour (same logic as invoice) ---
-            $tour_display = $booking->tour_text ?? '';
+            $tour_display = function_exists( 'bst_live_tour_title' ) ? bst_live_tour_title( $booking->tour_id ?? 0 ) : '';
             $tour_year    = $booking->tour_year ?? '';
-            $tour_dates   = $booking->tour_date_text ?? '';
-            $tour_pkg     = $booking->tour_package_type ?? '';
+            $tour_dates   = function_exists( 'bst_live_tour_date_text' ) ? bst_live_tour_date_text( $booking->tour_date_id ?? 0 ) : '';
+            $tour_pkg     = function_exists( 'bst_live_package_name' ) ? bst_live_package_name( $booking->tour_package_id ?? 0 ) : '';
             if ( ! empty( $tour_year ) ) {
                 $tour_display .= ' (' . $tour_year . ')';
             }

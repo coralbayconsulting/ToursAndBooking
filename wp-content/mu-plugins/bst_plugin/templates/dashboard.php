@@ -16,10 +16,63 @@ $current_user = wp_get_current_user();
 // Get booking data for dashboard tiles
 $booking_table = $wpdb->prefix . 'bst_tour_booking';
 
+function bst_dashboard_live_tour_title( $tour_id ) {
+    $tour_id = (int) $tour_id;
+    if ( $tour_id <= 0 ) {
+        return '';
+    }
+    $p = get_post( $tour_id );
+    return ( $p && 'tour' === $p->post_type ) ? (string) $p->post_title : '';
+}
+
+function bst_dashboard_live_tour_date_text( $tour_date_id ) {
+    $tour_date_id = (int) $tour_date_id;
+    if ( $tour_date_id <= 0 ) {
+        return '';
+    }
+    $p = get_post( $tour_date_id );
+    if ( ! $p || 'tour-date' !== $p->post_type ) {
+        return '';
+    }
+    $start_date = get_post_meta( $tour_date_id, 'start_date', true );
+    $end_date   = get_post_meta( $tour_date_id, 'end_date', true );
+    if ( $start_date && $end_date ) {
+        return ( date( 'M', strtotime( $start_date ) ) === date( 'M', strtotime( $end_date ) ) )
+            ? date( 'j', strtotime( $start_date ) ) . '-' . date( 'j M Y', strtotime( $end_date ) )
+            : date( 'j M', strtotime( $start_date ) ) . ' - ' . date( 'j M Y', strtotime( $end_date ) );
+    }
+    if ( $start_date ) {
+        return date( 'j M Y', strtotime( $start_date ) );
+    }
+    return (string) $p->post_title;
+}
+
+function bst_dashboard_live_package_name( $package_id ) {
+    $package_id = (int) $package_id;
+    if ( $package_id <= 0 ) {
+        return '';
+    }
+    return (string) get_option( 'bst_package_' . $package_id . '_name', '' );
+}
+
+function bst_dashboard_live_tour_display( $booking ) {
+    $tour_title = bst_dashboard_live_tour_title( $booking->tour_id ?? 0 );
+    $tour_date  = bst_dashboard_live_tour_date_text( $booking->tour_date_id ?? 0 );
+    $package    = bst_dashboard_live_package_name( $booking->tour_package_id ?? 0 );
+    $out = $tour_title;
+    if ( '' !== $tour_date ) {
+        $out .= ' (' . $tour_date . ')';
+    }
+    if ( '' !== $package ) {
+        $out .= ' - ' . $package;
+    }
+    return $out;
+}
+
 // Get waiting list bookings with availability check
 $waiting_list_bookings = $wpdb->get_results("
-    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, b.tour_text, b.tour_date_text, b.created_date, 
-           b.tour_package_text, b.tour_id, b.tour_date_id, b.package_vehicles, b.tour_package_id
+    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, b.created_date,
+           b.tour_id, b.tour_date_id, b.package_vehicles, b.tour_package_id
     FROM $booking_table b
     WHERE b.booking_status = 'Waiting List' 
     ORDER BY b.id ASC 
@@ -73,7 +126,7 @@ $overbooked_tour_dates = get_overbooked_tour_dates_for_dashboard();
 
 // Get reserved bookings
 $reserved_bookings = $wpdb->get_results("
-    SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, tour_text, tour_date_text, created_date, tour_package_text 
+    SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, created_date, tour_id, tour_date_id, tour_package_id
     FROM $booking_table 
     WHERE booking_status = 'Reserved' 
     ORDER BY created_date DESC 
@@ -82,7 +135,7 @@ $reserved_bookings = $wpdb->get_results("
 
 // Get pending bookings
 $pending_bookings = $wpdb->get_results("
-    SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, tour_text, tour_date_text, created_date 
+    SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, created_date, tour_id, tour_date_id
     FROM $booking_table 
     WHERE booking_status = 'Pending' 
     ORDER BY created_date DESC 
@@ -91,7 +144,7 @@ $pending_bookings = $wpdb->get_results("
 
 // Get processing bookings (SEPA, etc. awaiting payment confirmation)
 $processing_bookings = $wpdb->get_results("
-    SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, tour_text, tour_date_text, created_date, deposit_payment_method, tour_package_text, booking_entry_id 
+    SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, created_date, deposit_payment_method, booking_entry_id, tour_id, tour_date_id, tour_package_id
     FROM $booking_table 
     WHERE booking_status = 'Processing' 
     ORDER BY created_date DESC 
@@ -100,7 +153,7 @@ $processing_bookings = $wpdb->get_results("
 
 // Get payment failed bookings
 $payment_failed_bookings = $wpdb->get_results("
-    SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, tour_text, tour_date_text, created_date, deposit_payment_method, tour_package_text, booking_entry_id 
+    SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, created_date, deposit_payment_method, booking_entry_id, tour_id, tour_date_id, tour_package_id
     FROM $booking_table 
     WHERE booking_status = 'Payment Failed' 
     ORDER BY created_date DESC 
@@ -111,12 +164,12 @@ $payment_failed_bookings = $wpdb->get_results("
 // - booking_status = 'Pending' (always means a bank wire is awaited), OR
 // - any bank wire payment method set but amount not yet received
 $bank_wire_pending = $wpdb->get_results("
-    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, b.tour_text, b.tour_date_text, b.created_date,
+    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, b.created_date,
            b.deposit_payment_method, b.deposit_payment_amount, b.deposit_payment_status,
            b.balance_payment_method, b.balance_payment_amount, b.balance_payment_status,
            b.additional_payment_method, b.additional_payment_amount, b.additional_payment_status,
-           b.booking_status, b.finalization_entry_id, b.tour_package_text, b.tour_price, b.net_tour_price, b.balance_due, b.tour_currency,
-           b.tour_id, b.package_people, b.booking_entry_id,
+           b.booking_status, b.finalization_entry_id, b.tour_price, b.net_tour_price, b.balance_due, b.tour_currency,
+           b.tour_id, b.tour_date_id, b.tour_package_id, b.package_people, b.booking_entry_id,
            gf9.date_created as booking_date, gf10.date_created as finalization_date
     FROM $booking_table b
     LEFT JOIN {$wpdb->prefix}gf_entry gf9 ON b.booking_entry_id = gf9.id
@@ -136,7 +189,7 @@ $bank_wire_pending = $wpdb->get_results("
 
 // Get reservations not booked
 $reservations_not_booked = $wpdb->get_results("
-    SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, tour_text, tour_date_text, created_date, tour_package_text
+    SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, created_date, tour_id, tour_date_id, tour_package_id
     FROM $booking_table 
     WHERE booking_status = 'Reserved'
     ORDER BY created_date ASC 
@@ -145,8 +198,8 @@ $reservations_not_booked = $wpdb->get_results("
 
 // Get most recent web bookings (last 5, pending and booked only)
 $recent_bookings = $wpdb->get_results("
-    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, b.tour_text, b.tour_date_text, 
-           b.created_date, b.booking_status, b.tour_package_text
+    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name,
+           b.created_date, b.booking_status, b.tour_id, b.tour_date_id, b.tour_package_id
     FROM $booking_table b
     WHERE b.booking_status IN ('Pending', 'Booked') 
       AND b.booking_method = 'Web'
@@ -156,8 +209,8 @@ $recent_bookings = $wpdb->get_results("
 
 // Get bookings awaiting transfer (transfer status)
 $transfer_bookings = $wpdb->get_results("
-    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, b.tour_text, b.tour_date_text, 
-           b.created_date, b.booking_status, b.tour_package_text
+    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name,
+           b.created_date, b.booking_status, b.tour_id, b.tour_date_id, b.tour_package_id
     FROM $booking_table b
     WHERE b.booking_status = 'transfer'
     ORDER BY b.created_date ASC
@@ -165,8 +218,8 @@ $transfer_bookings = $wpdb->get_results("
 
 // Get refunds due (negative balance OR pending refund payment)
 $refunds_due = $wpdb->get_results("
-    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, b.tour_text, b.tour_date_text, 
-           b.created_date, b.booking_status, b.tour_package_text, b.balance_due, b.tour_currency,
+    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name,
+           b.created_date, b.booking_status, b.balance_due, b.tour_currency, b.tour_id, b.tour_date_id, b.tour_package_id,
            b.refund_payment_status, b.refund_payment_amount
     FROM $booking_table b
     WHERE b.balance_due < 0
@@ -182,8 +235,8 @@ $finalization_needed = $wpdb->get_results($wpdb->prepare("
            b.guest1_email, b.guest2_email,
            CONCAT(b.guest1_first_name, ' ', b.guest1_last_name) as guest1_name,
            CONCAT(b.guest2_first_name, ' ', b.guest2_last_name) as guest2_name,
-           b.tour_text, b.tour_date_text,
-           td_meta.meta_value as start_date, b.finalization_email_sent, b.created_date, b.tour_package_text, b.tour_date_id, 
+           td_meta.meta_value as start_date, b.finalization_email_sent, b.created_date, b.tour_date_id,
+           b.tour_id, b.tour_package_id,
            b.balance_due, b.tour_currency, b.finalization_entry_id, b.booking_entry_id,
            el.last_finalization_sent
     FROM $booking_table b
@@ -530,7 +583,7 @@ if (!empty($waiting_list_bookings)) {
                                     [Booking <?php echo $booking->id; ?>]
                                 </a>
                             </div>
-                            <div class="dashboard-booking-tour"><?php $tour_display = $booking->tour_text; if ($booking->tour_date_text) { $tour_display .= ' (' . $booking->tour_date_text . ')'; } if (!empty($booking->tour_package_text)) { $tour_display .= ' - ' . $booking->tour_package_text; } echo esc_html($tour_display); ?></div>
+                            <div class="dashboard-booking-tour"><?php echo esc_html( bst_dashboard_live_tour_display( $booking ) ); ?></div>
                             <div class="dashboard-booking-date" style="color: #dc3232; font-weight: 600;">
                                 <?php
                                 // Get the correct currency symbol based on booking currency
@@ -590,7 +643,7 @@ if (!empty($waiting_list_bookings)) {
                                 </span>
                                 <?php endif; ?>
                             </div>
-                            <div class="dashboard-booking-tour"><?php $tour_display = $booking->tour_text; if ($booking->tour_date_text) { $tour_display .= ' (' . $booking->tour_date_text . ')'; } if (!empty($booking->tour_package_text)) { $tour_display .= ' - ' . $booking->tour_package_text; } echo esc_html($tour_display); ?></div>
+                            <div class="dashboard-booking-tour"><?php echo esc_html( bst_dashboard_live_tour_display( $booking ) ); ?></div>
                             <div class="dashboard-booking-date" <?php echo $can_convert ? 'style="color: #00a32a; font-weight: 600;"' : ''; ?>>
                                 <?php if ($can_convert): ?>
                                     ✓ Space available! Ready to convert
@@ -630,18 +683,7 @@ if (!empty($waiting_list_bookings)) {
                                     [Booking <?php echo $booking->id; ?>]
                                 </a>
                             </div>
-                            <div class="dashboard-booking-tour">
-                                <?php 
-                                $tour_display = $booking->tour_text;
-                                if ($booking->tour_date_text) {
-                                    $tour_display .= ' (' . $booking->tour_date_text . ')';
-                                }
-                                if (!empty($booking->tour_package_text)) {
-                                    $tour_display .= ' - ' . $booking->tour_package_text;
-                                }
-                                echo esc_html($tour_display);
-                                ?>
-                            </div>
+                            <div class="dashboard-booking-tour"><?php echo esc_html( bst_dashboard_live_tour_display( $booking ) ); ?></div>
                             <div class="dashboard-booking-date" style="color: #f0ad4e; font-weight: 600;">
                                 <?php 
                                 $payment_method_display = !empty($booking->deposit_payment_method) ? $booking->deposit_payment_method : 'Card';
@@ -690,18 +732,7 @@ if (!empty($waiting_list_bookings)) {
                                     [Booking <?php echo $booking->id; ?>]
                                 </a>
                             </div>
-                            <div class="dashboard-booking-tour">
-                                <?php 
-                                $tour_display = $booking->tour_text;
-                                if ($booking->tour_date_text) {
-                                    $tour_display .= ' (' . $booking->tour_date_text . ')';
-                                }
-                                if (!empty($booking->tour_package_text)) {
-                                    $tour_display .= ' - ' . $booking->tour_package_text;
-                                }
-                                echo esc_html($tour_display);
-                                ?>
-                            </div>
+                            <div class="dashboard-booking-tour"><?php echo esc_html( bst_dashboard_live_tour_display( $booking ) ); ?></div>
                             <div class="dashboard-booking-date" style="color: #dc3232; font-weight: 600;">
                                 <?php 
                                 $payment_method_display = !empty($booking->deposit_payment_method) ? $booking->deposit_payment_method : 'Card';
@@ -826,18 +857,7 @@ if (!empty($waiting_list_bookings)) {
                                     [Booking <?php echo $booking->id; ?>]
                                 </a>
                             </div>
-                            <div class="dashboard-booking-tour">
-                                <?php 
-                                $tour_display = $booking->tour_text;
-                                if ($booking->tour_date_text) {
-                                    $tour_display .= ' (' . $booking->tour_date_text . ')';
-                                }
-                                if (!empty($booking->tour_package_text)) {
-                                    $tour_display .= ' - ' . $booking->tour_package_text;
-                                }
-                                echo esc_html($tour_display);
-                                ?>
-                            </div>
+                            <div class="dashboard-booking-tour"><?php echo esc_html( bst_dashboard_live_tour_display( $booking ) ); ?></div>
                             <div class="dashboard-booking-date" style="color: #dc3232; font-weight: 600;">
                                 <?php if (!empty($missing_payments)): ?>
                                     <?php foreach ($missing_payments as $pmt): ?>
@@ -893,7 +913,7 @@ if (!empty($waiting_list_bookings)) {
                                     [Booking <?php echo $booking->id; ?>]
                                 </a>
                             </div>
-                            <div class="dashboard-booking-tour"><?php $tour_display = $booking->tour_text; if ($booking->tour_date_text) { $tour_display .= ' (' . $booking->tour_date_text . ')'; } if (!empty($booking->tour_package_text)) { $tour_display .= ' - ' . $booking->tour_package_text; } echo esc_html($tour_display); ?></div>
+                            <div class="dashboard-booking-tour"><?php echo esc_html( bst_dashboard_live_tour_display( $booking ) ); ?></div>
                             <div class="dashboard-booking-date" style="color: #ff6900; font-weight: 600;">
                                 Reserved <?php echo $days_reserved; ?> days ago
                             </div>
@@ -924,11 +944,13 @@ if (!empty($waiting_list_bookings)) {
                 foreach ($finalization_needed as $booking) {
                     // Use tour_date_id as the key to prevent duplicates
                     $key = $booking->tour_date_id;
-                    // Use tour_date_text for proper date range format (e.g., "27 Jun - 7 Jul 2027")
-                    $tour_date = !empty($booking->tour_date_text) ? $booking->tour_date_text : 'TBD';
+                    $tour_date = bst_dashboard_live_tour_date_text( $booking->tour_date_id );
+                    if ( empty( $tour_date ) ) {
+                        $tour_date = 'TBD';
+                    }
                     if (!isset($grouped_bookings[$key])) {
                         $grouped_bookings[$key] = [
-                            'tour_text' => $booking->tour_text,
+                            'tour_text' => bst_dashboard_live_tour_title( $booking->tour_id ),
                             'tour_date' => $tour_date,
                             'start_date' => $booking->start_date,
                             'tour_date_id' => $booking->tour_date_id,
@@ -1129,7 +1151,7 @@ if (!empty($waiting_list_bookings)) {
                                     [Booking <?php echo $booking->id; ?>]
                                 </a>
                             </div>
-                            <div class="dashboard-booking-tour"><?php $tour_display = $booking->tour_text; if ($booking->tour_date_text) { $tour_display .= ' (' . $booking->tour_date_text . ')'; } if (!empty($booking->tour_package_text)) { $tour_display .= ' - ' . $booking->tour_package_text; } echo esc_html($tour_display); ?></div>
+                            <div class="dashboard-booking-tour"><?php echo esc_html( bst_dashboard_live_tour_display( $booking ) ); ?></div>
                             <div class="dashboard-booking-date">
                                 <?php echo esc_html(date('M j, Y', strtotime($booking->created_date))); ?>
                             </div>
@@ -1165,7 +1187,7 @@ if (!empty($waiting_list_bookings)) {
                                     [Booking <?php echo $booking->id; ?>]
                                 </a>
                             </div>
-                            <div class="dashboard-booking-tour"><?php $tour_display = $booking->tour_text; if ($booking->tour_date_text) { $tour_display .= ' (' . $booking->tour_date_text . ')'; } if (!empty($booking->tour_package_text)) { $tour_display .= ' - ' . $booking->tour_package_text; } echo esc_html($tour_display); ?></div>
+                            <div class="dashboard-booking-tour"><?php echo esc_html( bst_dashboard_live_tour_display( $booking ) ); ?></div>
                             <div class="dashboard-booking-date">
                                 <strong>Status:</strong> <?php echo esc_html($booking->booking_status); ?> - <?php echo esc_html(date('M j, Y', strtotime($booking->created_date))); ?>
                             </div>

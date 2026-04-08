@@ -3,12 +3,12 @@
     "title": "Vehicle",
     "fields": [
         {
-            "key": "field_69c5d50e21bd0",
-            "label": "Vehicle Code",
-            "name": "vehicle_code",
+            "key": "field_69c5d50e21bd7",
+            "label": "Vehicle Type",
+            "name": "vehicle_type",
             "aria-label": "",
-            "type": "text",
-            "instructions": "Short internal reference (optional). The post title remains the canonical name used for bookings and matching.",
+            "type": "select",
+            "instructions": "Set automatically from tour Type Code when vehicles are created from a tour (Driving → car, Motorcycle → motorcycle). You may override manually.",
             "required": 0,
             "conditional_logic": 0,
             "wrapper": {
@@ -16,12 +16,20 @@
                 "class": "",
                 "id": ""
             },
-            "default_value": "",
-            "maxlength": "",
+            "choices": {
+                "car": "Car",
+                "motorcycle": "Motorcycle"
+            },
+            "default_value": false,
+            "return_format": "value",
+            "multiple": 0,
+            "allow_null": 1,
             "allow_in_bindings": 0,
+            "ui": 0,
+            "ajax": 0,
             "placeholder": "",
-            "prepend": "",
-            "append": ""
+            "create_options": 0,
+            "save_options": 0
         },
         {
             "key": "field_69c5d50e21bd1",
@@ -185,5 +193,5 @@
     "description": "",
     "show_in_rest": 0,
     "display_title": "",
-    "modified": 1999999999
+    "modified": 2000000001
 }

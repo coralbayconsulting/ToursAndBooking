@@ -7,6 +7,15 @@
 // Include SimpleXLSXGen library
 require_once BST_PLUGIN_DIR . 'includes/vendor/SimpleXLSXGen.php';
 
+function bst_xlsx_live_tour_title( $tour_id ) {
+    $tour_id = (int) $tour_id;
+    if ( $tour_id <= 0 ) {
+        return '';
+    }
+    $p = get_post( $tour_id );
+    return ( $p && 'tour' === $p->post_type ) ? (string) $p->post_title : '';
+}
+
 /**
  * Enhanced commission export with proper formatting
  */
@@ -203,7 +212,7 @@ function bst_export_commission_bookings_xlsx_handler() {
     foreach ($grouped_bookings as $group_key => $group_data) {
         // Sort bookings within group
         usort($group_data['bookings'], function($a, $b) {
-            $tour_compare = strcasecmp($a->tour_text, $b->tour_text);
+            $tour_compare = strcasecmp(bst_xlsx_live_tour_title($a->tour_id ?? 0), bst_xlsx_live_tour_title($b->tour_id ?? 0));
             if ($tour_compare !== 0) return $tour_compare;
             
             $name_compare = strcasecmp($a->guest1_last_name, $b->guest1_last_name);
@@ -400,10 +409,12 @@ function bst_get_commission_booking_row_data_xlsx($booking, $exchange_rate) {
         $currency_format = '€#,##0.00';
     }
     
+    $tour_title = bst_xlsx_live_tour_title($booking->tour_id ?? 0);
+
     return array(
         '<style font-size="10">' . $booking->id . '</style>',
         '<style font-size="10">' . $guest_name . '</style>',
-        '<style font-size="10">' . ($booking->tour_text ?? '') . '</style>',
+        '<style font-size="10">' . $tour_title . '</style>',
         '<style font-size="10">' . $vehicle_text . '</style>',
         '<style font-size="10" nf="' . $currency_format . '">' . $tour_cost_display . '</style>',
         '<style font-size="10" nf="' . $currency_format . '">' . $total_paid_display . '</style>',

@@ -372,6 +372,34 @@
                             "prepend": "",
                             "append": "",
                             "parent_repeater": "field_67ad574316fd3"
+                        },
+                        {
+                            "key": "field_67f9e40b1c001",
+                            "label": "Vehicle (CPT)",
+                            "name": "vehicle_id",
+                            "aria-label": "",
+                            "type": "post_object",
+                            "instructions": "Linked Vehicle post for inventory and IDs. Filled by migration or manually.",
+                            "required": 0,
+                            "conditional_logic": 0,
+                            "wrapper": {
+                                "width": "",
+                                "class": "",
+                                "id": ""
+                            },
+                            "post_type": [
+                                "vehicle"
+                            ],
+                            "post_status": "",
+                            "taxonomy": "",
+                            "return_format": "id",
+                            "multiple": 0,
+                            "allow_null": 1,
+                            "allow_in_bindings": 0,
+                            "bidirectional": 0,
+                            "ui": 1,
+                            "bidirectional_target": [],
+                            "parent_repeater": "field_67ad574316fd3"
                         }
                     ]
                 }
@@ -1382,5 +1410,5 @@
     "description": "",
     "show_in_rest": 1,
     "display_title": "",
-    "modified": 1774572939
+    "modified": 1999999998
 }
