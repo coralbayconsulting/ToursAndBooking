@@ -152,9 +152,12 @@ function bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tour_id
 
 		$wrote = false;
 		foreach ( $selectors as $selector ) {
-			if ( update_sub_field( $selector, $vid, $tour_id ) ) {
-				$wrote = true;
-				break;
+			foreach ( array( $tour_id, 'post_' . $tour_id ) as $post_ref ) {
+				$r = update_sub_field( $selector, $vid, $post_ref );
+				if ( false !== $r ) {
+					$wrote = true;
+					break 2;
+				}
 			}
 		}
 
@@ -405,9 +408,28 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 		}
 
 		if ( ! empty( $pending_cells ) ) {
-			$ok = update_field( 'vehicle_pricing', $pricing, $tid );
-			if ( ! $ok ) {
-				$ok = update_field( BST_VEHICLE_PRICING_REPEATER_KEY, $pricing, $tid );
+			if ( function_exists( 'acf_get_field_groups' ) ) {
+				acf_get_field_groups( array( 'post_id' => $tid ) );
+			}
+			$ok = false;
+			foreach ( array( $tid, 'post_' . $tid ) as $post_ref ) {
+				$r = update_field( 'vehicle_pricing', $pricing, $post_ref );
+				if ( false !== $r ) {
+					$ok = true;
+					break;
+				}
+				$r = update_field( BST_VEHICLE_PRICING_REPEATER_KEY, $pricing, $post_ref );
+				if ( false !== $r ) {
+					$ok = true;
+					break;
+				}
+			}
+			if ( ! $ok && function_exists( 'acf_get_field' ) && function_exists( 'acf_update_value' ) ) {
+				$field = acf_get_field( BST_VEHICLE_PRICING_REPEATER_KEY );
+				if ( is_array( $field ) ) {
+					$r = acf_update_value( $pricing, $tid, $field );
+					$ok = ( false !== $r );
+				}
 			}
 			if ( ! $ok ) {
 				$ok = bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tid, $pending_cells, $results );
