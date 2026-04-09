@@ -27,6 +27,7 @@ class BST_Plugin {
         require_once BST_PLUGIN_DIR . 'includes/database/tour-booking-actions.php'; 
         require_once BST_PLUGIN_DIR . 'includes/custom-post-types.php';
         require_once BST_PLUGIN_DIR . 'includes/vehicle-helpers.php';
+        require_once BST_PLUGIN_DIR . 'includes/tour-date-limited-vehicles.php';
         require_once BST_PLUGIN_DIR . 'includes/vehicle-migration.php';
         require_once BST_PLUGIN_DIR . 'includes/vehicle-tour-names-export.php';
         require_once BST_PLUGIN_DIR . 'includes/vehicle-booking-remap.php';
@@ -89,12 +90,14 @@ class BST_Plugin {
         add_action('wp_ajax_bst_regenerate_tour_date_titles', array($this, 'handle_regenerate_tour_date_titles'));
         add_action('wp_ajax_bst_sync_sold_slots_ajax', array($this, 'handle_sync_sold_slots_ajax'));
         add_action('wp_ajax_bst_release_data_cleanup', array($this, 'handle_release_data_cleanup'));
+        add_action('wp_ajax_bst_sync_limited_vehicles_create', array($this, 'handle_sync_limited_vehicles_create'));
+        add_action('wp_ajax_bst_sync_limited_vehicles_sold', array($this, 'handle_sync_limited_vehicles_sold'));
         
         // Daily availability sync automation
         add_action('wp_loaded', array($this, 'schedule_daily_availability_sync'));
         add_action('bst_daily_availability_sync', array($this, 'run_daily_availability_sync'));
         
-        // Edit page navigation for tours and tour-dates
+        // Edit page navigation for tours, tour-dates, and vehicles
         add_action('edit_form_after_title', array($this, 'add_edit_page_navigation'));
         add_filter('post_row_actions', array($this, 'modify_post_row_actions'), 10, 2);
         add_action('admin_footer', array($this, 'add_tour_edit_link_script'));
@@ -158,7 +161,9 @@ class BST_Plugin {
         add_filter('acf/prepare_field/name=sold_slots', array($this, 'make_sold_slots_readonly'));
         add_filter('acf/prepare_field/name=reserved_slots', array($this, 'make_reserved_slots_readonly'));
         add_filter('acf/prepare_field/name=available_slots', array($this, 'make_available_slots_readonly'));
-        
+        add_filter('acf/fields/post_object/query/key=field_696e8b1a0a002', array($this, 'acf_limited_vehicle_post_object_query'), 10, 3);
+        add_filter('acf/fields/post_object/query/key=field_67f9e40b1c001', array($this, 'acf_tour_vehicle_pricing_cpt_query'), 10, 3);
+
         // Make title field readonly for tour-date posts
         add_action('admin_head', array($this, 'make_tour_date_title_readonly'));
         
@@ -1728,6 +1733,70 @@ class BST_Plugin {
     }
 
     /**
+     * Limit tour-date limited-vehicle picker to vehicles linked on the parent tour (vehicle_pricing).
+     *
+     * @param array $args WP_Query args for post_object field.
+     * @param array $field ACF field array.
+     * @param int|string $post_id Post ID being edited.
+     * @return array
+     */
+    public function acf_limited_vehicle_post_object_query( $args, $field, $post_id ) {
+        if ( ! function_exists( 'acf_get_valid_post_id' ) || ! function_exists( 'bst_tour_id_for_tour_date' ) || ! function_exists( 'bst_vehicle_ids_for_tour_date_limited_picker' ) ) {
+            return $args;
+        }
+        $resolved = acf_get_valid_post_id( $post_id );
+        if ( ! $resolved || 'tour-date' !== get_post_type( $resolved ) ) {
+            return $args;
+        }
+        $tour_id = bst_tour_id_for_tour_date( $resolved );
+        $ids     = bst_vehicle_ids_for_tour_date_limited_picker( (int) $resolved, $tour_id );
+        if ( empty( $ids ) ) {
+            $args['post__in'] = array( 0 );
+        } else {
+            $args['post__in'] = $ids;
+        }
+        unset( $args['meta_query'] );
+        if ( function_exists( 'bst_limited_vehicles_row_key_from_prefix' ) && function_exists( 'bst_limited_vehicle_ids_assigned_other_rows' ) && ! empty( $field['prefix'] ) ) {
+            $row_key = bst_limited_vehicles_row_key_from_prefix( $field['prefix'] );
+            if ( null !== $row_key ) {
+                $exclude = bst_limited_vehicle_ids_assigned_other_rows( (int) $resolved, $row_key );
+                if ( ! empty( $exclude ) ) {
+                    $not_in   = isset( $args['post__not_in'] ) ? (array) $args['post__not_in'] : array();
+                    $args['post__not_in'] = array_values( array_unique( array_merge( $not_in, $exclude ) ) );
+                }
+            }
+        }
+        return $args;
+    }
+
+    /**
+     * On Tour → Vehicle Pricing → Vehicle (CPT): only cars for driving tours, only motorcycles for motorcycle tours.
+     *
+     * @param array $args WP_Query args for post_object field.
+     * @param array $field ACF field array.
+     * @param int|string $post_id Post ID being edited.
+     * @return array
+     */
+    public function acf_tour_vehicle_pricing_cpt_query( $args, $field, $post_id ) {
+        if ( ! function_exists( 'acf_get_valid_post_id' ) || ! function_exists( 'bst_vehicle_ids_for_tour_pricing_picker' ) ) {
+            return $args;
+        }
+        $resolved = acf_get_valid_post_id( $post_id );
+        if ( ! $resolved || 'tour' !== get_post_type( $resolved ) ) {
+            return $args;
+        }
+        $tour_id = (int) $resolved;
+        $ids     = bst_vehicle_ids_for_tour_pricing_picker( $tour_id );
+        if ( empty( $ids ) ) {
+            $args['post__in'] = array( 0 );
+        } else {
+            $args['post__in'] = $ids;
+        }
+        unset( $args['meta_query'] );
+        return $args;
+    }
+
+    /**
      * Make title field readonly for tour-date posts
      */
     public function make_tour_date_title_readonly() {
@@ -2314,6 +2383,78 @@ class BST_Plugin {
     }
 
     /**
+     * Tools → add limited-vehicle rows (vehicle + max) on child tour-dates from tours.
+     */
+    public function handle_sync_limited_vehicles_create() {
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bst_sync_limited_vehicles_create_nonce' ) ) {
+            wp_send_json_error( __( 'Security check failed.', 'bst-plugin' ) );
+            return;
+        }
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Insufficient permissions.', 'bst-plugin' ) );
+            return;
+        }
+        if ( ! function_exists( 'bst_migrate_limited_vehicles_create_only_batch' ) ) {
+            wp_send_json_error( __( 'Migration is not available.', 'bst-plugin' ) );
+            return;
+        }
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( 300 );
+        }
+        $packed      = bst_migrate_limited_vehicles_create_only_batch();
+        $lines       = isset( $packed['lines'] ) && is_array( $packed['lines'] ) ? $packed['lines'] : array();
+        $error_count = isset( $packed['error_count'] ) ? (int) $packed['error_count'] : 0;
+        $text        = implode( ' ', array_map( 'wp_strip_all_tags', $lines ) );
+        wp_send_json_success(
+            array(
+                'message'    => $text,
+                'has_errors' => $error_count > 0,
+            )
+        );
+    }
+
+    /**
+     * Tools → recalculate Sold from bookings; return oversold list.
+     */
+    public function handle_sync_limited_vehicles_sold() {
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bst_sync_limited_vehicles_sold_nonce' ) ) {
+            wp_send_json_error( __( 'Security check failed.', 'bst-plugin' ) );
+            return;
+        }
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Insufficient permissions.', 'bst-plugin' ) );
+            return;
+        }
+        if ( ! function_exists( 'bst_migrate_limited_vehicles_sync_sold_batch' ) ) {
+            wp_send_json_error( __( 'Migration is not available.', 'bst-plugin' ) );
+            return;
+        }
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( 300 );
+        }
+        $packed = bst_migrate_limited_vehicles_sync_sold_batch();
+        $lines  = isset( $packed['lines'] ) && is_array( $packed['lines'] ) ? $packed['lines'] : array();
+        $errors = isset( $packed['error_count'] ) ? (int) $packed['error_count'] : 0;
+        $n      = isset( $packed['rows_updated'] ) ? (int) $packed['rows_updated'] : 0;
+        $os     = isset( $packed['oversold'] ) && is_array( $packed['oversold'] ) ? $packed['oversold'] : array();
+
+        /* translators: %d: number of limited-vehicle rows whose sold value changed */
+        $msg = sprintf( __( 'Updated sold values for %d limited-vehicle row(s) (where the calculated sold differed from what was stored).', 'bst-plugin' ), $n );
+        if ( $errors > 0 ) {
+            $msg .= ' ' . implode( ' ', array_map( 'wp_strip_all_tags', $lines ) );
+        }
+
+        wp_send_json_success(
+            array(
+                'message'      => $msg,
+                'rows_updated' => $n,
+                'oversold'     => $os,
+                'has_errors'   => $errors > 0,
+            )
+        );
+    }
+
+    /**
      * Setup BST custom capabilities
      */
     public function setup_bst_capabilities() {
@@ -2805,7 +2946,7 @@ class BST_Plugin {
      * Modify post row actions to add filter preservation for tours and tour-dates
      */
     public function modify_post_row_actions($actions, $post) {
-        if (in_array($post->post_type, array('tour', 'tour-date'))) {
+        if (in_array($post->post_type, array('tour', 'tour-date', 'vehicle'), true)) {
             // Keep the default actions but they'll be enhanced by our JavaScript
             // to preserve list state parameters
         }
@@ -2870,11 +3011,11 @@ class BST_Plugin {
     }
     
     /**
-     * Add JavaScript to modify tour and tour-date edit links with current list state
+     * Add JavaScript to modify tour, tour-date, and vehicle edit links with current list state
      */
     public function add_tour_edit_link_script() {
         $screen = get_current_screen();
-        if (!$screen || !in_array($screen->id, array('edit-tour', 'edit-tour-date'))) {
+        if (!$screen || !in_array($screen->id, array('edit-tour', 'edit-tour-date', 'edit-vehicle'), true)) {
             return;
         }
         
@@ -2891,6 +3032,12 @@ class BST_Plugin {
             $params['filter_status'] = sanitize_text_field($_GET['post_status']);
         }
         if (isset($_GET['m']) && !empty($_GET['m'])) $params['filter_date'] = sanitize_text_field($_GET['m']);
+        if ( 'edit-vehicle' === $screen->id && isset( $_GET['bst_vehicle_type'] ) ) {
+            $vtf = sanitize_text_field( wp_unslash( $_GET['bst_vehicle_type'] ) );
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $params['bst_vehicle_type'] = $vtf;
+            }
+        }
         
         if (empty($params)) {
             return; // No parameters to add
@@ -2960,7 +3107,7 @@ class BST_Plugin {
     public function preserve_list_state_after_save($location, $post_id) {
         $post = get_post($post_id);
         
-        if (!$post || !in_array($post->post_type, array('tour', 'tour-date'))) {
+        if (!$post || !in_array($post->post_type, array('tour', 'tour-date', 'vehicle'), true)) {
             return $location;
         }
         
@@ -2977,6 +3124,17 @@ class BST_Plugin {
                 $list_params[$param] = sanitize_text_field($_GET[$param]);
             }
         }
+        if ( isset( $_POST['bst_vehicle_type'] ) ) {
+            $vtf = sanitize_text_field( wp_unslash( $_POST['bst_vehicle_type'] ) );
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $list_params['bst_vehicle_type'] = $vtf;
+            }
+        } elseif ( isset( $_GET['bst_vehicle_type'] ) ) {
+            $vtf = sanitize_text_field( wp_unslash( $_GET['bst_vehicle_type'] ) );
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $list_params['bst_vehicle_type'] = $vtf;
+            }
+        }
         
         // Add list state parameters to the redirect location
         if (!empty($list_params)) {
@@ -2987,10 +3145,10 @@ class BST_Plugin {
     }
     
     /**
-     * Add navigation elements to edit pages for tours and tour-dates
+     * Add navigation elements to edit pages for tours, tour-dates, and vehicles
      */
     public function add_edit_page_navigation($post) {
-        if (!in_array($post->post_type, array('tour', 'tour-date'))) {
+        if (!in_array($post->post_type, array('tour', 'tour-date', 'vehicle'), true)) {
             return;
         }
         
@@ -3022,6 +3180,14 @@ class BST_Plugin {
                 continue;
             }
             $list_state[ $wp_param ] = sanitize_text_field( wp_unslash( $_GET[ $our_param ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        }
+
+        // Vehicle list filter (?bst_vehicle_type=car|motorcycle) — same param name on list and edit screen.
+        if ( isset( $_GET['bst_vehicle_type'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            $vtf = sanitize_text_field( wp_unslash( $_GET['bst_vehicle_type'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $list_state['bst_vehicle_type'] = $vtf;
+            }
         }
         
         // Build the back to list URL
@@ -3072,6 +3238,9 @@ class BST_Plugin {
                     echo '<input type="hidden" name="' . esc_attr($our_param) . '" value="' . esc_attr($value) . '">';
                 }
             }
+        }
+        if ( ! empty( $list_state['bst_vehicle_type'] ) && in_array( $list_state['bst_vehicle_type'], array( 'car', 'motorcycle' ), true ) ) {
+            echo '<input type="hidden" name="bst_vehicle_type" value="' . esc_attr( $list_state['bst_vehicle_type'] ) . '">';
         }
 
         // Ensure navigation links do not trigger the browser's unsaved-changes dialog
@@ -3145,6 +3314,19 @@ class BST_Plugin {
                     'compare' => '='
                 )
             );
+        }
+
+        // Vehicle list type filter (matches edit.php?post_type=vehicle&bst_vehicle_type=…)
+        if ( 'vehicle' === $post->post_type && ! empty( $list_state['bst_vehicle_type'] ) ) {
+            $vtf = $list_state['bst_vehicle_type'];
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $mq = isset( $query_args['meta_query'] ) && is_array( $query_args['meta_query'] ) ? $query_args['meta_query'] : array();
+                $mq[] = array(
+                    'key'   => 'vehicle_type',
+                    'value' => $vtf,
+                );
+                $query_args['meta_query'] = $mq;
+            }
         }
         
         // Add ordering - for tour-dates we need special handling
@@ -3294,6 +3476,18 @@ class BST_Plugin {
                 )
             );
         }
+
+        if ( 'vehicle' === $post->post_type && ! empty( $list_state['bst_vehicle_type'] ) ) {
+            $vtf = $list_state['bst_vehicle_type'];
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $mq = isset( $query_args['meta_query'] ) && is_array( $query_args['meta_query'] ) ? $query_args['meta_query'] : array();
+                $mq[] = array(
+                    'key'   => 'vehicle_type',
+                    'value' => $vtf,
+                );
+                $query_args['meta_query'] = $mq;
+            }
+        }
         
         // Handle sorting - special case for tour-dates
         if ($post->post_type === 'tour-date') {
@@ -3416,6 +3610,11 @@ class BST_Plugin {
                     case 'm':
                         $edit_params['filter_date'] = $value;
                         break;
+                    case 'bst_vehicle_type':
+                        if ( in_array( (string) $value, array( 'car', 'motorcycle' ), true ) ) {
+                            $edit_params['bst_vehicle_type'] = $value;
+                        }
+                        break;
                 }
             }
             
@@ -3455,6 +3654,11 @@ class BST_Plugin {
                         break;
                     case 'm':
                         $edit_params['filter_date'] = $value;
+                        break;
+                    case 'bst_vehicle_type':
+                        if ( in_array( (string) $value, array( 'car', 'motorcycle' ), true ) ) {
+                            $edit_params['bst_vehicle_type'] = $value;
+                        }
                         break;
                 }
             }

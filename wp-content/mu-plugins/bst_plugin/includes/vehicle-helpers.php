@@ -263,6 +263,184 @@ function bst_vehicle_is_available_for_booking( $vehicle_id ) {
 }
 
 /**
+ * Vehicle CPT flag: “Limited by default” (hint only; per-date limits live on tour-date).
+ *
+ * @param int $vehicle_id Vehicle CPT ID.
+ * @return bool
+ */
+function bst_vehicle_usually_limited( $vehicle_id ) {
+    $vehicle_id = (int) $vehicle_id;
+    if ( $vehicle_id <= 0 || ! function_exists( 'get_field' ) ) {
+        return false;
+    }
+    return (bool) get_field( 'vehicle_usually_limited', $vehicle_id );
+}
+
+/**
+ * Whether a vehicle’s vehicle_type matches the tour’s expected type (empty type on vehicle = allow).
+ *
+ * @param int    $vehicle_id Vehicle CPT ID.
+ * @param string $vtype      Expected `car` or `motorcycle`.
+ * @return bool
+ */
+function bst_vehicle_matches_tour_vehicle_type( $vehicle_id, $vtype ) {
+    $vehicle_id = (int) $vehicle_id;
+    if ( $vehicle_id <= 0 ) {
+        return false;
+    }
+    if ( ! function_exists( 'get_field' ) ) {
+        return true;
+    }
+    $vt = get_field( 'vehicle_type', $vehicle_id );
+    if ( null === $vt || false === $vt || '' === $vt ) {
+        return true;
+    }
+    return (string) $vt === (string) $vtype;
+}
+
+/**
+ * Published vehicle IDs of a given type that are “available for assignment” (vehicle_active).
+ *
+ * @param string $vtype `car` or `motorcycle`.
+ * @return int[]
+ */
+function bst_vehicle_ids_assignable_for_type( $vtype ) {
+    $vtype = (string) $vtype;
+    if ( '' === $vtype ) {
+        $vtype = 'car';
+    }
+    $active_clause = array(
+        'relation' => 'OR',
+        array(
+            'key'     => 'vehicle_active',
+            'compare' => 'NOT EXISTS',
+        ),
+        array(
+            'key'     => 'vehicle_active',
+            'value'   => '1',
+            'compare' => '=',
+        ),
+        array(
+            'key'     => 'vehicle_active',
+            'value'   => 1,
+            'compare' => '=',
+        ),
+    );
+    $q             = new WP_Query(
+        array(
+            'post_type'              => 'vehicle',
+            'post_status'            => 'publish',
+            'posts_per_page'         => -1,
+            'fields'                 => 'ids',
+            'no_found_rows'          => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
+            'meta_query'             => array(
+                'relation' => 'AND',
+                array(
+                    'key'     => 'vehicle_type',
+                    'value'   => $vtype,
+                    'compare' => '=',
+                ),
+                $active_clause,
+            ),
+        )
+    );
+    return array_map( 'intval', $q->posts ? $q->posts : array() );
+}
+
+/**
+ * Vehicle IDs allowed in Tour → Vehicle pricing picker: assignable for tour type, plus any already linked on this tour (retired but still on pricing).
+ *
+ * @param int $tour_id Tour post ID.
+ * @return int[]
+ */
+function bst_vehicle_ids_for_tour_pricing_picker( $tour_id ) {
+    $tour_id = (int) $tour_id;
+    if ( $tour_id <= 0 ) {
+        return array();
+    }
+    $vtype      = bst_vehicle_type_for_tour_id( $tour_id );
+    $vtype      = ( 'motorcycle' === $vtype ) ? 'motorcycle' : 'car';
+    $assignable = bst_vehicle_ids_assignable_for_type( $vtype );
+    $linked     = bst_tour_linked_vehicle_ids( $tour_id );
+    $extra      = array();
+    foreach ( $linked as $vid ) {
+        if ( in_array( (int) $vid, $assignable, true ) ) {
+            continue;
+        }
+        if ( bst_vehicle_matches_tour_vehicle_type( (int) $vid, $vtype ) ) {
+            $extra[] = (int) $vid;
+        }
+    }
+    return array_values( array_unique( array_merge( $assignable, $extra ) ) );
+}
+
+/**
+ * Vehicle IDs saved on Limited vehicles repeater for a tour date (any assignment state).
+ *
+ * @param int $tour_date_id Tour-date post ID.
+ * @return int[]
+ */
+function bst_limited_vehicle_ids_on_tour_date( $tour_date_id ) {
+    $tour_date_id = (int) $tour_date_id;
+    if ( $tour_date_id <= 0 || ! function_exists( 'get_field' ) ) {
+        return array();
+    }
+    $rows = get_field( 'limited_vehicles', $tour_date_id, false );
+    if ( ! is_array( $rows ) ) {
+        return array();
+    }
+    $ids = array();
+    foreach ( $rows as $row ) {
+        if ( ! is_array( $row ) || empty( $row['limited_vehicle'] ) ) {
+            continue;
+        }
+        $v = $row['limited_vehicle'];
+        if ( is_object( $v ) && isset( $v->ID ) ) {
+            $ids[] = (int) $v->ID;
+        } elseif ( is_array( $v ) && isset( $v['ID'] ) ) {
+            $ids[] = (int) $v['ID'];
+        } else {
+            $ids[] = (int) $v;
+        }
+    }
+    return array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+}
+
+/**
+ * Tour Date → Limited vehicles picker: assignable & on tour pricing, plus vehicles already saved on this date (e.g. retired but still on row).
+ *
+ * @param int $tour_date_id Tour-date post ID.
+ * @param int $tour_id      Parent tour post ID.
+ * @return int[]
+ */
+function bst_vehicle_ids_for_tour_date_limited_picker( $tour_date_id, $tour_id ) {
+    $tour_date_id = (int) $tour_date_id;
+    $tour_id      = (int) $tour_id;
+    if ( $tour_id <= 0 ) {
+        return array();
+    }
+    $vtype      = bst_vehicle_type_for_tour_id( $tour_id );
+    $vtype      = ( 'motorcycle' === $vtype ) ? 'motorcycle' : 'car';
+    $linked     = bst_tour_linked_vehicle_ids( $tour_id );
+    $assignable = bst_vehicle_ids_assignable_for_type( $vtype );
+    $on_tour    = array_values( array_intersect( $assignable, $linked ) );
+
+    $saved  = bst_limited_vehicle_ids_on_tour_date( $tour_date_id );
+    $legacy = array();
+    foreach ( $saved as $vid ) {
+        if ( in_array( $vid, $on_tour, true ) ) {
+            continue;
+        }
+        if ( bst_vehicle_matches_tour_vehicle_type( $vid, $vtype ) ) {
+            $legacy[] = $vid;
+        }
+    }
+    return array_values( array_unique( array_merge( $on_tour, $legacy ) ) );
+}
+
+/**
  * Public/admin label for a vehicle: ACF listing_description when set, else post title.
  *
  * @param int $vehicle_id Vehicle CPT ID.
@@ -311,5 +489,211 @@ function bst_booking_vehicle_display_text( $booking, $slot = 1 ) {
         }
     }
     return isset( $booking->{$text_field} ) ? (string) $booking->{$text_field} : '';
+}
+
+/**
+ * Distinct Vehicle CPT IDs linked from a tour's vehicle_pricing repeater (vehicle_id subfields).
+ *
+ * @param int $tour_id Tour post ID.
+ * @return int[]
+ */
+function bst_tour_linked_vehicle_ids( $tour_id ) {
+    $tour_id = (int) $tour_id;
+    if ( $tour_id <= 0 || ! function_exists( 'get_field' ) ) {
+        return array();
+    }
+    $ids     = array();
+    $pricing = get_field( 'vehicle_pricing', $tour_id, true );
+    if ( empty( $pricing ) || ! is_array( $pricing ) ) {
+        return array();
+    }
+    foreach ( $pricing as $row ) {
+        if ( empty( $row['vehicles'] ) || ! is_array( $row['vehicles'] ) ) {
+            continue;
+        }
+        foreach ( $row['vehicles'] as $vrow ) {
+            if ( ! is_array( $vrow ) ) {
+                continue;
+            }
+            $linked_id = isset( $vrow['vehicle_id'] ) ? $vrow['vehicle_id'] : 0;
+            if ( is_array( $linked_id ) && isset( $linked_id['ID'] ) ) {
+                $linked_id = (int) $linked_id['ID'];
+            } else {
+                $linked_id = (int) $linked_id;
+            }
+            if ( $linked_id > 0 ) {
+                $ids[] = $linked_id;
+            }
+        }
+    }
+    $ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+    sort( $ids, SORT_NUMERIC );
+    return $ids;
+}
+
+/**
+ * Cached maps for resolving tour repeater label text → Vehicle CPT (same rules as migration / “On Tours”).
+ *
+ * @return array{norm_to_id: array<string,int>, vehicles_by_id: array<int,string>}
+ */
+function bst_vehicle_label_resolution_maps() {
+    static $cache = null;
+    if ( null !== $cache ) {
+        return $cache;
+    }
+    $norm_to_id     = array();
+    $vehicles_by_id = array();
+    $posts          = get_posts(
+        array(
+            'post_type'              => 'vehicle',
+            'post_status'            => 'any',
+            'posts_per_page'         => -1,
+            'orderby'                => 'ID',
+            'order'                  => 'ASC',
+            'fields'                 => 'ids',
+            'update_post_meta_cache' => false,
+            'no_found_rows'          => true,
+        )
+    );
+    foreach ( $posts as $vid ) {
+        $vid   = (int) $vid;
+        $title = get_the_title( $vid );
+        $vehicles_by_id[ $vid ] = $title;
+        $norm_to_id[ bst_vehicle_normalize_key( $title ) ] = $vid;
+    }
+    $cache = array(
+        'norm_to_id'     => $norm_to_id,
+        'vehicles_by_id' => $vehicles_by_id,
+    );
+    return $cache;
+}
+
+/**
+ * Resolve legacy / label base name to Vehicle CPT id (read-only; same matching as migration find_existing).
+ *
+ * @param string $base_name      Normalized vehicle label (e.g. after bst_vehicle_base_name_from_text).
+ * @param array  $norm_to_id     Map normalized title key → vehicle id.
+ * @param array  $vehicles_by_id Map vehicle id → title.
+ * @return int 0 if none.
+ */
+function bst_vehicle_resolve_base_name_to_vehicle_id( $base_name, array $norm_to_id, array $vehicles_by_id ) {
+    $base_name = trim( (string) $base_name );
+    if ( '' === $base_name ) {
+        return 0;
+    }
+    $key     = bst_vehicle_normalize_key( $base_name );
+    $compact = bst_vehicle_compact_key( $base_name );
+    if ( isset( $norm_to_id[ $key ] ) ) {
+        return (int) $norm_to_id[ $key ];
+    }
+    foreach ( $vehicles_by_id as $vid => $title ) {
+        if ( $compact && $compact === bst_vehicle_compact_key( $title ) ) {
+            return (int) $vid;
+        }
+    }
+    return 0;
+}
+
+/**
+ * Vehicle CPT IDs from a tour’s vehicle_pricing: linked vehicle_id rows plus label-only rows resolved to CPTs.
+ * Aligns with how the Vehicles admin list builds “On Tours” (by_id + legacy text match).
+ *
+ * @param int $tour_id Tour post ID.
+ * @return int[]
+ */
+function bst_tour_pricing_vehicle_ids_resolved( $tour_id ) {
+    $tour_id = (int) $tour_id;
+    if ( $tour_id <= 0 || ! function_exists( 'get_field' ) ) {
+        return array();
+    }
+    $pricing = get_field( 'vehicle_pricing', $tour_id, true );
+    if ( empty( $pricing ) || ! is_array( $pricing ) ) {
+        return array();
+    }
+
+    $maps = bst_vehicle_label_resolution_maps();
+
+    $ids = array();
+    foreach ( $pricing as $row ) {
+        if ( ! is_array( $row ) ) {
+            continue;
+        }
+        $nested = array();
+        if ( function_exists( 'bst_vehicle_migration_get_nested_vehicle_rows' ) ) {
+            $nested = bst_vehicle_migration_get_nested_vehicle_rows( $row );
+        } elseif ( ! empty( $row['vehicles'] ) && is_array( $row['vehicles'] ) ) {
+            $nested = $row['vehicles'];
+        }
+        foreach ( $nested as $vrow ) {
+            if ( ! is_array( $vrow ) ) {
+                continue;
+            }
+            $linked = 0;
+            if ( function_exists( 'bst_vehicle_migration_row_linked_post_id' ) ) {
+                $linked = bst_vehicle_migration_row_linked_post_id( $vrow );
+            } elseif ( isset( $vrow['vehicle_id'] ) ) {
+                $x = $vrow['vehicle_id'];
+                $linked = is_array( $x ) && isset( $x['ID'] ) ? (int) $x['ID'] : (int) $x;
+            } elseif ( isset( $vrow['field_67f9e40b1c001'] ) ) {
+                $x = $vrow['field_67f9e40b1c001'];
+                $linked = is_array( $x ) && isset( $x['ID'] ) ? (int) $x['ID'] : (int) $x;
+            }
+            if ( $linked > 0 ) {
+                $p = get_post( $linked );
+                if ( $p && 'vehicle' === $p->post_type ) {
+                    $ids[] = $linked;
+                }
+                continue;
+            }
+            if ( function_exists( 'bst_vehicle_migration_row_vehicle_text' ) ) {
+                $raw = bst_vehicle_migration_row_vehicle_text( $vrow );
+            } else {
+                $raw = isset( $vrow['vehicle'] ) ? (string) $vrow['vehicle'] : '';
+            }
+            $base = trim( (string) bst_vehicle_base_name_from_text( $raw ) );
+            if ( '' !== $base ) {
+                $resolved = bst_vehicle_resolve_base_name_to_vehicle_id( $base, $maps['norm_to_id'], $maps['vehicles_by_id'] );
+                if ( $resolved > 0 ) {
+                    $ids[] = $resolved;
+                }
+            }
+        }
+    }
+
+    $ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+    sort( $ids, SORT_NUMERIC );
+    return $ids;
+}
+
+/**
+ * Parent tour post ID from a tour-date post (ACF field `tour`).
+ *
+ * @param int|string $tour_date_post_id Numeric ID or ACF-style string.
+ * @return int
+ */
+function bst_tour_id_for_tour_date( $tour_date_post_id ) {
+    if ( ! function_exists( 'get_field' ) ) {
+        return 0;
+    }
+    $pid = 0;
+    if ( is_numeric( $tour_date_post_id ) ) {
+        $pid = (int) $tour_date_post_id;
+    } elseif ( is_string( $tour_date_post_id ) && function_exists( 'acf_get_valid_post_id' ) ) {
+        $pid = (int) acf_get_valid_post_id( $tour_date_post_id );
+    }
+    if ( $pid <= 0 ) {
+        return 0;
+    }
+    $raw = get_field( 'tour', $pid );
+    if ( $raw instanceof WP_Post ) {
+        return (int) $raw->ID;
+    }
+    if ( is_array( $raw ) && ! empty( $raw['ID'] ) ) {
+        return (int) $raw['ID'];
+    }
+    if ( is_numeric( $raw ) ) {
+        return (int) $raw;
+    }
+    return 0;
 }
 

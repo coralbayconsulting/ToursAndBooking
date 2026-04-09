@@ -208,6 +208,125 @@
             "append": ""
         },
         {
+            "key": "field_696e8b1a0a001",
+            "label": "Limited vehicles",
+            "name": "limited_vehicles",
+            "aria-label": "",
+            "type": "repeater",
+            "instructions": "Only vehicles linked on the parent tour (vehicle pricing) can be chosen. Vehicles not listed are unlimited. Per-vehicle caps are not enforced on bookings yet.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "layout": "table",
+            "pagination": 0,
+            "min": 0,
+            "max": 0,
+            "collapsed": "field_696e8b1a0a002",
+            "button_label": "Add vehicle",
+            "rows_per_page": 20,
+            "sub_fields": [
+                {
+                    "key": "field_696e8b1a0a002",
+                    "label": "Vehicle",
+                    "name": "limited_vehicle",
+                    "aria-label": "",
+                    "type": "post_object",
+                    "instructions": "",
+                    "required": 0,
+                    "conditional_logic": 0,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "post_type": [
+                        "vehicle"
+                    ],
+                    "post_status": "",
+                    "taxonomy": "",
+                    "return_format": "id",
+                    "multiple": 0,
+                    "allow_null": 1,
+                    "allow_in_bindings": 0,
+                    "bidirectional": 0,
+                    "ui": 1,
+                    "bidirectional_target": [],
+                    "parent_repeater": "field_696e8b1a0a001"
+                },
+                {
+                    "key": "field_696e8b1a0a003",
+                    "label": "Max",
+                    "name": "limited_vehicle_max",
+                    "aria-label": "",
+                    "type": "number",
+                    "instructions": "",
+                    "required": 0,
+                    "conditional_logic": 0,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "default_value": "",
+                    "min": 1,
+                    "max": "",
+                    "allow_in_bindings": 0,
+                    "placeholder": "",
+                    "step": "",
+                    "prepend": "",
+                    "append": "",
+                    "parent_repeater": "field_696e8b1a0a001"
+                },
+                {
+                    "key": "field_696e8b1a0a004",
+                    "label": "Sold",
+                    "name": "limited_vehicle_sold",
+                    "aria-label": "",
+                    "type": "number",
+                    "instructions": "Enter manually until automatic counts are available.",
+                    "required": 0,
+                    "conditional_logic": 0,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "default_value": 0,
+                    "min": 0,
+                    "max": "",
+                    "allow_in_bindings": 0,
+                    "placeholder": "",
+                    "step": "",
+                    "prepend": "",
+                    "append": "",
+                    "parent_repeater": "field_696e8b1a0a001"
+                },
+                {
+                    "key": "field_696e8b1a0a005",
+                    "label": "Avail.",
+                    "name": "limited_vehicle_avail_display",
+                    "aria-label": "",
+                    "type": "message",
+                    "instructions": "Max minus Sold (read-only).",
+                    "required": 0,
+                    "conditional_logic": 0,
+                    "wrapper": {
+                        "width": "",
+                        "class": "",
+                        "id": ""
+                    },
+                    "message": "—",
+                    "new_lines": "br",
+                    "esc_html": 0,
+                    "parent_repeater": "field_696e8b1a0a001"
+                }
+            ]
+        },
+        {
             "key": "field_6789ade72559e",
             "label": "New",
             "name": "new",
@@ -271,5 +390,5 @@
     "description": "",
     "show_in_rest": 0,
     "display_title": "",
-    "modified": 1774118222
+    "modified": 1744221600
 }

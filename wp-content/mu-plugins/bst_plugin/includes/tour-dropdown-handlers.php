@@ -307,6 +307,7 @@ function get_vehicle_data() {
 
     $tour_id = intval($_POST['tour_id']);
     $selected_package_id = intval($_POST['package_id']);
+    $tour_date_id        = isset($_POST['tour_date_id']) ? intval($_POST['tour_date_id']) : 0;
     
     // Get tour-type from taxonomy relationship
     $tour_type_id = null;
@@ -354,15 +355,6 @@ function get_vehicle_data() {
                 continue;
             }
             foreach ($vehicle['vehicles'] as $vehicle_item) {
-                // Format the price addition with currency symbol
-                $formatted_price = '';
-                if ($price != 0) {
-                    $symbol = ($currency === 'USD') ? '$' : '€';
-                    $abs_price = abs($price);
-                    $sign = ($price > 0) ? '+' : '-';
-                    $formatted_price = ' (' . $sign . $symbol . number_format($abs_price, 0) . ')';
-                }
-
                 $linked_id = isset($vehicle_item['vehicle_id']) ? $vehicle_item['vehicle_id'] : 0;
                 if (is_array($linked_id) && isset($linked_id['ID'])) {
                     $linked_id = (int) $linked_id['ID'];
@@ -382,17 +374,51 @@ function get_vehicle_data() {
 
                 if ($vehicle_id > 0 && function_exists('bst_vehicle_is_available_for_booking')
                     && ! bst_vehicle_is_available_for_booking($vehicle_id)) {
+                    /* Still list vehicles on this tour’s pricing so legacy tours stay understandable; cannot be booked. */
+                    $vehicle_name = get_the_title($vehicle_id) . ' ' . __('(No longer available for assignment)', 'bst-plugin');
+                    $data[]       = array(
+                        'text'       => $vehicle_name,
+                        'value'      => 0,
+                        'price'      => 0,
+                        'data-id'    => $class,
+                        'vehicle_id' => $vehicle_id,
+                        'unavailable' => true,
+                        'retired'    => true,
+                        '_order'     => $vehicle_row_order++,
+                    );
                     continue;
                 }
 
-                $vehicle_name = get_the_title($vehicle_id) . $formatted_price;
+                $limited_unavailable = false;
+                if ($tour_date_id > 0 && function_exists('bst_limited_vehicle_slots_remaining')) {
+                    $remaining = bst_limited_vehicle_slots_remaining($tour_date_id, $vehicle_id);
+                    if ($remaining !== null && $remaining <= 0) {
+                        $limited_unavailable = true;
+                    }
+                }
+
+                $formatted_price = '';
+                if (!$limited_unavailable && $price != 0) {
+                    $symbol = ($currency === 'USD') ? '$' : '€';
+                    $abs_price = abs($price);
+                    $sign = ($price > 0) ? '+' : '-';
+                    $formatted_price = ' (' . $sign . $symbol . number_format($abs_price, 0) . ')';
+                }
+
+                if ($limited_unavailable) {
+                    /* translators: appended to vehicle title when limited inventory is exhausted */
+                    $vehicle_name = get_the_title($vehicle_id) . ' ' . __('(Unavailable)', 'bst-plugin');
+                } else {
+                    $vehicle_name = get_the_title($vehicle_id) . $formatted_price;
+                }
 
                 $data[] = array(
                     'text' => $vehicle_name,
-                    'value' => $price, // Price for calculations
-                    'price' => $price,
+                    'value' => $limited_unavailable ? 0 : $price, // Price for calculations; 0 when unavailable
+                    'price' => $limited_unavailable ? 0 : $price,
                     'data-id' => $class, // Vehicle class ID
                     'vehicle_id' => $vehicle_id,
+                    'unavailable' => $limited_unavailable,
                     '_order' => $vehicle_row_order++,
                 );
             }

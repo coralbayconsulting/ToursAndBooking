@@ -223,6 +223,7 @@ jQuery(document).ready(function ($) {
 
     // Get tour's assigned currency (from PHP localization)
     var tourCurrencyCode = (typeof tourCurrency !== 'undefined' && tourCurrency.currency) ? tourCurrency.currency : 'EUR';
+    var selectedTourDateId = tourdatedropdown.val() || "";
 
     // Trigger AJAX request to fetch vehicle data
     $.ajax({
@@ -233,6 +234,7 @@ jQuery(document).ready(function ($) {
         tour_id: tourId,
         package_id: packageId,
         currency: tourCurrencyCode,
+        tour_date_id: selectedTourDateId,
       },
       success: function (response) {
         // Logic to show/hide vehicle dropdowns based on the number of vehicles and packageId
@@ -249,23 +251,27 @@ jQuery(document).ready(function ($) {
         } else {
           // Populate the dropdowns with the fetched data
           $.each(response.data, function (index, item) {
-            vehicleDropdown1.append(
-              $("<option>", {
-                value: item.value, // This contains the price for calculations
-                text: item.text, // This is the display text
-                "data-id": item["data-id"], // Vehicle class ID
-                "data-vehicle-id": item["vehicle_id"] || "",
-              })
-            );
+            var opt1 = $("<option>", {
+              value: item.value, // Price for calculations (0 when limited-unavailable)
+              text: item.text,
+              "data-id": item["data-id"],
+              "data-vehicle-id": item["vehicle_id"] || "",
+            });
+            if (item.unavailable) {
+              opt1.attr("data-unavailable", "true");
+            }
+            vehicleDropdown1.append(opt1);
             if (numVehicles == 2) {
-              vehicleDropdown2.append(
-                $("<option>", {
-                  value: item.value, // This contains the price for calculations  
-                  text: item.text, // This is the display text
-                  "data-id": item["data-id"], // Vehicle class ID
-                  "data-vehicle-id": item["vehicle_id"] || "",
-                })
-              );
+              var opt2 = $("<option>", {
+                value: item.value,
+                text: item.text,
+                "data-id": item["data-id"],
+                "data-vehicle-id": item["vehicle_id"] || "",
+              });
+              if (item.unavailable) {
+                opt2.attr("data-unavailable", "true");
+              }
+              vehicleDropdown2.append(opt2);
             }
           });
 
@@ -490,6 +496,10 @@ jQuery(document).ready(function ($) {
 
     function proceedWithBooking() {
     console.log('=== BOOK BUTTON CLICKED - STARTING proceedWithBooking ===');
+
+    if (!vehicleDropdownSelectionOk(vehicleDropdown1, vehicleDropdown1Container) || !vehicleDropdownSelectionOk(vehicleDropdown2, vehicleDropdown2Container)) {
+      return;
+    }
 
     // Get package name from global settings
     var packageName = tourpackagedropdown.find("option:selected").text().split(' ')[0]; // Use the first word in the text from the package dropdown
@@ -722,14 +732,24 @@ jQuery(document).ready(function ($) {
   // Trigger change event to display the initial flag
   currencyDropdown.trigger('change');
 
+  function vehicleDropdownSelectionOk($dropdown, $container) {
+    if (!$container.is(":visible")) {
+      return true;
+    }
+    if ($dropdown.prop("selectedIndex") === 0) {
+      return false;
+    }
+    return $dropdown.find("option:selected").attr("data-unavailable") !== "true";
+  }
+
   function checkBookButtonState() {
-    const vehicle1Selected = vehicleDropdown1.val() && vehicleDropdown1.prop('selectedIndex') !== 0;
-    const vehicle2Selected = vehicleDropdown2.val() && vehicleDropdown2.prop('selectedIndex') !== 0;
-  
+    const vehicle1Ok = vehicleDropdownSelectionOk(vehicleDropdown1, vehicleDropdown1Container);
+    const vehicle2Ok = vehicleDropdownSelectionOk(vehicleDropdown2, vehicleDropdown2Container);
+
     if (tourpackagedropdown.val() 
       && (
         (!vehicleDropdown1Container.is(":visible") && !vehicleDropdown2Container.is(":visible")) // No vehicle choices visible
-        || (vehicleDropdown1Container.is(":visible") && vehicle1Selected && (!vehicleDropdown2Container.is(":visible") || vehicle2Selected)) // Vehicle 1 visible and has a value, and if Vehicle 2 is visible, it also has a value
+        || (vehicleDropdown1Container.is(":visible") && vehicle1Ok && (!vehicleDropdown2Container.is(":visible") || vehicle2Ok))
       )
     ) {
       // Check if this should be booking or waiting list

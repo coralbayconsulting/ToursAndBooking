@@ -172,6 +172,50 @@
             "ui": 1,
             "ui_on_text": "",
             "ui_off_text": ""
+        },
+        {
+            "key": "field_69c5d50e21bd8",
+            "label": "Limited by default",
+            "name": "vehicle_usually_limited",
+            "aria-label": "",
+            "type": "true_false",
+            "instructions": "Hint for ops: new tour dates should treat this vehicle as limited unless overridden (actual limits are set per tour date).",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "message": "Limited by default",
+            "default_value": 0,
+            "allow_in_bindings": 0,
+            "ui": 1,
+            "ui_on_text": "",
+            "ui_off_text": ""
+        },
+        {
+            "key": "field_69f3c2a81bac1",
+            "label": "BST Vehicle Count",
+            "name": "bst_vehicle_count",
+            "aria-label": "",
+            "type": "number",
+            "instructions": "Optional fleet or reporting count for this vehicle.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "default_value": "",
+            "min": "",
+            "max": "",
+            "allow_in_bindings": 0,
+            "placeholder": "",
+            "step": "",
+            "prepend": "",
+            "append": ""
         }
     ],
     "location": [
@@ -193,5 +237,5 @@
     "description": "",
     "show_in_rest": 0,
     "display_title": "",
-    "modified": 2000000001
+    "modified": 1775289600
 }

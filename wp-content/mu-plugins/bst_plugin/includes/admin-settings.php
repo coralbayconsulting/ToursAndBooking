@@ -291,6 +291,22 @@ function bst_register_settings() {
         'bst_tools_page',
         'bst_admin_operations_section'
     );
+
+    add_settings_field(
+        'bst_limited_vehicles_create_tour_dates',
+        'Add limited vehicle rows to tour dates',
+        'bst_limited_vehicles_create_tour_dates_callback',
+        'bst_tools_page',
+        'bst_admin_operations_section'
+    );
+
+    add_settings_field(
+        'bst_limited_vehicles_sync_sold_tour_dates',
+        'Recalculate limited vehicle sold from bookings',
+        'bst_limited_vehicles_sync_sold_tour_dates_callback',
+        'bst_tools_page',
+        'bst_admin_operations_section'
+    );
 }
 add_action('admin_init', 'bst_register_settings');
 
@@ -1533,6 +1549,157 @@ function bst_booking_vehicle_remap_callback() {
     wp_nonce_field( 'bst_remap_booking_vehicle_ids' );
     submit_button( __( 'Remap booking vehicle IDs' ), 'secondary', 'submit', false );
     echo '</form>';
+    echo '</div>';
+}
+
+/**
+ * Tools → add limited-vehicle rows (vehicle + max) from tours; does not set Sold from bookings.
+ */
+function bst_limited_vehicles_create_tour_dates_callback() {
+    if ( ! function_exists( 'bst_migrate_limited_vehicles_create_only_batch' ) ) {
+        echo '<p class="description">' . esc_html__( 'Limited vehicles tools are not loaded.', 'bst-plugin' ) . '</p>';
+        return;
+    }
+
+    echo '<div class="bst-limited-vehicles-create" style="max-width: 720px;">';
+    echo '<p class="description" style="margin-bottom: 12px;"><strong>' . esc_html__( 'Before you run this:', 'bst-plugin' ) . '</strong> ';
+    echo esc_html__( 'Mark each vehicle as “Limited by default” on its Vehicle edit screen and link it on that tour’s Vehicle Pricing. This step only creates/updates rows and Max (BST Vehicle Count, minimum 1). Use “Recalculate limited vehicle sold from bookings” to fill Sold.', 'bst-plugin' );
+    echo '</p>';
+    echo '<p>' . esc_html__( 'For every tour that has at least one such vehicle, adds or updates matching Limited vehicles rows on each tour date. Existing Sold values are left unchanged on updated rows; new rows get Sold 0.', 'bst-plugin' ) . '</p>';
+    echo '<p style="margin-top: 12px;">';
+    echo '<button type="button" id="bst-lv-create-rows" class="button button-secondary">';
+    echo esc_html__( 'Add / update limited vehicle rows', 'bst-plugin' );
+    echo '</button>';
+    echo '<span id="bst-lv-create-spinner" class="spinner" style="float: none; margin: 0 0 0 10px;"></span>';
+    echo '</p>';
+    echo '<div id="bst-lv-create-result" style="margin-top: 12px;"></div>';
+    ?>
+    <script type="text/javascript">
+    jQuery(function($) {
+        var $btn = $('#bst-lv-create-rows');
+        var $spin = $('#bst-lv-create-spinner');
+        var $out = $('#bst-lv-create-result');
+        if (!$btn.length) {
+            return;
+        }
+        $btn.on('click', function() {
+            if (!confirm(<?php echo wp_json_encode( __( 'Add or update limited-vehicle rows on all matching tour dates? Backup recommended.', 'bst-plugin' ) ); ?>)) {
+                return;
+            }
+            $btn.prop('disabled', true);
+            $spin.addClass('is-active');
+            $out.empty();
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'bst_sync_limited_vehicles_create',
+                    nonce: <?php echo wp_json_encode( wp_create_nonce( 'bst_sync_limited_vehicles_create_nonce' ) ); ?>
+                }
+            }).done(function(res) {
+                if (res && res.success && res.data) {
+                    var d = res.data;
+                    var msg = (typeof d === 'string') ? d : (d.message || '');
+                    var hasErr = (typeof d === 'object' && d.has_errors);
+                    var cls = hasErr ? 'notice-warning' : 'notice-success';
+                    $out.html('<div class="notice ' + cls + ' inline"><p>' + $('<div/>').text(msg).html() + '</p></div>');
+                } else {
+                    var msg = (res && res.data) ? res.data : <?php echo wp_json_encode( __( 'Request failed.', 'bst-plugin' ) ); ?>;
+                    if (typeof msg === 'object' && msg.message) {
+                        msg = msg.message;
+                    }
+                    $out.html('<div class="notice notice-error inline"><p>' + $('<div/>').text(String(msg)).html() + '</p></div>');
+                }
+            }).fail(function() {
+                $out.html('<div class="notice notice-error inline"><p><?php echo esc_js( __( 'AJAX request failed.', 'bst-plugin' ) ); ?></p></div>');
+            }).always(function() {
+                $btn.prop('disabled', false);
+                $spin.removeClass('is-active');
+            });
+        });
+    });
+    </script>
+    <?php
+    echo '</div>';
+}
+
+/**
+ * Tools → set Sold on limited-vehicle rows from bookings; report oversold (sold &gt; max).
+ */
+function bst_limited_vehicles_sync_sold_tour_dates_callback() {
+    if ( ! function_exists( 'bst_migrate_limited_vehicles_sync_sold_batch' ) ) {
+        echo '<p class="description">' . esc_html__( 'Limited vehicles tools are not loaded.', 'bst-plugin' ) . '</p>';
+        return;
+    }
+
+    echo '<div class="bst-limited-vehicles-sync-sold" style="max-width: 720px;">';
+    echo '<p>' . esc_html__( 'Scans every tour date that has Limited vehicles rows. Sets each row’s Sold from bookings (active statuses: pending through completed and reserved; excludes Cancelled and Waiting List). Rows where the new Sold differs from the stored value are counted as updated. Lists any vehicle/date where sold exceeds max.', 'bst-plugin' ) . '</p>';
+    echo '<p style="margin-top: 12px;">';
+    echo '<button type="button" id="bst-lv-sync-sold" class="button button-secondary">';
+    echo esc_html__( 'Recalculate sold from bookings', 'bst-plugin' );
+    echo '</button>';
+    echo '<span id="bst-lv-sold-spinner" class="spinner" style="float: none; margin: 0 0 0 10px;"></span>';
+    echo '</p>';
+    echo '<div id="bst-lv-sold-result" style="margin-top: 12px;"></div>';
+    ?>
+    <script type="text/javascript">
+    jQuery(function($) {
+        var $btn = $('#bst-lv-sync-sold');
+        var $spin = $('#bst-lv-sold-spinner');
+        var $out = $('#bst-lv-sold-result');
+        if (!$btn.length) {
+            return;
+        }
+        $btn.on('click', function() {
+            if (!confirm(<?php echo wp_json_encode( __( 'Recalculate Sold on all limited-vehicle rows from bookings? Backup recommended.', 'bst-plugin' ) ); ?>)) {
+                return;
+            }
+            $btn.prop('disabled', true);
+            $spin.addClass('is-active');
+            $out.empty();
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'bst_sync_limited_vehicles_sold',
+                    nonce: <?php echo wp_json_encode( wp_create_nonce( 'bst_sync_limited_vehicles_sold_nonce' ) ); ?>
+                }
+            }).done(function(res) {
+                if (res && res.success && res.data) {
+                    var d = res.data;
+                    var msg = (typeof d === 'string') ? d : (d.message || '');
+                    var hasErr = (typeof d === 'object' && d.has_errors);
+                    var oversold = (typeof d === 'object' && d.oversold) ? d.oversold : [];
+                    var cls = hasErr ? 'notice-warning' : 'notice-success';
+                    var html = '<div class="notice ' + cls + ' inline"><p>' + $('<div/>').text(msg).html() + '</p>';
+                    if (oversold.length) {
+                        html += '<p><strong><?php echo esc_js( __( 'Oversold (sold greater than max):', 'bst-plugin' ) ); ?></strong></p><ul class="bst-lv-oversold-list" style="margin-left:1.25em; list-style: disc;">';
+                        oversold.forEach(function(line) {
+                            html += '<li>' + $('<div/>').text(line).html() + '</li>';
+                        });
+                        html += '</ul>';
+                    }
+                    html += '</div>';
+                    $out.html(html);
+                } else {
+                    var msg = (res && res.data) ? res.data : <?php echo wp_json_encode( __( 'Request failed.', 'bst-plugin' ) ); ?>;
+                    if (typeof msg === 'object' && msg.message) {
+                        msg = msg.message;
+                    }
+                    $out.html('<div class="notice notice-error inline"><p>' + $('<div/>').text(String(msg)).html() + '</p></div>');
+                }
+            }).fail(function() {
+                $out.html('<div class="notice notice-error inline"><p><?php echo esc_js( __( 'AJAX request failed.', 'bst-plugin' ) ); ?></p></div>');
+            }).always(function() {
+                $btn.prop('disabled', false);
+                $spin.removeClass('is-active');
+            });
+        });
+    });
+    </script>
+    <?php
     echo '</div>';
 }
 

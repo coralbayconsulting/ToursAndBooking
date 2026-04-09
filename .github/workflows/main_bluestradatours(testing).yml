@@ -1,0 +1,67 @@
+# TESTING — deploys to App Service slot "testing" on every push to main.
+# Staging slot uses main_bluestradatours(staging).yml (manual only).
+# Production uses deploy-production.yml (default slot, manual only).
+#
+# Docs: https://github.com/Azure/webapps-deploy
+
+name: Deploy to Azure — bluestradatours (TESTING slot)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zip artifact for deployment
+        run: zip release.zip ./* -r
+
+      - name: Upload artifact for deployment job
+        uses: actions/upload-artifact@v4
+        with:
+          name: wordpress-app
+          path: release.zip
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    # GitHub Environment — add matching federated credential in Azure if OIDC is environment-scoped:
+    # repo:<org>/<repo>:environment:testing
+    environment: testing
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download artifact from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: wordpress-app
+
+      - name: Unzip artifact for deployment
+        run: |
+          unzip release.zip
+          rm release.zip
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_4E938FD16E3D4ABB97873DF557913CF9 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_80D0218D465E49219EBC687AF0098B6B }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_BEF30C7BEE314963B77018828D554DC4 }}
+
+      - name: Deploy to Azure Web App (testing slot)
+        uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp
+        with:
+          app-name: 'bluestradatours'
+          slot-name: 'testing'
+          package: .

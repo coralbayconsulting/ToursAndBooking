@@ -995,6 +995,7 @@ add_filter(
         }
         $ordered['bst_vehicle_type']   = __( 'Type' );
         $ordered['bst_vehicle_active'] = __( 'Available To Assign' );
+        $ordered['bst_vehicle_limited'] = __( 'Limited' );
         $ordered['bst_vehicle_tours']    = __( 'On Tours' );
         $ordered['bst_vehicle_bookings'] = __( 'Used on Booking' );
         if ( isset( $columns['date'] ) ) {
@@ -1072,6 +1073,12 @@ add_action(
             return;
         }
 
+        if ( 'bst_vehicle_limited' === $column ) {
+            $lim = get_field( 'vehicle_usually_limited', $post_id );
+            echo $lim ? esc_html__( 'Yes' ) : esc_html__( 'No' );
+            return;
+        }
+
         if ( 'bst_vehicle_tours' === $column ) {
             $usage = bst_vehicle_usage_for_post( $post_id, get_the_title( $post_id ) );
             if ( empty( $usage ) ) {
@@ -1112,7 +1119,7 @@ add_action(
             return;
         }
 
-        if ( 'bst_vehicle_type' !== $column && 'bst_vehicle_active' !== $column && 'bst_vehicle_tours' !== $column && 'bst_vehicle_bookings' !== $column ) {
+        if ( 'bst_vehicle_type' !== $column && 'bst_vehicle_active' !== $column && 'bst_vehicle_limited' !== $column && 'bst_vehicle_tours' !== $column && 'bst_vehicle_bookings' !== $column ) {
             return;
         }
     },
