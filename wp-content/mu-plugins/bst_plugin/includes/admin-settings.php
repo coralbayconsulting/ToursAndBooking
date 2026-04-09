@@ -1735,6 +1735,32 @@ function bst_get_release_cleanup_tasks() {
 }
 
 /**
+ * Write release cleanup output lines to the PHP error log (e.g. wp-content/debug.log when WP_DEBUG_LOG is on).
+ *
+ * @param string[] $lines Result strings from cleanup tasks / migrations.
+ */
+function bst_log_release_cleanup_results( array $lines ) {
+	if ( empty( $lines ) ) {
+		return;
+	}
+	$prefix = '[BST release cleanup] ';
+	foreach ( $lines as $line ) {
+		if ( ! is_string( $line ) ) {
+			$line = wp_json_encode( $line );
+		}
+		$line = preg_replace( '/\s+/', ' ', trim( $line ) );
+		if ( '' === $line ) {
+			continue;
+		}
+		$tag = 'INFO';
+		if ( preg_match( '/\b(Warning|failed|error|Error)\b/i', $line ) ) {
+			$tag = 'WARNING';
+		}
+		error_log( $prefix . '[' . $tag . '] ' . $line );
+	}
+}
+
+/**
  * Execute cleanup tasks for the current release
  */
 function bst_execute_release_cleanup_tasks($tasks, $version, $force_rerun = false, $repair_repeater_links = false) {

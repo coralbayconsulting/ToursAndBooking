@@ -2353,6 +2353,10 @@ class BST_Plugin {
         try {
             // Execute cleanup tasks based on current version
             $results = bst_execute_release_cleanup_tasks($cleanup_tasks, $current_version, $force_rerun, $repair_repeater);
+
+            if ( function_exists( 'bst_log_release_cleanup_results' ) ) {
+                bst_log_release_cleanup_results( $results );
+            }
             
             // Mark each task complete under this version (preserves legacy metadata if present).
             $cleanup_status = get_option( 'bst_release_cleanup_status', array() );
@@ -2378,6 +2382,7 @@ class BST_Plugin {
             wp_send_json_success($message);
             
         } catch (Exception $e) {
+            error_log( '[BST release cleanup] [ERROR] ' . $e->getMessage() );
             wp_send_json_error('Cleanup failed: ' . $e->getMessage());
         }
     }

@@ -35,6 +35,41 @@ function bst_vehicle_migration_acf_repeater_selector_index( $php_zero_based ) {
 }
 
 /**
+ * Whether a repeater array key is valid for ACF (numeric index or row_* layout id).
+ *
+ * @param mixed $key Key from foreach ( $repeater as $key => $row ).
+ * @return bool
+ */
+function bst_vehicle_migration_is_acf_repeater_row_key( $key ) {
+	if ( is_int( $key ) || is_float( $key ) ) {
+		return $key >= 0;
+	}
+	if ( is_string( $key ) ) {
+		if ( preg_match( '/^row_[a-zA-Z0-9]+$/', $key ) ) {
+			return true;
+		}
+		if ( '' !== $key && ctype_digit( $key ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Value for update_sub_field() row position: pass through ACF row_* keys; map numeric indices via row_index_offset.
+ *
+ * @param mixed $key Repeater key from get_field().
+ * @return int|string
+ */
+function bst_vehicle_migration_repeater_key_for_subfield( $key ) {
+	if ( is_string( $key ) && preg_match( '/^row_[a-zA-Z0-9]+$/', $key ) ) {
+		return $key;
+	}
+	$num = is_numeric( $key ) ? (int) $key : 0;
+	return bst_vehicle_migration_acf_repeater_selector_index( $num );
+}
+
+/**
  * Nested "vehicles" rows from one vehicle_pricing row (handles name or field_* key).
  *
  * @param array $pricing_row One row from vehicle_pricing.
@@ -128,16 +163,20 @@ function bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tour_id
 
 	$all_ok = true;
 	foreach ( $cells as $c ) {
-		$i   = isset( $c['i'] ) ? (int) $c['i'] : -1;
-		$j   = isset( $c['j'] ) ? (int) $c['j'] : -1;
+		if ( ! isset( $c['i'], $c['j'] ) ) {
+			$all_ok = false;
+			continue;
+		}
+		$i   = $c['i'];
+		$j   = $c['j'];
 		$vid = isset( $c['vehicle_id'] ) ? (int) $c['vehicle_id'] : 0;
-		if ( $i < 0 || $j < 0 ) {
+		if ( ! bst_vehicle_migration_is_acf_repeater_row_key( $i ) || ! bst_vehicle_migration_is_acf_repeater_row_key( $j ) ) {
 			$all_ok = false;
 			continue;
 		}
 
-		$aci = bst_vehicle_migration_acf_repeater_selector_index( $i );
-		$acj = bst_vehicle_migration_acf_repeater_selector_index( $j );
+		$aci = bst_vehicle_migration_repeater_key_for_subfield( $i );
+		$acj = bst_vehicle_migration_repeater_key_for_subfield( $j );
 
 		$selectors = array(
 			array( 'vehicle_pricing', $aci, 'vehicles', $acj, 'vehicle_id' ),
@@ -164,11 +203,11 @@ function bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tour_id
 		if ( ! $wrote ) {
 			$all_ok = false;
 			$results[] = sprintf(
-				'Warning: update_sub_field failed for tour %1$d (%2$s) package row %3$d vehicle row %4$d (vehicle_id %5$d).',
+				'Warning: update_sub_field failed for tour %1$d (%2$s) package row %3$s vehicle row %4$s (vehicle_id %5$d).',
 				$tour_id,
 				get_the_title( $tour_id ),
-				$i,
-				$j,
+				is_scalar( $i ) ? (string) $i : '',
+				is_scalar( $j ) ? (string) $j : '',
 				$vid
 			);
 		}
