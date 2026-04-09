@@ -295,6 +295,10 @@ function bst_vehicle_migration_resolve_row_id( array $vehicle_item, $tour_id, ar
 function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_links_from_text = false ) {
 	global $wpdb;
 
+	if ( function_exists( 'bst_ensure_tour_booking_vehicle_id_columns' ) ) {
+		bst_ensure_tour_booking_vehicle_id_columns();
+	}
+
 	$results        = array();
 	$norm_to_id     = array();
 	$vehicles_by_id = array();
