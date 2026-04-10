@@ -3053,12 +3053,14 @@ jQuery(document).ready(function($) {
                     '<select id="vehicle1" name="vehicle1">' +
                         '<option value="">Select a Vehicle</option>' +
                     '</select>' +
+                    '<p class="description bst-vehicle-limited-note" style="display:none;margin-top:6px;" aria-live="polite"></p>' +
                 '</div>' +
                 '<div class="edit-form-field" id="vehicle2-field"' + vehicle2Style + '>' +
                     '<label for="vehicle2">Vehicle 2</label>' +
                     '<select id="vehicle2" name="vehicle2">' +
                         '<option value="">Select a Vehicle</option>' +
                     '</select>' +
+                    '<p class="description bst-vehicle-limited-note" style="display:none;margin-top:6px;" aria-live="polite"></p>' +
                 '</div>' +
             '</div>' +
         '</div>';
@@ -3409,6 +3411,41 @@ jQuery(document).ready(function($) {
         });
     }
     
+    function formatBstVehicleLimitedNote(sold, maxSlots) {
+        var tpl = window.bstVehicleLimitedNoteTemplate || 'Tour date manual count for this model: {{sold}} sold (max {{max}}). This booking is included in that total.';
+        return tpl.replace(/\{\{sold\}\}/g, String(sold)).replace(/\{\{max\}\}/g, String(maxSlots));
+    }
+
+    function updateVehicleLimitedNotes($tile) {
+        function sync($sel) {
+            var $note = $sel.siblings('.bst-vehicle-limited-note');
+            if (!$note.length) {
+                return;
+            }
+            var $opt = $sel.find('option:selected');
+            var vid = $sel.val();
+            if (!vid) {
+                $note.hide().text('');
+                return;
+            }
+            var maxV = $opt.attr('data-limited-max');
+            var soldV = $opt.attr('data-limited-sold');
+            if (maxV === undefined || maxV === '' || soldV === undefined || soldV === '') {
+                $note.hide().text('');
+                return;
+            }
+            var maxSlots = parseInt(maxV, 10);
+            var sold = parseInt(soldV, 10);
+            if (isNaN(maxSlots) || maxSlots <= 0 || isNaN(sold)) {
+                $note.hide().text('');
+                return;
+            }
+            $note.text(formatBstVehicleLimitedNote(sold, maxSlots)).show();
+        }
+        sync($tile.find('#vehicle1'));
+        sync($tile.find('#vehicle2'));
+    }
+
     function loadVehicles($tile, tourId, packageId) {
         var booking = window.bstBookingData || {};
         var vehicleChoices = parseInt(booking.vehicle_choices, 10) || 0;
@@ -3462,6 +3499,9 @@ jQuery(document).ready(function($) {
                                 .attr('data-price', vehicle.price || 0)
                                 .attr('data-text', vtext)
                                 .text(vtext);
+                            if (vehicle.limited_max != null && vehicle.limited_sold != null) {
+                                $opt.attr('data-limited-max', vehicle.limited_max).attr('data-limited-sold', vehicle.limited_sold);
+                            }
                             
                             // Populate vehicle1 if it's visible
                             if ($vehicle1Select.closest('.edit-form-field').is(':visible')) {
@@ -3491,6 +3531,7 @@ jQuery(document).ready(function($) {
                         
                         // Add change handlers for vehicle selection
                         $vehicle1Select.off('change.vehiclePrice').on('change.vehiclePrice', function() {
+                            updateVehicleLimitedNotes($tile);
                             // First update the extension price/label with new motorcycle upcharge
                             updateExtensionPriceAndLabel($tile);
                             // Then recalculate complete tour price from scratch
@@ -3498,11 +3539,14 @@ jQuery(document).ready(function($) {
                         });
                         
                         $vehicle2Select.off('change.vehiclePrice').on('change.vehiclePrice', function() {
+                            updateVehicleLimitedNotes($tile);
                             // First update the extension price/label with new motorcycle upcharge
                             updateExtensionPriceAndLabel($tile);
                             // Then recalculate complete tour price from scratch
                             calculateCompleteTourPrice($tile);
                         });
+                        
+                        updateVehicleLimitedNotes($tile);
                         
                         // Trigger initial calculation if vehicles are already selected
                         if (booking.vehicle1 || booking.vehicle2) {
@@ -3525,6 +3569,8 @@ jQuery(document).ready(function($) {
         
         $vehicle1.html('<option value="">Select a Vehicle</option>');
         $vehicle2.html('<option value="">Select a Vehicle</option>');
+        
+        $tile.find('.bst-vehicle-limited-note').hide().text('');
         
         // Remove vehicle change handlers
         $vehicle1.off('change.vehiclePrice');
@@ -4194,6 +4240,9 @@ jQuery(document).ready(function($) {
     window.originalTourPrice = <?php echo json_encode($booking->tour_price ?? 0); ?>;
     window.ajaxurl = '<?php echo admin_url('admin-ajax.php'); ?>';
     window.bstTourBookingsNonce = '<?php echo wp_create_nonce('bst_tour_bookings_nonce'); ?>';
+    window.bstVehicleLimitedNoteTemplate = <?php echo wp_json_encode(
+        __( 'Tour date manual count for this model: {{sold}} sold (max {{max}}). This booking is included in that total.', 'bst-plugin' )
+    ); ?>;
     
     <?php
     // Get extension settings from the tour if booking has a tour_id

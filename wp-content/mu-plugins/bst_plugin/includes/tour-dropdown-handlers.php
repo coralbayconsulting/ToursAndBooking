@@ -393,13 +393,17 @@ function get_vehicle_data() {
                 $symbol    = ($currency === 'USD') ? '$' : '€';
                 $abs_price = abs($price);
 
+                $limited_row_stats = null;
+                if ( $tour_date_id > 0 && function_exists( 'bst_limited_vehicle_max_sold_for_vehicle' ) ) {
+                    $limited_row_stats = bst_limited_vehicle_max_sold_for_vehicle( $tour_date_id, $vehicle_id );
+                }
                 $raw_limited_remaining = null;
-                if ($tour_date_id > 0 && function_exists('bst_limited_vehicle_slots_remaining')) {
-                    $raw_limited_remaining = bst_limited_vehicle_slots_remaining($tour_date_id, $vehicle_id);
+                if ( $limited_row_stats !== null ) {
+                    $raw_limited_remaining = max( 0, (int) $limited_row_stats['max'] - (int) $limited_row_stats['sold'] );
                 }
 
                 $limited_display_remaining = null;
-                if ($raw_limited_remaining !== null && function_exists('bst_limited_vehicle_slots_remaining_for_display')) {
+                if ( $raw_limited_remaining !== null && function_exists( 'bst_limited_vehicle_slots_remaining_for_display' ) ) {
                     $limited_display_remaining = bst_limited_vehicle_slots_remaining_for_display(
                         $tour_date_id,
                         $vehicle_id,
@@ -444,6 +448,8 @@ function get_vehicle_data() {
                     'data-id' => $class, // Vehicle class ID
                     'vehicle_id' => $vehicle_id,
                     'unavailable' => $limited_sold_out_block,
+                    'limited_max' => $limited_row_stats ? (int) $limited_row_stats['max'] : null,
+                    'limited_sold' => $limited_row_stats ? (int) $limited_row_stats['sold'] : null,
                     '_order' => $vehicle_row_order++,
                 );
             }
