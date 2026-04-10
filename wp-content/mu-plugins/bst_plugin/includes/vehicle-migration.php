@@ -144,8 +144,68 @@ function bst_vehicle_migration_row_linked_post_id( array $vrow ) {
  */
 function bst_vehicle_migration_assign_vehicle_id_on_nested_row( array &$vrow, $new_id ) {
 	$new_id = (int) $new_id;
+	// Post object field (allow null): use false for empty so ACF accepts the row on bulk save.
+	if ( $new_id <= 0 ) {
+		$vrow['vehicle_id']                        = false;
+		$vrow[ BST_VEHICLE_ROW_POST_OBJECT_KEY ] = false;
+		return;
+	}
 	$vrow['vehicle_id']                        = $new_id;
 	$vrow[ BST_VEHICLE_ROW_POST_OBJECT_KEY ] = $new_id;
+}
+
+/**
+ * After get_field(…, true), nested vehicle_id cells may still be WP_Post objects on unchanged rows.
+ * Passing that mixed tree to update_field() often returns false (ACF cannot round-trip objects). Force every
+ * nested row to scalar IDs (or false) before save.
+ *
+ * @param array $pricing vehicle_pricing repeater (by reference).
+ */
+function bst_vehicle_migration_normalize_vehicle_pricing_for_save( array &$pricing ) {
+	foreach ( $pricing as $i => &$row ) {
+		if ( ! is_array( $row ) ) {
+			continue;
+		}
+		$nested_key = null;
+		if ( ! empty( $row['vehicles'] ) && is_array( $row['vehicles'] ) ) {
+			$nested_key = 'vehicles';
+		} elseif ( ! empty( $row[ BST_VEHICLE_NESTED_REPEATER_KEY ] ) && is_array( $row[ BST_VEHICLE_NESTED_REPEATER_KEY ] ) ) {
+			$nested_key = BST_VEHICLE_NESTED_REPEATER_KEY;
+		}
+		if ( ! $nested_key ) {
+			continue;
+		}
+		foreach ( $row[ $nested_key ] as $j => $vrow ) {
+			if ( ! is_array( $vrow ) ) {
+				continue;
+			}
+			$vid = bst_vehicle_migration_row_linked_post_id( $vrow );
+			bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing[ $i ][ $nested_key ][ $j ], $vid );
+		}
+	}
+	unset( $row );
+}
+
+/**
+ * Always persist migration text to the DB + one short FPM line (full release log can miss long runs).
+ *
+ * @param array $results Log lines.
+ */
+function bst_vehicle_migration_persist_run_to_options( array $results ) {
+	$text = implode( "\n", $results );
+	if ( strlen( $text ) > 800000 ) {
+		$text = substr( $text, 0, 800000 ) . "\n... [truncated]";
+	}
+	$payload = array(
+		'time'  => current_time( 'mysql' ),
+		'utc'   => microtime( true ),
+		'text'  => $text,
+		'lines' => $results,
+	);
+	update_option( 'bst_migration_last_run', $payload, false );
+	set_transient( 'bst_migration_last_run_copy', $payload, WEEK_IN_SECONDS );
+	// Single line so it always appears next to other cron lines in php-fpm.www.log.
+	error_log( '[BST] vehicle migration finished — full output in WP Tools (option bst_migration_last_run). Line count: ' . count( $results ) );
 }
 
 /**
@@ -425,6 +485,7 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false ) {
 		$tid = (int) $tid;
 		if ( ! function_exists( 'get_field' ) || ! function_exists( 'update_field' ) ) {
 			$results[] = 'ACF/SCF not available; aborting tour updates.';
+			bst_vehicle_migration_persist_run_to_options( $results );
 			return $results;
 		}
 
@@ -482,6 +543,8 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false ) {
 			if ( function_exists( 'acf_get_field_groups' ) ) {
 				acf_get_field_groups( array( 'post_id' => $tid ) );
 			}
+			// Critical: unchanged rows may still have vehicle_id as WP_Post; bulk update_field rejects that.
+			bst_vehicle_migration_normalize_vehicle_pricing_for_save( $pricing );
 			bst_vehicle_migration_bust_caches_for_tour( $tid );
 			$ok = false;
 			foreach ( array( $tid, 'post_' . $tid ) as $post_ref ) {
@@ -591,6 +654,8 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false ) {
 
 	$results[] = sprintf( 'Bookings updated with vehicle IDs: %d', $b_updated );
 	$results[] = sprintf( 'Vehicle CPT count after migration: %d', count( $vehicles_by_id ) );
+
+	bst_vehicle_migration_persist_run_to_options( $results );
 
 	return $results;
 }

@@ -1738,6 +1738,9 @@ function bst_log_release_cleanup_results( array $lines ) {
 		return;
 	}
 
+	// One short line first — always visible next to other BST lines in php-fpm.www.log.
+	error_log( '[BST] release cleanup: persisting ' . count( $lines ) . ' result line(s) (see wp_options bst_last_release_cleanup_log).' );
+
 	$prefix = '[BST release cleanup] ';
 	$full_text = '';
 	foreach ( $lines as $line ) {

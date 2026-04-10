@@ -2,6 +2,7 @@
 $error_log_path = bst_get_tools_error_log_path();
 $release_cleanup_log_path = function_exists( 'bst_get_release_cleanup_log_path' ) ? bst_get_release_cleanup_log_path() : trailingslashit( WP_CONTENT_DIR ) . 'bst-release-cleanup.log';
 $bst_last_release_cleanup_log = get_option( 'bst_last_release_cleanup_log', null );
+$bst_migration_last_run       = get_option( 'bst_migration_last_run', null );
 $upload_dir = wp_upload_dir();
 $bst_release_cleanup_upload_path = ( empty( $upload_dir['error'] ) ) ? trailingslashit( $upload_dir['basedir'] ) . 'bst-plugin-logs/release-cleanup.log' : '';
 
@@ -39,6 +40,15 @@ $current_time = time();
 
 <div class="wrap">
     <h1>Tools</h1>
+
+    <?php if ( is_array( $bst_migration_last_run ) && ! empty( $bst_migration_last_run['text'] ) ) : ?>
+    <div class="notice notice-info" style="margin:12px 0 20px;">
+        <p><strong>Last vehicle migration (database)</strong> — <?php echo esc_html( isset( $bst_migration_last_run['time'] ) ? $bst_migration_last_run['time'] : '' ); ?>. This is saved even when PHP-FPM log lines are missing.</p>
+        <div class="bst-tools-error-log-box" style="max-height:320px; overflow-y:auto; white-space:pre-wrap; font-family:monospace; font-size:12px; background:#fff; padding:12px;">
+            <?php echo esc_html( $bst_migration_last_run['text'] ); ?>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <h2>Deployment Tools</h2>
     <table class="form-table">
