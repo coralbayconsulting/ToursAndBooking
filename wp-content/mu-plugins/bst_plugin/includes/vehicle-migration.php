@@ -129,7 +129,23 @@ function bst_vehicle_migration_row_linked_post_id( array $vrow ) {
 	if ( is_array( $linked ) && isset( $linked['ID'] ) ) {
 		return (int) $linked['ID'];
 	}
+	if ( is_object( $linked ) && isset( $linked->ID ) ) {
+		return (int) $linked->ID;
+	}
 	return (int) $linked;
+}
+
+/**
+ * Set Vehicle CPT id on a nested repeater row. ACF often stores the post object under both name and field_* key;
+ * writing only one can leave stale meta and make update_field / update_sub_field fail (especially after raw DB loads).
+ *
+ * @param array $vrow   Nested vehicles row (by reference).
+ * @param int   $new_id Vehicle post ID.
+ */
+function bst_vehicle_migration_assign_vehicle_id_on_nested_row( array &$vrow, $new_id ) {
+	$new_id = (int) $new_id;
+	$vrow['vehicle_id']                        = $new_id;
+	$vrow[ BST_VEHICLE_ROW_POST_OBJECT_KEY ] = $new_id;
 }
 
 /**
@@ -351,12 +367,9 @@ function bst_vehicle_migration_resolve_row_id( array $vehicle_item, $tour_id, ar
  *
  * @param bool $force_reset When true (Tools → force rerun), delete all Vehicle CPT posts first, ignore stored
  *                          repeater IDs, and recompute booking vehicle*_id from text every time.
- * @param bool $repair_repeater_links_from_text When true, re-derive each tour repeater row's vehicle_id from the
- *                          legacy label text only (ignore stored post object). Does not delete Vehicle CPTs.
- *                          Use after bad per-cell saves misaligned IDs with rows. Safe with fixed update_sub_field indexing.
  * @return string[] Log lines for admin UI.
  */
-function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_links_from_text = false ) {
+function bst_migrate_vehicle_cpt_links( $force_reset = false ) {
 	global $wpdb;
 
 	if ( function_exists( 'bst_ensure_tour_booking_vehicle_id_columns' ) ) {
@@ -367,10 +380,12 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 	$norm_to_id     = array();
 	$vehicles_by_id = array();
 	$force_reset    = (bool) $force_reset;
-	$repair_repeater_links_from_text = (bool) $repair_repeater_links_from_text;
 
-	if ( $repair_repeater_links_from_text && ! $force_reset ) {
-		$results[] = 'Repair mode: re-deriving tour repeater vehicle_id from label text (ignoring stored Vehicle CPT links). Vehicle posts are not deleted.';
+	if ( function_exists( 'acf_get_setting' ) ) {
+		$results[] = sprintf(
+			'ACF row_index_offset=%s (repeater selectors use this; 1 = first row is index 1).',
+			var_export( acf_get_setting( 'row_index_offset' ), true )
+		);
 	}
 
 	if ( $force_reset ) {
@@ -414,8 +429,8 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 		}
 
 		bst_vehicle_migration_bust_caches_for_tour( $tid );
-		// Unformatted (raw) values round-trip through update_field; formatted values can break nested repeaters.
-		$pricing = get_field( 'vehicle_pricing', $tid, false );
+		// Formatted values match the field registry (names/return formats). We also set both name + field_* keys on write.
+		$pricing = get_field( 'vehicle_pricing', $tid, true );
 		if ( empty( $pricing ) || ! is_array( $pricing ) ) {
 			continue;
 		}
@@ -437,25 +452,19 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 					continue;
 				}
 				$rows_seen++;
-				$ignore_linked = $force_reset || $repair_repeater_links_from_text;
+				$ignore_linked = $force_reset;
 				$new_id        = bst_vehicle_migration_resolve_row_id( $vrow, $tid, $norm_to_id, $vehicles_by_id, $ignore_linked );
 				$old           = bst_vehicle_migration_row_linked_post_id( $vrow );
 				$write         = false;
 
 				if ( $force_reset ) {
 					if ( $old !== $new_id ) {
-						$pricing[ $i ][ $nested_key ][ $j ]['vehicle_id'] = $new_id;
-						$write = true;
-						$rows_touched++;
-					}
-				} elseif ( $repair_repeater_links_from_text ) {
-					if ( $new_id > 0 && $old !== $new_id ) {
-						$pricing[ $i ][ $nested_key ][ $j ]['vehicle_id'] = $new_id;
+						bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing[ $i ][ $nested_key ][ $j ], $new_id );
 						$write = true;
 						$rows_touched++;
 					}
 				} elseif ( $new_id > 0 && $old !== $new_id ) {
-					$pricing[ $i ][ $nested_key ][ $j ]['vehicle_id'] = $new_id;
+					bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing[ $i ][ $nested_key ][ $j ], $new_id );
 					$write = true;
 					$rows_touched++;
 				}

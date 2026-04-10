@@ -1420,12 +1420,8 @@ function bst_release_data_cleanup_callback() {
     echo '<label><input type="checkbox" id="force-rerun-cleanup" value="1"> ';
     echo '<strong>Force reset vehicle migration</strong> — permanently deletes <em>all</em> Vehicle CPT posts, then rebuilds them from tour repeater labels and booking vehicle text, and rewrites <code>vehicle_id</code> / <code>vehicle1_id</code> / <code>vehicle2_id</code>. Leave unchecked for a normal run (keeps existing Vehicle posts and only fills missing links).';
     echo '</label></div>';
-    echo '<div style="margin: 15px 0;">';
-    echo '<label><input type="checkbox" id="repair-repeater-vehicle-links" value="1"> ';
-    echo '<strong>Repair tour repeater Vehicle (CPT) links from label text</strong> — re-assigns each nested row’s <code>vehicle_id</code> by matching the <em>Vehicle</em> label to existing Vehicle CPT titles (ignores the current CPT pick). Does <em>not</em> delete Vehicle posts. Use this if links look scrambled (wrong model in the CPT column); a bug in per-cell saves used 0-based row numbers where ACF expects 1-based.';
-    echo '</label></div>';
     if ($already_run) {
-        echo '<p class="description" style="margin-top:-8px;">To run again after completion, check <strong>Force reset</strong> and/or <strong>Repair tour repeater links</strong> above.</p>';
+        echo '<p class="description" style="margin-top:-8px;">To run again after completion, check <strong>Force reset vehicle migration</strong> above.</p>';
     }
     
     echo '<button type="button" id="cleanup-release-data" class="button button-primary" style="margin-top: 15px;" title="Run release-specific data cleanup tasks">';
@@ -1447,13 +1443,11 @@ function bst_release_data_cleanup_callback() {
             var $spinner = $('#cleanup-release-spinner');
             var $result = $('#cleanup-release-result');
             var $forceCheckbox = $('#force-rerun-cleanup');
-            var $repairCheckbox = $('#repair-repeater-vehicle-links');
             var forceRerun = $forceCheckbox.is(':checked');
-            var repairRepeater = $repairCheckbox.is(':checked');
             var alreadyRun = <?php echo $already_run ? 'true' : 'false'; ?>;
             
-            if (alreadyRun && !forceRerun && !repairRepeater) {
-                alert('Please check "Force reset vehicle migration" and/or "Repair tour repeater Vehicle (CPT) links from label text" to run cleanup again for this version.');
+            if (alreadyRun && !forceRerun) {
+                alert('Please check "Force reset vehicle migration" to run cleanup again for this version.');
                 return;
             }
             
@@ -1481,8 +1475,7 @@ function bst_release_data_cleanup_callback() {
                 data: {
                     action: 'bst_release_data_cleanup',
                     nonce: '<?php echo wp_create_nonce("bst_release_cleanup_nonce"); ?>',
-                    force: forceRerun ? 'true' : 'false',
-                    repair_repeater: repairRepeater ? 'true' : 'false'
+                    force: forceRerun ? 'true' : 'false'
                 },
                 success: function(response) {
                     $spinner.hide();
@@ -1715,7 +1708,7 @@ function bst_get_release_cleanup_tasks() {
         '1.0.0' => array(
             array(
                 'name' => 'Migrate vehicle CPT links',
-                'description' => 'Link tour vehicle repeater rows and bookings to Vehicle CPT posts (normalized / compact title match only; no similar-text guessing). Sets vehicle type from tour Type Code (Driving→car, Motorcycle→motorcycle). Use “Force reset vehicle migration” to wipe all Vehicle posts and rebuild. Use “Repair tour repeater links from label text” if CPT picks are wrong but labels are right (fixes misaligned per-cell saves). Sync ACF JSON for Vehicle + Tour before running.'
+                'description' => 'Link tour vehicle repeater rows and bookings to Vehicle CPT posts (normalized / compact title match only; no similar-text guessing). Sets vehicle type from tour Type Code (Driving→car, Motorcycle→motorcycle). Use “Force reset vehicle migration” to wipe all Vehicle posts and rebuild. Sync ACF JSON for Vehicle + Tour before running.'
             )
         ),
         // Example for future releases:
@@ -1735,8 +1728,8 @@ function bst_get_release_cleanup_tasks() {
 }
 
 /**
- * Write release cleanup output lines to the PHP error log (e.g. wp-content/debug.log when WP_DEBUG_LOG is on).
- * Also appends to wp-content/bst-release-cleanup.log so hosts without debug.log still have a trail.
+ * Write release cleanup output lines to: PHP error_log, wp-content file, uploads dir file, and option
+ * bst_last_release_cleanup_log (so Tools can always show output even when the filesystem is read-only).
  *
  * @param string[] $lines Result strings from cleanup tasks / migrations.
  */
@@ -1744,16 +1737,9 @@ function bst_log_release_cleanup_results( array $lines ) {
 	if ( empty( $lines ) ) {
 		return;
 	}
-	$log_path = function_exists( 'bst_get_release_cleanup_log_path' ) ? bst_get_release_cleanup_log_path() : trailingslashit( WP_CONTENT_DIR ) . 'bst-release-cleanup.log';
-	$header   = sprintf(
-		"[%s] — %d line(s)\n",
-		current_time( 'mysql' ),
-		count( $lines )
-	);
-	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- log file may be unwritable on misconfigured hosts.
-	@file_put_contents( $log_path, $header, FILE_APPEND | LOCK_EX );
 
 	$prefix = '[BST release cleanup] ';
+	$full_text = '';
 	foreach ( $lines as $line ) {
 		if ( ! is_string( $line ) ) {
 			$line = wp_json_encode( $line );
@@ -1766,30 +1752,63 @@ function bst_log_release_cleanup_results( array $lines ) {
 		if ( preg_match( '/\b(Warning|failed|error|Error)\b/i', $line ) ) {
 			$tag = 'WARNING';
 		}
-		$out = $prefix . '[' . $tag . '] ' . $line . "\n";
-		error_log( $prefix . '[' . $tag . '] ' . $line );
-		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-		@file_put_contents( $log_path, $out, FILE_APPEND | LOCK_EX );
+		$out_line = $prefix . '[' . $tag . '] ' . $line;
+		error_log( $out_line );
+		$full_text .= $out_line . "\n";
 	}
-	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-	@file_put_contents( $log_path, "\n", FILE_APPEND | LOCK_EX );
+
+	update_option(
+		'bst_last_release_cleanup_log',
+		array(
+			'time'    => current_time( 'mysql' ),
+			'text'    => $full_text,
+			'lines'   => $lines,
+			'success' => true,
+		),
+		false
+	);
+
+	$log_path = function_exists( 'bst_get_release_cleanup_log_path' ) ? bst_get_release_cleanup_log_path() : trailingslashit( WP_CONTENT_DIR ) . 'bst-release-cleanup.log';
+	$header   = sprintf(
+		"[%s] — %d line(s)\n",
+		current_time( 'mysql' ),
+		count( $lines )
+	);
+	$payload  = $header . $full_text . "\n";
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- log destination may be read-only; DB copy still exists.
+	$w = @file_put_contents( $log_path, $payload, FILE_APPEND | LOCK_EX );
+	if ( false === $w ) {
+		error_log( '[BST release cleanup] [ERROR] Could not append to ' . $log_path );
+	}
+
+	$upload = wp_upload_dir();
+	if ( empty( $upload['error'] ) ) {
+		$dir = trailingslashit( $upload['basedir'] ) . 'bst-plugin-logs';
+		if ( wp_mkdir_p( $dir ) ) {
+			$up_log = trailingslashit( $dir ) . 'release-cleanup.log';
+			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			$w2 = @file_put_contents( $up_log, $payload, FILE_APPEND | LOCK_EX );
+			if ( false === $w2 ) {
+				error_log( '[BST release cleanup] [ERROR] Could not append to ' . $up_log );
+			}
+		}
+	}
 }
 
 /**
  * Execute cleanup tasks for the current release
  */
-function bst_execute_release_cleanup_tasks($tasks, $version, $force_rerun = false, $repair_repeater_links = false) {
+function bst_execute_release_cleanup_tasks($tasks, $version, $force_rerun = false) {
     global $wpdb;
     $results = array();
     $force_rerun = (bool) $force_rerun;
-    $repair_repeater_links = (bool) $repair_repeater_links;
     
     // Execute each cleanup task
     foreach ($tasks as $task) {
         switch ($task['name']) {
             case 'Migrate vehicle CPT links':
                 if ( function_exists( 'bst_migrate_vehicle_cpt_links' ) ) {
-                    $results = array_merge( $results, bst_migrate_vehicle_cpt_links( $force_rerun, $repair_repeater_links ) );
+                    $results = array_merge( $results, bst_migrate_vehicle_cpt_links( $force_rerun ) );
                 } else {
                     $results[] = 'Vehicle migration function not loaded.';
                 }

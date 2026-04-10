@@ -1,6 +1,9 @@
 <?php
 $error_log_path = bst_get_tools_error_log_path();
 $release_cleanup_log_path = function_exists( 'bst_get_release_cleanup_log_path' ) ? bst_get_release_cleanup_log_path() : trailingslashit( WP_CONTENT_DIR ) . 'bst-release-cleanup.log';
+$bst_last_release_cleanup_log = get_option( 'bst_last_release_cleanup_log', null );
+$upload_dir = wp_upload_dir();
+$bst_release_cleanup_upload_path = ( empty( $upload_dir['error'] ) ) ? trailingslashit( $upload_dir['basedir'] ) . 'bst-plugin-logs/release-cleanup.log' : '';
 
 // Handle a download request BEFORE any output so headers can be sent.
 bst_tools_maybe_send_error_log_download();
@@ -127,12 +130,17 @@ $current_time = time();
     <h2>Error Log</h2>
     <div class="bst-tools-section">
         <p>View and manage PHP error logs for debugging issues.</p>
+        <p class="description" style="max-width:920px;">
+            Code that calls PHP’s <code>error_log()</code> (including BST release cleanup, Airwallex/exchange-rate tasks, and most plugins) writes to the file configured in PHP’s <code>error_log</code> directive — set in <strong>php.ini</strong> or your <strong>PHP-FPM pool</strong> (or equivalent). That is independent of the web server brand (nginx, IIS, etc.); it is not an Apache-only feature.
+            WordPress’s <code>WP_DEBUG_LOG</code> in <code>wp-config.php</code> is separate: when enabled, WordPress also appends to <code>wp-content/debug.log</code>.
+            <strong>This page shows one file:</strong> we prefer the INI path when that file exists and is readable; otherwise we fall back to <code>debug.log</code> or other known locations. On a new testing host, if the INI path is empty or points somewhere the web user cannot read, use the <strong>Release cleanup &amp; migration log</strong> section below (database copy) or align <code>WP_DEBUG_LOG</code> + <code>debug.log</code> with your host docs.
+        </p>
+        <p><strong>PHP <code>error_log</code> (INI):</strong> <code><?php echo esc_html( function_exists( 'bst_tools_get_ini_error_log_display' ) ? bst_tools_get_ini_error_log_display() : ini_get( 'error_log' ) ); ?></code></p>
+        <p><strong>File used by this viewer:</strong> <code><?php echo esc_html( $error_log_path ); ?></code></p>
 
         <?php if (isset($_GET['download_error']) && $_GET['download_error'] === 'headers_sent') : ?>
             <div class="notice notice-error"><p>Error: Could not download log file. Headers already sent. This may be due to output before the download request.</p></div>
         <?php endif; ?>
-
-        <p><strong>Error log path:</strong> <code><?php echo esc_html($error_log_path); ?></code></p>
 
         <?php if (file_exists($error_log_path)) : ?>
             <?php
@@ -179,8 +187,24 @@ $current_time = time();
 
     <h2>Release cleanup &amp; migration log</h2>
     <div class="bst-tools-section">
-        <p>Lines from <strong>Release data cleanup</strong> (vehicle migration, warnings, summary) are appended here, in addition to the PHP error log when configured.</p>
-        <p><strong>Log path:</strong> <code><?php echo esc_html( $release_cleanup_log_path ); ?></code></p>
+        <p><strong>Last run (database)</strong> — this is updated every time release cleanup finishes. Use it if <code>wp-content</code> log files are missing or not writable.</p>
+        <?php if ( is_array( $bst_last_release_cleanup_log ) && ! empty( $bst_last_release_cleanup_log['time'] ) ) : ?>
+            <p><strong>Recorded at:</strong> <?php echo esc_html( $bst_last_release_cleanup_log['time'] ); ?></p>
+            <div class="bst-tools-error-log-box" style="max-height:400px; overflow-y:auto; white-space:pre-wrap; font-family:monospace; font-size:12px;">
+                <?php echo esc_html( isset( $bst_last_release_cleanup_log['text'] ) ? $bst_last_release_cleanup_log['text'] : '' ); ?>
+            </div>
+        <?php else : ?>
+            <p><em>No release cleanup output stored yet. Run <strong>Release data cleanup</strong> from plugin settings.</em></p>
+        <?php endif; ?>
+
+        <p style="margin-top:18px;"><strong>Append-only files</strong> (when the server allows writes):</p>
+        <ul style="list-style:disc; margin-left:1.25em;">
+            <li><code><?php echo esc_html( $release_cleanup_log_path ); ?></code></li>
+            <?php if ( $bst_release_cleanup_upload_path ) : ?>
+                <li><code><?php echo esc_html( $bst_release_cleanup_upload_path ); ?></code> (uploads)</li>
+            <?php endif; ?>
+        </ul>
+        <p><strong>File tail (wp-content log):</strong></p>
         <?php if ( file_exists( $release_cleanup_log_path ) ) : ?>
             <?php
             $rc_size = filesize( $release_cleanup_log_path );
