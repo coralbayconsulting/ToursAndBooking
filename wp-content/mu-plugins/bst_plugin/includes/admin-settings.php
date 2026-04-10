@@ -1423,7 +1423,19 @@ function bst_release_data_cleanup_callback() {
     if ($already_run) {
         echo '<p class="description" style="margin-top:-8px;">To run again after completion, check <strong>Force reset vehicle migration</strong> above.</p>';
     }
-    
+
+    $last_mig = get_option( 'bst_migration_last_run', null );
+    if ( is_array( $last_mig ) && ! empty( $last_mig['text'] ) ) {
+        echo '<div class="bst-saved-cleanup-output" style="margin: 20px 0; padding: 12px; background: #f6f7f7; border: 1px solid #c3c4c7; border-radius: 4px; max-width: 960px;">';
+        echo '<p style="margin: 0 0 8px;"><strong>' . esc_html__( 'Last saved migration output', 'bst-plugin' ) . '</strong> ';
+        echo '<span class="description">(' . esc_html( isset( $last_mig['time'] ) ? $last_mig['time'] : '' ) . ' — ' . esc_html__( 'copy this for support', 'bst-plugin' ) . ')</span></p>';
+        echo '<textarea readonly rows="16" id="bst-saved-migration-textarea" style="width:100%; max-width:100%; font-family: Consolas, Monaco, monospace; font-size: 12px; box-sizing: border-box;">';
+        echo esc_textarea( $last_mig['text'] );
+        echo '</textarea>';
+        echo '<p style="margin: 8px 0 0;"><button type="button" class="button" id="bst-copy-saved-migration">' . esc_html__( 'Copy saved output', 'bst-plugin' ) . '</button></p>';
+        echo '</div>';
+    }
+
     echo '<button type="button" id="cleanup-release-data" class="button button-primary" style="margin-top: 15px;" title="Run release-specific data cleanup tasks">';
     echo '<span class="dashicons dashicons-admin-tools" style="margin-right: 5px;"></span>';
     echo $already_run ? 'Rerun Release Data Cleanup' : 'Run Release Data Cleanup';
@@ -1438,6 +1450,18 @@ function bst_release_data_cleanup_callback() {
     ?>
     <script type="text/javascript">
     jQuery(document).ready(function($) {
+        $('#bst-copy-saved-migration').on('click', function() {
+            var ta = document.getElementById('bst-saved-migration-textarea');
+            if (!ta) return;
+            ta.focus();
+            ta.select();
+            try {
+                document.execCommand('copy');
+            } catch (e) {}
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(ta.value);
+            }
+        });
         $('#cleanup-release-data').on('click', function() {
             var $button = $(this);
             var $spinner = $('#cleanup-release-spinner');
@@ -1481,16 +1505,27 @@ function bst_release_data_cleanup_callback() {
                     $spinner.hide();
                     
                     if (response.success) {
-                        $result.html('<div class="notice notice-success"><p>' + response.data + '</p></div>');
+                        var text = (typeof response.data === 'string') ? response.data : '';
+                        var $box = $('<div class="notice notice-success" style="max-width:960px;"><p><strong>Cleanup finished.</strong> Full output is below — it will not disappear. Copy it before leaving this page.</p></div>');
+                        var $ta = $('<textarea readonly="readonly" rows="20" style="width:100%;max-width:100%;font-family:Consolas,Monaco,monospace;font-size:12px;box-sizing:border-box;margin-top:10px;" />').val(text);
+                        var $copyBtn = $('<button type="button" class="button" style="margin-top:8px;">Copy full output to clipboard</button>');
+                        $copyBtn.on('click', function() {
+                            $ta.focus();
+                            $ta.select();
+                            try { document.execCommand('copy'); } catch (e) {}
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                navigator.clipboard.writeText($ta.val());
+                            }
+                        });
+                        $result.empty().append($box).append($ta).append($('<p style="margin-top:8px;">').append($copyBtn));
                         if (!alreadyRun) {
                             $button.text('Rerun Release Data Cleanup');
                         }
-                        // Reload page to show updated status
-                        setTimeout(function() {
-                            location.reload();
-                        }, 3000);
+                        $button.prop('disabled', false);
                     } else {
-                        $result.html('<div class="notice notice-error"><p>' + response.data + '</p></div>');
+                        var errText = (typeof response.data === 'string') ? response.data : (response.data && response.data.message) ? response.data.message : 'Unknown error';
+                        var $errTa = $('<textarea readonly="readonly" rows="12" style="width:100%;max-width:100%;font-family:Consolas,Monaco,monospace;font-size:12px;box-sizing:border-box;margin-top:8px;" />').val(errText);
+                        $result.html('<div class="notice notice-error"><p><strong>Cleanup failed or was blocked.</strong></p></div>').append($errTa);
                         $button.prop('disabled', false);
                     }
                 },
