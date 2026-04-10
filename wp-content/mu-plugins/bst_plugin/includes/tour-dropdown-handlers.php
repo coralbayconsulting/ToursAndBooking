@@ -465,6 +465,11 @@ function get_vehicle_data() {
                     );
                 }
 
+                $limited_slots_remaining_public = null;
+                if (! $is_admin_vehicle_labels && $limited_display_remaining !== null) {
+                    $limited_slots_remaining_public = (int) $limited_display_remaining;
+                }
+
                 $data[] = array(
                     'text' => $vehicle_name,
                     'value' => $out_price,
@@ -474,6 +479,7 @@ function get_vehicle_data() {
                     'unavailable' => $limited_sold_out_block,
                     'limited_max' => $limited_row_stats ? (int) $limited_row_stats['max'] : null,
                     'limited_sold_other_bookings' => $limited_sold_other,
+                    'limited_slots_remaining' => $limited_slots_remaining_public,
                     '_order' => $vehicle_row_order++,
                 );
             }

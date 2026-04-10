@@ -243,7 +243,9 @@ jQuery(document).ready(function ($) {
           ? packageSettings[packageId].vehicles
           : 1;
 
-        if (response.data.length < 2) {
+        if (!response.success || !Array.isArray(response.data) || response.data.length < 2) {
+          window.bstTourVehicleLimitedRemaining = {};
+          hideDualVehicleInventoryNotice();
           vehicleDropdown1Container.hide();
           vehicleDropdown2Container.hide();
           
@@ -251,7 +253,14 @@ jQuery(document).ready(function ($) {
           updateExtensionCheckbox();
         } else {
           // Populate the dropdowns with the fetched data
+          window.bstTourVehicleLimitedRemaining = {};
           $.each(response.data, function (index, item) {
+            if (item.vehicle_id != null && item.limited_slots_remaining != null) {
+              window.bstTourVehicleLimitedRemaining[String(item.vehicle_id)] = parseInt(
+                item.limited_slots_remaining,
+                10
+              );
+            }
             var opt1 = $("<option>", {
               value: item.value, // Price for calculations (0 when limited-unavailable)
               text: item.text,
@@ -260,6 +269,9 @@ jQuery(document).ready(function ($) {
             });
             if (item.unavailable) {
               opt1.attr("data-unavailable", "true");
+            }
+            if (item.limited_slots_remaining != null) {
+              opt1.attr("data-limited-slots-remaining", item.limited_slots_remaining);
             }
             vehicleDropdown1.append(opt1);
             if (numVehicles == 2) {
@@ -271,6 +283,9 @@ jQuery(document).ready(function ($) {
               });
               if (item.unavailable) {
                 opt2.attr("data-unavailable", "true");
+              }
+              if (item.limited_slots_remaining != null) {
+                opt2.attr("data-limited-slots-remaining", item.limited_slots_remaining);
               }
               vehicleDropdown2.append(opt2);
             }
@@ -286,6 +301,8 @@ jQuery(document).ready(function ($) {
             vehicleDropdown2.prop("disabled", true); // Disable vehicleDropdown2
           }
         }
+
+        refreshVehicle2LimitedOptions();
 
         // Trigger change event to update calculations
         vehicleDropdown1.trigger("change");
@@ -305,13 +322,117 @@ jQuery(document).ready(function ($) {
     checkButtonDisplayState(); // Add this to check for sold out/unavailable state
   });
 
+  function getPackageVehicleSlotCount() {
+    var packageId = tourpackagedropdown.val();
+    if (!packageId || typeof packageSettings === "undefined" || !packageSettings[packageId]) {
+      return 1;
+    }
+    return parseInt(packageSettings[packageId].vehicles, 10) || 1;
+  }
+
+  function hideDualVehicleInventoryNotice() {
+    $("#bst-dual-vehicle-inventory-notice").hide().text("");
+  }
+
+  function showDualVehicleInventoryNotice(msg) {
+    $("#bst-dual-vehicle-inventory-notice").text(msg).show();
+  }
+
+  function parseLimitedSlotsRemainingAttr($opt) {
+    var a = $opt.attr("data-limited-slots-remaining");
+    if (a === undefined || a === "") {
+      return null;
+    }
+    var n = parseInt(a, 10);
+    return isNaN(n) ? null : n;
+  }
+
+  function refreshVehicle2LimitedOptions() {
+    if (getPackageVehicleSlotCount() < 2) {
+      vehicleDropdown2.find("option").prop("disabled", false);
+      return;
+    }
+    if (!vehicleDropdown1Container.is(":visible") || !vehicleDropdown2Container.is(":visible")) {
+      return;
+    }
+    var $s1 = vehicleDropdown1.find("option:selected");
+    var id1 = $s1.data("vehicle-id");
+    vehicleDropdown2.find("option").each(function () {
+      var $o = $(this);
+      if ($o.index() === 0) {
+        $o.prop("disabled", false);
+        return;
+      }
+      var idOpt = $o.data("vehicle-id");
+      var lim = parseLimitedSlotsRemainingAttr($o);
+      var disable =
+        id1 &&
+        idOpt &&
+        String(id1) === String(idOpt) &&
+        lim !== null &&
+        lim < 2;
+      $o.prop("disabled", !!disable);
+    });
+    var $s2 = vehicleDropdown2.find("option:selected");
+    if ($s2.length && $s2.prop("disabled")) {
+      vehicleDropdown2.prop("selectedIndex", 0);
+    }
+  }
+
+  function dualLimitedSameVehicleOk() {
+    if (getPackageVehicleSlotCount() < 2) {
+      return true;
+    }
+    if (!vehicleDropdown1Container.is(":visible") || !vehicleDropdown2Container.is(":visible")) {
+      return true;
+    }
+    if (vehicleDropdown1.prop("selectedIndex") === 0 || vehicleDropdown2.prop("selectedIndex") === 0) {
+      return true;
+    }
+    var id1 = vehicleDropdown1.find("option:selected").data("vehicle-id");
+    var id2 = vehicleDropdown2.find("option:selected").data("vehicle-id");
+    if (!id1 || !id2 || String(id1) !== String(id2)) {
+      return true;
+    }
+    var lim =
+      window.bstTourVehicleLimitedRemaining &&
+      window.bstTourVehicleLimitedRemaining[String(id1)];
+    if (lim === undefined || lim === null) {
+      return true;
+    }
+    return lim >= 2;
+  }
+
+  function enforceDualLimitedSameVehicleRule(fromDropdown) {
+    if (dualLimitedSameVehicleOk()) {
+      hideDualVehicleInventoryNotice();
+      return;
+    }
+    showDualVehicleInventoryNotice(
+      "Only one of this vehicle remains on this tour date. It cannot be used for both selections—please choose a different vehicle for the second car."
+    );
+    if (fromDropdown === 2) {
+      vehicleDropdown2.prop("selectedIndex", 0);
+    } else {
+      vehicleDropdown1.prop("selectedIndex", 0);
+    }
+  }
+
   // Handle change event for the vehicle dropdowns
-  vehicleDropdown1.on("change", function() {
+  vehicleDropdown1.on("change", function (e) {
+    refreshVehicle2LimitedOptions();
+    if (!e.isTrigger) {
+      enforceDualLimitedSameVehicleRule(1);
+    }
     updateExtensionCheckbox();
     calculateTotalPrice();
     checkBookButtonState();
   });
-  vehicleDropdown2.on("change", function() {
+  vehicleDropdown2.on("change", function (e) {
+    refreshVehicle2LimitedOptions();
+    if (!e.isTrigger) {
+      enforceDualLimitedSameVehicleRule(2);
+    }
     updateExtensionCheckbox();
     calculateTotalPrice();
     checkBookButtonState();
@@ -499,6 +620,12 @@ jQuery(document).ready(function ($) {
     console.log('=== BOOK BUTTON CLICKED - STARTING proceedWithBooking ===');
 
     if (!vehicleDropdownSelectionOk(vehicleDropdown1, vehicleDropdown1Container) || !vehicleDropdownSelectionOk(vehicleDropdown2, vehicleDropdown2Container)) {
+      return;
+    }
+    if (!dualLimitedSameVehicleOk()) {
+      showDualVehicleInventoryNotice(
+        "Only one of this vehicle remains on this tour date. Choose different vehicles for each car."
+      );
       return;
     }
 
@@ -746,11 +873,19 @@ jQuery(document).ready(function ($) {
   function checkBookButtonState() {
     const vehicle1Ok = vehicleDropdownSelectionOk(vehicleDropdown1, vehicleDropdown1Container);
     const vehicle2Ok = vehicleDropdownSelectionOk(vehicleDropdown2, vehicleDropdown2Container);
+    const dualLimitedOk = dualLimitedSameVehicleOk();
+    if (!dualLimitedOk) {
+      showDualVehicleInventoryNotice(
+        "Only one of this vehicle remains on this tour date. It cannot be used for both selections—please choose a different vehicle for the second car."
+      );
+    } else {
+      hideDualVehicleInventoryNotice();
+    }
 
     if (tourpackagedropdown.val() 
       && (
         (!vehicleDropdown1Container.is(":visible") && !vehicleDropdown2Container.is(":visible")) // No vehicle choices visible
-        || (vehicleDropdown1Container.is(":visible") && vehicle1Ok && (!vehicleDropdown2Container.is(":visible") || vehicle2Ok))
+        || (vehicleDropdown1Container.is(":visible") && vehicle1Ok && (!vehicleDropdown2Container.is(":visible") || vehicle2Ok) && dualLimitedOk)
       )
     ) {
       // Check if this should be booking or waiting list

@@ -441,6 +441,7 @@ if (is_singular('tour')) {
                                             <option value="">Select a <?php echo $vehicle_descriptor; ?></option>
                                         </select>
                                     </div>
+                                    <p id="bst-dual-vehicle-inventory-notice" class="small-text" style="display:none;color:#b32d2e;margin-top:8px;text-align:left;" role="alert" aria-live="polite"></p>
                                     <div id="vehicle-disclaimer" style="display: none; margin-top: 5px;">
                                         <p class="small-text" style="color: #666; font-style: italic; text-align: left;">(**) <?php echo $vehicle_descriptor; ?> choice is subject to availability</p>
                                     </div>
