@@ -72,13 +72,13 @@ function bst_limited_vehicle_sold_count( $tour_date_id, $vehicle_id ) {
 }
 
 /**
- * Remaining limited-vehicle slots from tour-date repeater (manual Sold field), or null if unlimited.
+ * Max / sold from the tour-date limited_vehicles repeater for one vehicle, or null if not limited.
  *
  * @param int $tour_date_id Tour-date post ID.
  * @param int $vehicle_id   Vehicle CPT ID.
- * @return int|null        Zero or more when limited; null when not in the limited list.
+ * @return array{max:int,sold:int}|null
  */
-function bst_limited_vehicle_slots_remaining( $tour_date_id, $vehicle_id ) {
+function bst_limited_vehicle_max_sold_for_vehicle( $tour_date_id, $vehicle_id ) {
 	$tour_date_id = (int) $tour_date_id;
 	$vehicle_id   = (int) $vehicle_id;
 	if ( $tour_date_id <= 0 || $vehicle_id <= 0 ) {
@@ -101,9 +101,27 @@ function bst_limited_vehicle_slots_remaining( $tour_date_id, $vehicle_id ) {
 		if ( $max <= 0 ) {
 			return null;
 		}
-		return max( 0, $max - $sold );
+		return array(
+			'max'  => $max,
+			'sold' => $sold,
+		);
 	}
 	return null;
+}
+
+/**
+ * Remaining limited-vehicle slots from tour-date repeater (manual Sold field), or null if unlimited.
+ *
+ * @param int $tour_date_id Tour-date post ID.
+ * @param int $vehicle_id   Vehicle CPT ID.
+ * @return int|null        Zero or more when limited; null when not in the limited list.
+ */
+function bst_limited_vehicle_slots_remaining( $tour_date_id, $vehicle_id ) {
+	$stats = bst_limited_vehicle_max_sold_for_vehicle( $tour_date_id, $vehicle_id );
+	if ( $stats === null ) {
+		return null;
+	}
+	return max( 0, $stats['max'] - $stats['sold'] );
 }
 
 /**
@@ -150,14 +168,17 @@ function bst_limited_vehicle_booking_slot_count_for_vehicle( $booking_id, $tour_
  * Remaining limited slots for dropdown labels. When editing a booking, adds back slots this booking
  * already holds so "N left" matches admin expectations (same vehicle stays selectable when at cap).
  *
+ * Uses max(0, max - sold + bonus), not max(0, max - sold) + bonus, so oversold (sold > max) never
+ * shows a false positive (e.g. 0 avail in repeater but "1 left" after bonus).
+ *
  * @param int $tour_date_id Tour-date post ID.
  * @param int $vehicle_id   Vehicle CPT ID.
  * @param int $booking_id   Optional booking row id (only used if user can manage bookings).
  * @return int|null        null when not a limited vehicle on this date.
  */
 function bst_limited_vehicle_slots_remaining_for_display( $tour_date_id, $vehicle_id, $booking_id = 0 ) {
-	$remaining = bst_limited_vehicle_slots_remaining( $tour_date_id, $vehicle_id );
-	if ( $remaining === null ) {
+	$stats = bst_limited_vehicle_max_sold_for_vehicle( $tour_date_id, $vehicle_id );
+	if ( $stats === null ) {
 		return null;
 	}
 	$booking_id = (int) $booking_id;
@@ -165,7 +186,7 @@ function bst_limited_vehicle_slots_remaining_for_display( $tour_date_id, $vehicl
 	if ( $booking_id > 0 && function_exists( 'bst_user_can_manage_bookings' ) && bst_user_can_manage_bookings() ) {
 		$bonus = bst_limited_vehicle_booking_slot_count_for_vehicle( $booking_id, $tour_date_id, $vehicle_id );
 	}
-	return $remaining + $bonus;
+	return max( 0, $stats['max'] - $stats['sold'] + $bonus );
 }
 
 /**
