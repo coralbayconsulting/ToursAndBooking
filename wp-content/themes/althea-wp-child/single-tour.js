@@ -301,7 +301,7 @@ jQuery(document).ready(function ($) {
           }
         }
 
-        refreshVehicle2LimitedOptions();
+        refreshBothVehicleLimitedOptions();
 
         // Trigger change event to update calculations
         vehicleDropdown1.trigger("change");
@@ -351,8 +351,14 @@ jQuery(document).ready(function ($) {
     return v != null && String(v).trim() !== "" ? String(v) : "";
   }
 
-  function refreshVehicle2LimitedOptions() {
+  /**
+   * Two-car packages: if the other dropdown has chosen vehicle V and V has limited_slots_remaining < 2,
+   * the same V cannot be chosen here. Applies both directions (Car 1 affects Car 2 and Car 2 affects Car 1).
+   * If remaining >= 2, the same model may be selected in both slots.
+   */
+  function refreshBothVehicleLimitedOptions() {
     if (getPackageVehicleSlotCount() < 2) {
+      vehicleDropdown1.find("option").prop("disabled", false);
       vehicleDropdown2.find("option").prop("disabled", false);
       return;
     }
@@ -360,23 +366,38 @@ jQuery(document).ready(function ($) {
       return;
     }
     var id1 = selectedVehicleCptId(vehicleDropdown1);
-    vehicleDropdown2.find("option").each(function () {
-      var $o = $(this);
-      if ($o.index() === 0) {
-        $o.prop("disabled", false);
-        return;
-      }
-      var idOptRaw = $o.attr("data-vehicle-id");
-      var idOpt = idOptRaw != null && String(idOptRaw).trim() !== "" ? String(idOptRaw) : "";
-      var lim = parseLimitedSlotsRemainingAttr($o);
-      var disable =
-        id1 &&
-        idOpt &&
-        id1 === idOpt &&
-        lim !== null &&
-        lim < 2;
-      $o.prop("disabled", !!disable);
-    });
+    var id2 = selectedVehicleCptId(vehicleDropdown2);
+
+    function applyDisable($dropdown, otherSlotVehicleId) {
+      $dropdown.find("option").each(function () {
+        var $o = $(this);
+        if ($o.index() === 0) {
+          $o.prop("disabled", false);
+          return;
+        }
+        if (!otherSlotVehicleId) {
+          $o.prop("disabled", false);
+          return;
+        }
+        var idOptRaw = $o.attr("data-vehicle-id");
+        var idOpt = idOptRaw != null && String(idOptRaw).trim() !== "" ? String(idOptRaw) : "";
+        var lim = parseLimitedSlotsRemainingAttr($o);
+        var disable =
+          idOpt &&
+          idOpt === otherSlotVehicleId &&
+          lim !== null &&
+          lim < 2;
+        $o.prop("disabled", !!disable);
+      });
+    }
+
+    applyDisable(vehicleDropdown1, id2);
+    applyDisable(vehicleDropdown2, id1);
+
+    var $s1 = vehicleDropdown1.find("option:selected");
+    if ($s1.length && $s1.prop("disabled")) {
+      vehicleDropdown1.prop("selectedIndex", 0);
+    }
     var $s2 = vehicleDropdown2.find("option:selected");
     if ($s2.length && $s2.prop("disabled")) {
       vehicleDropdown2.prop("selectedIndex", 0);
@@ -431,7 +452,7 @@ jQuery(document).ready(function ($) {
 
   // Handle change event for the vehicle dropdowns
   vehicleDropdown1.on("change", function (e) {
-    refreshVehicle2LimitedOptions();
+    refreshBothVehicleLimitedOptions();
     if (!e.isTrigger) {
       enforceDualLimitedSameVehicleRule(1);
     }
@@ -440,7 +461,7 @@ jQuery(document).ready(function ($) {
     checkBookButtonState();
   });
   vehicleDropdown2.on("change", function (e) {
-    refreshVehicle2LimitedOptions();
+    refreshBothVehicleLimitedOptions();
     if (!e.isTrigger) {
       enforceDualLimitedSameVehicleRule(2);
     }
