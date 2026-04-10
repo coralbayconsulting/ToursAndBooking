@@ -1425,9 +1425,15 @@ function bst_release_data_cleanup_callback() {
     echo '<label style="display:block;"><input type="checkbox" id="repair-repeater-links-from-text" value="1"> ';
     echo '<strong>Re-link tour repeater from labels</strong> — ignores each row’s saved Vehicle (CPT) id and sets it again from the row’s vehicle <em>text</em> (same matching as migration). Does <em>not</em> delete Vehicle posts. Use after a bad save left wrong or stale CPT ids while labels are still correct.';
     echo '</label></div>';
+    echo '<p class="description" style="margin-top:-8px;">';
     if ($already_run) {
-        echo '<p class="description" style="margin-top:-8px;">Clicking <strong>Rerun Release Data Cleanup</strong> checks both options above (you can uncheck either before confirming). You may also run with only <strong>Re-link from labels</strong> if you do not want to delete all Vehicle CPTs.</p>';
+        echo esc_html__( 'Only the checked options run. Check at least one box to rerun cleanup for this version.', 'bst-plugin' );
+    } else {
+        echo esc_html__( 'Only the checked options run. Leave both unchecked for standard migration (no force reset, no re-link-from-labels-only pass).', 'bst-plugin' );
     }
+    echo ' ';
+    echo esc_html__( 'Clicking Run does not change these checkboxes.', 'bst-plugin' );
+    echo '</p>';
 
     $tools_url = admin_url( 'admin.php?page=bst_tools_page' );
     echo '<p class="description" style="max-width:960px;">' . esc_html__( 'After each run, the full log is saved in one place:', 'bst-plugin' ) . ' ';
@@ -1454,11 +1460,6 @@ function bst_release_data_cleanup_callback() {
             var $forceCheckbox = $('#force-rerun-cleanup');
             var $repairCheckbox = $('#repair-repeater-links-from-text');
             var alreadyRun = <?php echo $already_run ? 'true' : 'false'; ?>;
-
-            if (alreadyRun) {
-                $forceCheckbox.prop('checked', true);
-                $repairCheckbox.prop('checked', true);
-            }
 
             var forceRerun = $forceCheckbox.is(':checked');
             var repairRepeater = $repairCheckbox.is(':checked');
