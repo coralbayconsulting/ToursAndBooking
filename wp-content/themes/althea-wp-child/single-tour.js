@@ -234,7 +234,8 @@ jQuery(document).ready(function ($) {
         tour_id: tourId,
         package_id: packageId,
         currency: tourCurrencyCode,
-        tour_date_id: selectedTourDateId,
+        tour_date_id: String(selectedTourDateId).split("|")[0],
+        vehicle_label_context: "public",
       },
       success: function (response) {
         // Logic to show/hide vehicle dropdowns based on the number of vehicles and packageId

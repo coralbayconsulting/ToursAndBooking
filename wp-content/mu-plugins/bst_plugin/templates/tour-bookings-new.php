@@ -723,7 +723,8 @@ jQuery(document).ready(function($) {
                 action: 'get_vehicle_data',
                 tour_id: formData.tour_id,
                 package_id: formData.tour_package_id,
-                currency: formData.tour_currency
+                currency: formData.tour_currency,
+                vehicle_label_context: 'admin'
             },
             success: function(response) {
                 if (response.success && response.data && Array.isArray(response.data)) {

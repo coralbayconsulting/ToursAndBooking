@@ -3411,9 +3411,9 @@ jQuery(document).ready(function($) {
         });
     }
     
-    function formatBstVehicleLimitedNote(sold, maxSlots) {
-        var tpl = window.bstVehicleLimitedNoteTemplate || 'Tour date manual count for this model: {{sold}} sold (max {{max}}). This booking is included in that total.';
-        return tpl.replace(/\{\{sold\}\}/g, String(sold)).replace(/\{\{max\}\}/g, String(maxSlots));
+    function formatBstVehicleLimitedNote(soldOther, maxSlots) {
+        var tpl = window.bstVehicleLimitedNoteTemplate || '{{x}} of {{y}} sold on other bookings';
+        return tpl.replace(/\{\{x\}\}/g, String(soldOther)).replace(/\{\{y\}\}/g, String(maxSlots));
     }
 
     function updateVehicleLimitedNotes($tile) {
@@ -3429,18 +3429,18 @@ jQuery(document).ready(function($) {
                 return;
             }
             var maxV = $opt.attr('data-limited-max');
-            var soldV = $opt.attr('data-limited-sold');
-            if (maxV === undefined || maxV === '' || soldV === undefined || soldV === '') {
+            var otherV = $opt.attr('data-limited-sold-other');
+            if (maxV === undefined || maxV === '' || otherV === undefined || otherV === '') {
                 $note.hide().text('');
                 return;
             }
             var maxSlots = parseInt(maxV, 10);
-            var sold = parseInt(soldV, 10);
-            if (isNaN(maxSlots) || maxSlots <= 0 || isNaN(sold)) {
+            var soldOther = parseInt(otherV, 10);
+            if (isNaN(maxSlots) || maxSlots <= 0 || isNaN(soldOther)) {
                 $note.hide().text('');
                 return;
             }
-            $note.text(formatBstVehicleLimitedNote(sold, maxSlots)).show();
+            $note.text(formatBstVehicleLimitedNote(soldOther, maxSlots)).show();
         }
         sync($tile.find('#vehicle1'));
         sync($tile.find('#vehicle2'));
@@ -3475,7 +3475,8 @@ jQuery(document).ready(function($) {
                 package_id: packageId,
                 currency: currency,
                 tour_date_id: tourDateId,
-                booking_id: bookingId
+                booking_id: bookingId,
+                vehicle_label_context: 'admin'
             },
             success: function(response) {
                 if (response.success && response.data && response.data.length > 0) {
@@ -3499,8 +3500,9 @@ jQuery(document).ready(function($) {
                                 .attr('data-price', vehicle.price || 0)
                                 .attr('data-text', vtext)
                                 .text(vtext);
-                            if (vehicle.limited_max != null && vehicle.limited_sold != null) {
-                                $opt.attr('data-limited-max', vehicle.limited_max).attr('data-limited-sold', vehicle.limited_sold);
+                            if (vehicle.limited_max != null && vehicle.limited_sold_other_bookings != null) {
+                                $opt.attr('data-limited-max', vehicle.limited_max)
+                                    .attr('data-limited-sold-other', vehicle.limited_sold_other_bookings);
                             }
                             
                             // Populate vehicle1 if it's visible
@@ -3839,7 +3841,8 @@ jQuery(document).ready(function($) {
                                 action: 'get_vehicle_data',
                                 tour_id: tourId,
                                 package_id: packageId,
-                                currency: window.bstBookingData?.tour_currency || 'EUR'
+                                currency: window.bstBookingData?.tour_currency || 'EUR',
+                                vehicle_label_context: 'admin'
                             },
                             success: function(vehicleResponse) {
                                 var currentVehicleChoices = 0;
@@ -4241,7 +4244,7 @@ jQuery(document).ready(function($) {
     window.ajaxurl = '<?php echo admin_url('admin-ajax.php'); ?>';
     window.bstTourBookingsNonce = '<?php echo wp_create_nonce('bst_tour_bookings_nonce'); ?>';
     window.bstVehicleLimitedNoteTemplate = <?php echo wp_json_encode(
-        __( 'Tour date manual count for this model: {{sold}} sold (max {{max}}). This booking is included in that total.', 'bst-plugin' )
+        __( '{{x}} of {{y}} sold on other bookings', 'bst-plugin' )
     ); ?>;
     
     <?php

@@ -39,16 +39,17 @@ function bst_booking_statuses_for_limited_vehicle_usage() {
 }
 
 /**
- * How many booking “slots” use this vehicle on this tour date (vehicle1_id + vehicle2_id, same id counts twice).
- * Reserved for future automatic Sold sync; admin Sold is manual for now.
+ * Booking slots using this vehicle on this tour date, optionally excluding one booking row.
  *
- * @param int $tour_date_id Tour-date post ID.
- * @param int $vehicle_id   Vehicle CPT ID.
+ * @param int $tour_date_id         Tour-date post ID.
+ * @param int $vehicle_id           Vehicle CPT ID.
+ * @param int $exclude_booking_id   BST booking id to omit (0 = include all).
  * @return int
  */
-function bst_limited_vehicle_sold_count( $tour_date_id, $vehicle_id ) {
-	$tour_date_id = (int) $tour_date_id;
-	$vehicle_id   = (int) $vehicle_id;
+function bst_limited_vehicle_sold_count_excluding_booking( $tour_date_id, $vehicle_id, $exclude_booking_id = 0 ) {
+	$tour_date_id       = (int) $tour_date_id;
+	$vehicle_id         = (int) $vehicle_id;
+	$exclude_booking_id = (int) $exclude_booking_id;
 	if ( $tour_date_id <= 0 || $vehicle_id <= 0 ) {
 		return 0;
 	}
@@ -67,8 +68,23 @@ function bst_limited_vehicle_sold_count( $tour_date_id, $vehicle_id ) {
 		), 0) FROM {$table}
 		WHERE tour_date_id = %d AND booking_status IN ({$in_ph}) AND booking_status NOT IN ({$not_in_ph})";
 	$prepare_args = array_merge( array( $vehicle_id, $vehicle_id, $tour_date_id ), $statuses, $excluded );
-	$sql          = $wpdb->prepare( $sql, $prepare_args );
+	if ( $exclude_booking_id > 0 ) {
+		$sql           .= ' AND id != %d';
+		$prepare_args[] = $exclude_booking_id;
+	}
+	$sql = $wpdb->prepare( $sql, $prepare_args );
 	return (int) $wpdb->get_var( $sql );
+}
+
+/**
+ * How many booking “slots” use this vehicle on this tour date (vehicle1_id + vehicle2_id, same id counts twice).
+ *
+ * @param int $tour_date_id Tour-date post ID.
+ * @param int $vehicle_id   Vehicle CPT ID.
+ * @return int
+ */
+function bst_limited_vehicle_sold_count( $tour_date_id, $vehicle_id ) {
+	return bst_limited_vehicle_sold_count_excluding_booking( $tour_date_id, $vehicle_id, 0 );
 }
 
 /**
