@@ -133,7 +133,7 @@ function bst_vehicle_type_for_tour_id( $tour_id ) {
 }
 
 /**
- * Default ACF transmission for a new vehicle: motorcycles → automatic; cars from title keywords.
+ * Default ACF transmission for a new vehicle: motorcycles → manual, except “DCT” in title → automatic; cars from title keywords.
  *
  * @param string $post_title   Vehicle CPT title.
  * @param string $vehicle_type 'car' or 'motorcycle'.
@@ -142,7 +142,11 @@ function bst_vehicle_type_for_tour_id( $tour_id ) {
 function bst_vehicle_default_transmission( $post_title, $vehicle_type ) {
     $vehicle_type = (string) $vehicle_type;
     if ( 'motorcycle' === $vehicle_type ) {
-        return 'automatic';
+        $t = strtolower( (string) $post_title );
+        if ( false !== strpos( $t, 'dct' ) ) {
+            return 'automatic';
+        }
+        return 'manual';
     }
     $t = strtolower( (string) $post_title );
     if ( false !== strpos( $t, 'automatic' ) || false !== strpos( $t, ' auto' ) || preg_match( '/\bauto\b/', $t ) ) {
