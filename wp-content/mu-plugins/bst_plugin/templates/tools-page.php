@@ -1,5 +1,6 @@
 <?php
 $error_log_path = bst_get_tools_error_log_path();
+$release_cleanup_log_path = function_exists( 'bst_get_release_cleanup_log_path' ) ? bst_get_release_cleanup_log_path() : trailingslashit( WP_CONTENT_DIR ) . 'bst-release-cleanup.log';
 
 // Handle a download request BEFORE any output so headers can be sent.
 bst_tools_maybe_send_error_log_download();
@@ -174,6 +175,36 @@ $current_time = time();
                 </button>
             </form>
         </div>
+    </div>
+
+    <h2>Release cleanup &amp; migration log</h2>
+    <div class="bst-tools-section">
+        <p>Lines from <strong>Release data cleanup</strong> (vehicle migration, warnings, summary) are appended here, in addition to the PHP error log when configured.</p>
+        <p><strong>Log path:</strong> <code><?php echo esc_html( $release_cleanup_log_path ); ?></code></p>
+        <?php if ( file_exists( $release_cleanup_log_path ) ) : ?>
+            <?php
+            $rc_size = filesize( $release_cleanup_log_path );
+            ?>
+            <p><strong>File size:</strong> <?php echo esc_html( size_format( $rc_size ) ); ?></p>
+            <?php if ( $rc_size > 0 ) : ?>
+                <?php
+                $rc_lines = file( $release_cleanup_log_path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES );
+                $rc_lines = is_array( $rc_lines ) ? $rc_lines : array();
+                $rc_total = count( $rc_lines );
+                $rc_display = array_slice( $rc_lines, -100 );
+                ?>
+                <p><strong>Showing last <?php echo count( $rc_display ); ?> lines (of <?php echo (int) $rc_total; ?> total)</strong></p>
+                <div class="bst-tools-error-log-box" style="max-height:400px; overflow-y:auto;">
+                    <?php foreach ( $rc_display as $line ) : ?>
+                        <div><?php echo esc_html( $line ); ?></div>
+                    <?php endforeach; ?>
+                </div>
+            <?php else : ?>
+                <p><em>Log file is empty.</em></p>
+            <?php endif; ?>
+        <?php else : ?>
+            <p><em>File not created yet. Run release data cleanup once; warnings and summaries will be written here.</em></p>
+        <?php endif; ?>
     </div>
 
     <div class="postbox bst-tools-postbox">

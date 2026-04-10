@@ -56,6 +56,23 @@ function bst_vehicle_migration_is_acf_repeater_row_key( $key ) {
 }
 
 /**
+ * Clear WP/ACF caches for a tour before reading or writing repeater meta (helps migration round-trip).
+ *
+ * @param int $tour_id Tour post ID.
+ */
+function bst_vehicle_migration_bust_caches_for_tour( $tour_id ) {
+	$tour_id = (int) $tour_id;
+	if ( $tour_id <= 0 ) {
+		return;
+	}
+	clean_post_cache( $tour_id );
+	wp_cache_delete( $tour_id, 'post_meta' );
+	if ( function_exists( 'acf_reset_local' ) ) {
+		acf_reset_local();
+	}
+}
+
+/**
  * Value for update_sub_field() row position: pass through ACF row_* keys; map numeric indices via row_index_offset.
  *
  * @param mixed $key Repeater key from get_field().
@@ -187,12 +204,17 @@ function bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tour_id
 				$acj,
 				BST_VEHICLE_ROW_POST_OBJECT_KEY,
 			),
+			// Mixed name/key paths (some ACF versions are picky about nested repeater identity).
+			array( 'vehicle_pricing', $aci, BST_VEHICLE_NESTED_REPEATER_KEY, $acj, 'vehicle_id' ),
+			array( BST_VEHICLE_PRICING_REPEATER_KEY, $aci, 'vehicles', $acj, BST_VEHICLE_ROW_POST_OBJECT_KEY ),
 		);
 
 		$wrote = false;
+		bst_vehicle_migration_bust_caches_for_tour( $tour_id );
 		foreach ( $selectors as $selector ) {
 			foreach ( array( $tour_id, 'post_' . $tour_id ) as $post_ref ) {
 				$r = update_sub_field( $selector, $vid, $post_ref );
+				// ACF: only boolean false means failure; null/true often indicate success.
 				if ( false !== $r ) {
 					$wrote = true;
 					break 2;
@@ -391,8 +413,9 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 			return $results;
 		}
 
-		// Use formatted values so repeater subfields use names (vehicle, vehicle_id), not raw field keys.
-		$pricing = get_field( 'vehicle_pricing', $tid, true );
+		bst_vehicle_migration_bust_caches_for_tour( $tid );
+		// Unformatted (raw) values round-trip through update_field; formatted values can break nested repeaters.
+		$pricing = get_field( 'vehicle_pricing', $tid, false );
 		if ( empty( $pricing ) || ! is_array( $pricing ) ) {
 			continue;
 		}
@@ -450,6 +473,7 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 			if ( function_exists( 'acf_get_field_groups' ) ) {
 				acf_get_field_groups( array( 'post_id' => $tid ) );
 			}
+			bst_vehicle_migration_bust_caches_for_tour( $tid );
 			$ok = false;
 			foreach ( array( $tid, 'post_' . $tid ) as $post_ref ) {
 				$r = update_field( 'vehicle_pricing', $pricing, $post_ref );

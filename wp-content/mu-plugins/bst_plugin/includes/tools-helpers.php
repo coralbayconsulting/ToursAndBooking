@@ -11,6 +11,15 @@ if (!defined('ABSPATH')) {
 }
 
 /**
+ * Fixed path for release cleanup / vehicle migration log lines (always under wp-content).
+ *
+ * @return string Absolute filesystem path.
+ */
+function bst_get_release_cleanup_log_path() {
+    return trailingslashit(WP_CONTENT_DIR) . 'bst-release-cleanup.log';
+}
+
+/**
  * Get the error log path used on the Tools page (Azure, WP debug.log, etc.).
  *
  * @return string Path to the error log file (existing or fallback).

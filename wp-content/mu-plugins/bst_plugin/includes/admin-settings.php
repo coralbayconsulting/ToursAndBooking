@@ -1736,6 +1736,7 @@ function bst_get_release_cleanup_tasks() {
 
 /**
  * Write release cleanup output lines to the PHP error log (e.g. wp-content/debug.log when WP_DEBUG_LOG is on).
+ * Also appends to wp-content/bst-release-cleanup.log so hosts without debug.log still have a trail.
  *
  * @param string[] $lines Result strings from cleanup tasks / migrations.
  */
@@ -1743,6 +1744,15 @@ function bst_log_release_cleanup_results( array $lines ) {
 	if ( empty( $lines ) ) {
 		return;
 	}
+	$log_path = function_exists( 'bst_get_release_cleanup_log_path' ) ? bst_get_release_cleanup_log_path() : trailingslashit( WP_CONTENT_DIR ) . 'bst-release-cleanup.log';
+	$header   = sprintf(
+		"[%s] — %d line(s)\n",
+		current_time( 'mysql' ),
+		count( $lines )
+	);
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- log file may be unwritable on misconfigured hosts.
+	@file_put_contents( $log_path, $header, FILE_APPEND | LOCK_EX );
+
 	$prefix = '[BST release cleanup] ';
 	foreach ( $lines as $line ) {
 		if ( ! is_string( $line ) ) {
@@ -1756,8 +1766,13 @@ function bst_log_release_cleanup_results( array $lines ) {
 		if ( preg_match( '/\b(Warning|failed|error|Error)\b/i', $line ) ) {
 			$tag = 'WARNING';
 		}
+		$out = $prefix . '[' . $tag . '] ' . $line . "\n";
 		error_log( $prefix . '[' . $tag . '] ' . $line );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		@file_put_contents( $log_path, $out, FILE_APPEND | LOCK_EX );
 	}
+	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+	@file_put_contents( $log_path, "\n", FILE_APPEND | LOCK_EX );
 }
 
 /**
