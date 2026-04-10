@@ -984,6 +984,7 @@ add_filter(
             $ordered['title'] = $columns['title'];
         }
         $ordered['bst_vehicle_type']   = __( 'Type' );
+        $ordered['bst_vehicle_transmission'] = __( 'Trans' );
         $ordered['bst_vehicle_active'] = __( 'Available To Assign' );
         $ordered['bst_vehicle_limited'] = __( 'Limited' );
         $ordered['bst_vehicle_tours']    = __( 'On Tours' );
@@ -1057,6 +1058,21 @@ add_action(
             return;
         }
 
+        if ( 'bst_vehicle_transmission' === $column ) {
+            $tr = get_field( 'transmission', $post_id );
+            $tr = is_string( $tr ) ? $tr : '';
+            if ( 'manual' === $tr ) {
+                esc_html_e( 'Man' );
+            } elseif ( 'automatic' === $tr ) {
+                esc_html_e( 'Auto' );
+            } elseif ( 'na' === $tr ) {
+                esc_html_e( 'N/A' );
+            } else {
+                echo '&mdash;';
+            }
+            return;
+        }
+
         if ( 'bst_vehicle_active' === $column ) {
             $active = get_field( 'vehicle_active', $post_id );
             echo $active ? esc_html__( 'Yes' ) : esc_html__( 'No' );
@@ -1109,7 +1125,7 @@ add_action(
             return;
         }
 
-        if ( 'bst_vehicle_type' !== $column && 'bst_vehicle_active' !== $column && 'bst_vehicle_limited' !== $column && 'bst_vehicle_tours' !== $column && 'bst_vehicle_bookings' !== $column ) {
+        if ( 'bst_vehicle_type' !== $column && 'bst_vehicle_transmission' !== $column && 'bst_vehicle_active' !== $column && 'bst_vehicle_limited' !== $column && 'bst_vehicle_tours' !== $column && 'bst_vehicle_bookings' !== $column ) {
             return;
         }
     },
