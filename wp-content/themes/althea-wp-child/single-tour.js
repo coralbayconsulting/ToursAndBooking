@@ -50,8 +50,8 @@ jQuery(document).ready(function ($) {
       calculateTotalPrice();
     }
     
-    // Check if we should show waiting list button instead of book button
-    checkButtonDisplayState();
+    // Book / waiting-list visibility and disabled state (includes vehicle + inventory rules)
+    checkBookButtonState();
   }
 
   // Function to calculate and display the total price
@@ -151,7 +151,6 @@ jQuery(document).ready(function ($) {
         });
 
         showHideFields();
-        checkButtonDisplayState(); // Check if we should show waiting list button
       },
       error: function (xhr, status, error) {
         console.log("Tour Package AJAX Error:", error);
@@ -184,8 +183,8 @@ jQuery(document).ready(function ($) {
       showHideFields();
     }
     
-    // Check button display state after date selection
-    checkButtonDisplayState();
+    // Book / waiting-list state after date selection
+    checkBookButtonState();
   });
 
   // Handle change event for the package dropdown
@@ -319,12 +318,12 @@ jQuery(document).ready(function ($) {
       },
     });
 
-    checkButtonDisplayState(); // Add this to check for sold out/unavailable state
+    checkBookButtonState();
   });
 
   function getPackageVehicleSlotCount() {
-    var packageId = tourpackagedropdown.val();
-    if (!packageId || typeof packageSettings === "undefined" || !packageSettings[packageId]) {
+    var packageId = tourpackagedropdown.find("option:selected").data("id");
+    if (packageId == null || packageId === "" || typeof packageSettings === "undefined" || !packageSettings[packageId]) {
       return 1;
     }
     return parseInt(packageSettings[packageId].vehicles, 10) || 1;
@@ -347,6 +346,11 @@ jQuery(document).ready(function ($) {
     return isNaN(n) ? null : n;
   }
 
+  function selectedVehicleCptId($dropdown) {
+    var v = $dropdown.find("option:selected").attr("data-vehicle-id");
+    return v != null && String(v).trim() !== "" ? String(v) : "";
+  }
+
   function refreshVehicle2LimitedOptions() {
     if (getPackageVehicleSlotCount() < 2) {
       vehicleDropdown2.find("option").prop("disabled", false);
@@ -355,20 +359,20 @@ jQuery(document).ready(function ($) {
     if (!vehicleDropdown1Container.is(":visible") || !vehicleDropdown2Container.is(":visible")) {
       return;
     }
-    var $s1 = vehicleDropdown1.find("option:selected");
-    var id1 = $s1.data("vehicle-id");
+    var id1 = selectedVehicleCptId(vehicleDropdown1);
     vehicleDropdown2.find("option").each(function () {
       var $o = $(this);
       if ($o.index() === 0) {
         $o.prop("disabled", false);
         return;
       }
-      var idOpt = $o.data("vehicle-id");
+      var idOptRaw = $o.attr("data-vehicle-id");
+      var idOpt = idOptRaw != null && String(idOptRaw).trim() !== "" ? String(idOptRaw) : "";
       var lim = parseLimitedSlotsRemainingAttr($o);
       var disable =
         id1 &&
         idOpt &&
-        String(id1) === String(idOpt) &&
+        id1 === idOpt &&
         lim !== null &&
         lim < 2;
       $o.prop("disabled", !!disable);
@@ -389,25 +393,32 @@ jQuery(document).ready(function ($) {
     if (vehicleDropdown1.prop("selectedIndex") === 0 || vehicleDropdown2.prop("selectedIndex") === 0) {
       return true;
     }
-    var id1 = vehicleDropdown1.find("option:selected").data("vehicle-id");
-    var id2 = vehicleDropdown2.find("option:selected").data("vehicle-id");
-    if (!id1 || !id2 || String(id1) !== String(id2)) {
+    var id1 = selectedVehicleCptId(vehicleDropdown1);
+    var id2 = selectedVehicleCptId(vehicleDropdown2);
+    if (!id1 || !id2 || id1 !== id2) {
       return true;
     }
     var lim =
       window.bstTourVehicleLimitedRemaining &&
-      window.bstTourVehicleLimitedRemaining[String(id1)];
+      window.bstTourVehicleLimitedRemaining[id1];
     if (lim === undefined || lim === null) {
       return true;
     }
     return lim >= 2;
   }
 
+  var BST_DUAL_VEHICLE_INVENTORY_MSG =
+    "This vehicle only has one left on this tour date. It cannot be selected for both cars.";
+
   function enforceDualLimitedSameVehicleRule(fromDropdown) {
     if (dualLimitedSameVehicleOk()) {
       hideDualVehicleInventoryNotice();
       return;
     }
+    console.error(
+      "[BST Tour Booking] Invalid vehicle pair: same limited model selected twice when fewer than two slots remain (package requires two cars)."
+    );
+    window.alert(BST_DUAL_VEHICLE_INVENTORY_MSG);
     showDualVehicleInventoryNotice(
       "Only one of this vehicle remains on this tour date. It cannot be used for both selections—please choose a different vehicle for the second car."
     );
@@ -593,6 +604,15 @@ jQuery(document).ready(function ($) {
     e.preventDefault();
     console.log('=== BOOK BUTTON CLICKED ===');
 
+    if (!dualLimitedSameVehicleOk()) {
+      console.error(
+        "[BST Tour Booking] Book blocked: same limited vehicle cannot fill both slots when only one remains."
+      );
+      window.alert(BST_DUAL_VEHICLE_INVENTORY_MSG);
+      checkBookButtonState();
+      return;
+    }
+
     // Get selected values
     var tourId = $('#tourBookingForm').data("tour-id"); // Get tour ID from data attribute
     var tourTitle = $('#tourBookingForm').data('tour-title');
@@ -623,6 +643,10 @@ jQuery(document).ready(function ($) {
       return;
     }
     if (!dualLimitedSameVehicleOk()) {
+      console.error(
+        "[BST Tour Booking] proceedWithBooking blocked: invalid dual limited vehicle selection."
+      );
+      window.alert(BST_DUAL_VEHICLE_INVENTORY_MSG);
       showDualVehicleInventoryNotice(
         "Only one of this vehicle remains on this tour date. Choose different vehicles for each car."
       );
@@ -882,46 +906,60 @@ jQuery(document).ready(function ($) {
       hideDualVehicleInventoryNotice();
     }
 
-    if (tourpackagedropdown.val() 
-      && (
-        (!vehicleDropdown1Container.is(":visible") && !vehicleDropdown2Container.is(":visible")) // No vehicle choices visible
-        || (vehicleDropdown1Container.is(":visible") && vehicle1Ok && (!vehicleDropdown2Container.is(":visible") || vehicle2Ok) && dualLimitedOk)
-      )
-    ) {
-      // Check if this should be booking or waiting list
-      checkButtonDisplayState();
-    } else {
+    checkButtonDisplayState();
+
+    if (!tourdatedropdown.val() || !tourpackagedropdown.val()) {
       bookButton.prop("disabled", true);
       $("#waitingListButton").prop("disabled", true);
+      return;
     }
+
+    var isDateSoldOut = tourdatedropdown.find("option:selected").attr("data-sold-out") === "true";
+    var isPackageUnavailable = tourpackagedropdown.find("option:selected").attr("data-unavailable") === "true";
+    if (isDateSoldOut || isPackageUnavailable) {
+      $("#waitingListButton").prop("disabled", false);
+      return;
+    }
+
+    const vehiclesReady =
+      (!vehicleDropdown1Container.is(":visible") && !vehicleDropdown2Container.is(":visible")) ||
+      (vehicleDropdown1Container.is(":visible") &&
+        vehicle1Ok &&
+        (!vehicleDropdown2Container.is(":visible") || vehicle2Ok) &&
+        dualLimitedOk);
+
+    if (!vehiclesReady) {
+      bookButton.prop("disabled", true);
+      $("#waitingListButton").prop("disabled", true);
+      return;
+    }
+
+    bookButton.prop("disabled", false);
+    $("#waitingListButton").prop("disabled", true);
   }
 
-  // Function to check if waiting list button should be shown instead of book button
+  // Waiting list vs book visibility only — does not enable Book (checkBookButtonState sets disabled).
   function checkButtonDisplayState() {
-    // Check if we have all required selections
     if (!tourdatedropdown.val() || !tourpackagedropdown.val()) {
-      // Show book button but keep it disabled for consistent sizing
       bookButton.show().prop("disabled", true);
       $("#waitingListButton").hide();
       $("#bookButtonText").show();
       $("#waitingListButtonText").hide();
       return;
     }
-    
+
     var isDateSoldOut = tourdatedropdown.find("option:selected").attr("data-sold-out") === "true";
     var isPackageUnavailable = tourpackagedropdown.find("option:selected").attr("data-unavailable") === "true";
-    
+
     if (isDateSoldOut || isPackageUnavailable) {
-      // Show waiting list button, hide book button
       bookButton.hide();
       $("#bookButtonText").hide();
       $("#waitingListButton").show().prop("disabled", false);
       $("#waitingListButtonText").show();
     } else {
-      // Show book button, hide waiting list button
       $("#waitingListButton").hide();
       $("#waitingListButtonText").hide();
-      bookButton.show().prop("disabled", false);
+      bookButton.show().prop("disabled", true);
       $("#bookButtonText").show();
     }
   }
