@@ -1416,6 +1416,8 @@ function bst_release_data_cleanup_callback() {
         echo '<p><strong>Note:</strong> An older release cleanup was recorded on ' . esc_html( date( 'Y-m-d H:i:s', (int) $bucket['_legacy_release_cleanup_at'] ) ) . ' (before per-task tracking). The tasks listed above for this version have <strong>not</strong> been marked complete yet — use <strong>Run Release Data Cleanup</strong> for a first run (no vehicle deletion unless you check force reset).</p>';
         echo '</div>';
     }
+    // HTML comment: if missing in View Source on a host, that server is not running this file revision (deploy/sync).
+    echo "<!-- BST release cleanup UI v2 (two checkboxes + re-link option) -->\n";
     echo '<div style="margin: 15px 0;">';
     echo '<label style="display:block;margin-bottom:10px;"><input type="checkbox" id="force-rerun-cleanup" value="1"> ';
     echo '<strong>Force reset vehicle migration</strong> — permanently deletes <em>all</em> Vehicle CPT posts, recreates them from tour repeater <em>text</em> (inventory scan only) and booking vehicle text, and rewrites booking <code>vehicle1_id</code> / <code>vehicle2_id</code>. Does <strong>not</strong> save Tour → vehicle_pricing CPT links; use <strong>Re-link tour repeater from labels</strong> (same run or a second run) for that.';
