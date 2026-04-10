@@ -70,6 +70,48 @@ function bst_vehicle_migration_bust_caches_for_tour( $tour_id ) {
 	if ( function_exists( 'acf_reset_local' ) ) {
 		acf_reset_local();
 	}
+	if ( function_exists( 'acf_flush_value_cache' ) ) {
+		acf_flush_value_cache( $tour_id );
+	}
+}
+
+/**
+ * While non-zero, acf_tour_vehicle_pricing_cpt_query must not restrict post_object choices (migration writes).
+ */
+function bst_vehicle_migration_push_post_object_query_bypass() {
+	$g = &$GLOBALS['bst_vehicle_migration_po_query_bypass'];
+	$g = (int) $g + 1;
+}
+
+/**
+ * @return void
+ */
+function bst_vehicle_migration_pop_post_object_query_bypass() {
+	if ( empty( $GLOBALS['bst_vehicle_migration_po_query_bypass'] ) ) {
+		return;
+	}
+	--$GLOBALS['bst_vehicle_migration_po_query_bypass'];
+	if ( $GLOBALS['bst_vehicle_migration_po_query_bypass'] < 0 ) {
+		$GLOBALS['bst_vehicle_migration_po_query_bypass'] = 0;
+	}
+}
+
+/**
+ * @return bool
+ */
+function bst_vehicle_migration_is_post_object_query_bypassed() {
+	return ! empty( $GLOBALS['bst_vehicle_migration_po_query_bypass'] );
+}
+
+/**
+ * ACF/SCF postmeta key for Tour → vehicle_pricing[pi].vehicles[pj].vehicle_id (0-based row indices in DB).
+ *
+ * @param int $package_index_0 Parent repeater row (0-based, order in stored repeater).
+ * @param int $vehicle_index_0 Nested repeater row (0-based).
+ * @return string
+ */
+function bst_vehicle_migration_vehicle_id_value_meta_key( $package_index_0, $vehicle_index_0 ) {
+	return BST_VEHICLE_PRICING_REPEATER_KEY . '_' . (int) $package_index_0 . '_' . BST_VEHICLE_NESTED_REPEATER_KEY . '_' . (int) $vehicle_index_0 . '_' . BST_VEHICLE_ROW_POST_OBJECT_KEY;
 }
 
 /**
@@ -219,10 +261,86 @@ function bst_vehicle_migration_find_existing_id( $base_name, array &$norm_to_id,
 }
 
 /**
- * When bulk update_field( vehicle_pricing ) fails, write each vehicle_id cell via update_sub_field (nested repeater).
+ * Write Vehicle (CPT) ids directly to postmeta using ACF’s nested repeater key pattern (0-based row indices).
+ * This bypasses update_field / update_sub_field, which can fail when post_object query filters or SCF validation
+ * reject programmatic updates even though the target Vehicle posts exist.
  *
  * @param int    $tour_id Tour post ID.
- * @param array  $cells   List of arrays with keys i, j, vehicle_id (package row index, vehicle row index, CPT id).
+ * @param array  $cells   Each item: vehicle_id, plus meta_row & meta_subrow (0-based positions in repeater rows).
+ * @param array  $results Log (append warnings).
+ * @return bool True if every cell was written and verified.
+ */
+function bst_vehicle_migration_apply_pricing_vehicle_ids_via_postmeta( $tour_id, array $cells, array &$results ) {
+	$tour_id = (int) $tour_id;
+	if ( $tour_id <= 0 || empty( $cells ) ) {
+		return false;
+	}
+
+	$all_ok = true;
+	foreach ( $cells as $c ) {
+		$vid = isset( $c['vehicle_id'] ) ? (int) $c['vehicle_id'] : 0;
+		$pi  = isset( $c['meta_row'] ) ? (int) $c['meta_row'] : null;
+		$pj  = isset( $c['meta_subrow'] ) ? (int) $c['meta_subrow'] : null;
+		if ( null === $pi || null === $pj ) {
+			if ( isset( $c['i'], $c['j'] ) && is_numeric( $c['i'] ) && is_numeric( $c['j'] ) ) {
+				$pi = (int) $c['i'];
+				$pj = (int) $c['j'];
+			} else {
+				$all_ok = false;
+				$results[] = sprintf(
+					'Warning: cannot write vehicle_id via postmeta for tour %d — missing meta_row/meta_subrow.',
+					$tour_id
+				);
+				continue;
+			}
+		}
+
+		$value_key = bst_vehicle_migration_vehicle_id_value_meta_key( $pi, $pj );
+		$ref_key   = '_' . $value_key;
+
+		if ( $vid > 0 ) {
+			update_post_meta( $tour_id, $value_key, $vid );
+			update_post_meta( $tour_id, $ref_key, BST_VEHICLE_ROW_POST_OBJECT_KEY );
+			$read = get_post_meta( $tour_id, $value_key, true );
+			if ( (int) $read !== $vid ) {
+				$all_ok = false;
+				$results[] = sprintf(
+					'Warning: postmeta verify failed for tour %1$d package row %2$d vehicle row %3$d (expected vehicle_id %4$d, read %5$s).',
+					$tour_id,
+					$pi,
+					$pj,
+					$vid,
+					is_scalar( $read ) ? (string) $read : '?'
+				);
+			}
+		} else {
+			delete_post_meta( $tour_id, $value_key );
+			delete_post_meta( $tour_id, $ref_key );
+		}
+
+		// Legacy name-based keys (some imports / older saves); keep in sync only if that row already used names.
+		$name_val = 'vehicle_pricing_' . $pi . '_vehicles_' . $pj . '_vehicle_id';
+		$name_ref = '_' . $name_val;
+		if ( metadata_exists( 'post', $tour_id, $name_val ) ) {
+			if ( $vid > 0 ) {
+				update_post_meta( $tour_id, $name_val, $vid );
+				update_post_meta( $tour_id, $name_ref, BST_VEHICLE_ROW_POST_OBJECT_KEY );
+			} else {
+				delete_post_meta( $tour_id, $name_val );
+				delete_post_meta( $tour_id, $name_ref );
+			}
+		}
+	}
+
+	bst_vehicle_migration_bust_caches_for_tour( $tour_id );
+	return $all_ok;
+}
+
+/**
+ * Fallback: write each vehicle_id cell via update_sub_field (nested repeater).
+ *
+ * @param int    $tour_id Tour post ID.
+ * @param array  $cells   List of arrays with keys i, j, vehicle_id (and ideally meta_row, meta_subrow).
  * @param array  $results Log lines (append warnings here).
  * @return bool True if every cell saved.
  */
@@ -508,45 +626,52 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 		}
 
 		$pending_cells = array();
+		$pi              = 0;
 		foreach ( $pricing as $i => $row ) {
 			if ( ! is_array( $row ) ) {
+				++$pi;
 				continue;
 			}
 			$nested = bst_vehicle_migration_get_nested_vehicle_rows( $row );
 			if ( empty( $nested ) ) {
+				++$pi;
 				continue;
 			}
 			// Write back into the same nested key shape we read (name or field key).
 			$nested_key = ( ! empty( $row['vehicles'] ) && is_array( $row['vehicles'] ) ) ? 'vehicles' : BST_VEHICLE_NESTED_REPEATER_KEY;
+			$pj         = 0;
 			foreach ( $nested as $j => $vrow ) {
-				if ( ! is_array( $vrow ) ) {
-					continue;
-				}
-				$rows_seen++;
-				$ignore_linked = $repair_repeater_links_from_text;
-				$new_id        = bst_vehicle_migration_resolve_row_id( $vrow, $tid, $norm_to_id, $vehicles_by_id, $ignore_linked );
-				$old           = bst_vehicle_migration_row_linked_post_id( $vrow );
-				$write         = false;
+				if ( is_array( $vrow ) ) {
+					$rows_seen++;
+					$ignore_linked = $repair_repeater_links_from_text;
+					$new_id        = bst_vehicle_migration_resolve_row_id( $vrow, $tid, $norm_to_id, $vehicles_by_id, $ignore_linked );
+					$old           = bst_vehicle_migration_row_linked_post_id( $vrow );
+					$write         = false;
 
-				if ( $repair_repeater_links_from_text ) {
-					if ( $new_id > 0 && $old !== $new_id ) {
+					if ( $repair_repeater_links_from_text ) {
+						if ( $new_id > 0 && $old !== $new_id ) {
+							bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing[ $i ][ $nested_key ][ $j ], $new_id );
+							$write = true;
+							$rows_touched++;
+						}
+					} elseif ( $new_id > 0 && $old !== $new_id ) {
 						bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing[ $i ][ $nested_key ][ $j ], $new_id );
 						$write = true;
 						$rows_touched++;
 					}
-				} elseif ( $new_id > 0 && $old !== $new_id ) {
-					bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing[ $i ][ $nested_key ][ $j ], $new_id );
-					$write = true;
-					$rows_touched++;
+					if ( $write ) {
+						$pending_cells[] = array(
+							'meta_row'    => $pi,
+							'meta_subrow' => $pj,
+							'i'           => $i,
+							'j'           => $j,
+							'vehicle_id'  => $new_id,
+						);
+					}
 				}
-				if ( $write ) {
-					$pending_cells[] = array(
-						'i'          => $i,
-						'j'          => $j,
-						'vehicle_id' => $new_id,
-					);
-				}
+				++$pj;
 			}
+			++$pi;
 		}
 
 		if ( ! empty( $pending_cells ) ) {
@@ -555,35 +680,45 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 			}
 			// Critical: unchanged rows may still have vehicle_id as WP_Post; bulk update_field rejects that.
 			bst_vehicle_migration_normalize_vehicle_pricing_for_save( $pricing );
-			bst_vehicle_migration_bust_caches_for_tour( $tid );
+			bst_vehicle_migration_push_post_object_query_bypass();
 			$ok = false;
-			foreach ( array( $tid, 'post_' . $tid ) as $post_ref ) {
-				$r = update_field( 'vehicle_pricing', $pricing, $post_ref );
-				if ( false !== $r ) {
-					$ok = true;
-					break;
+			try {
+				bst_vehicle_migration_bust_caches_for_tour( $tid );
+				// 1) Direct postmeta (matches ACF DB layout; avoids post_object picker restrictions on save).
+				$ok = bst_vehicle_migration_apply_pricing_vehicle_ids_via_postmeta( $tid, $pending_cells, $results );
+				// 2) Whole repeater via API (optional if postmeta already succeeded).
+				if ( ! $ok ) {
+					foreach ( array( $tid, 'post_' . $tid ) as $post_ref ) {
+						$r = update_field( 'vehicle_pricing', $pricing, $post_ref );
+						if ( false !== $r ) {
+							$ok = true;
+							break;
+						}
+						$r = update_field( BST_VEHICLE_PRICING_REPEATER_KEY, $pricing, $post_ref );
+						if ( false !== $r ) {
+							$ok = true;
+							break;
+						}
+					}
 				}
-				$r = update_field( BST_VEHICLE_PRICING_REPEATER_KEY, $pricing, $post_ref );
-				if ( false !== $r ) {
-					$ok = true;
-					break;
+				if ( ! $ok && function_exists( 'acf_get_field' ) && function_exists( 'acf_update_value' ) ) {
+					$field = acf_get_field( BST_VEHICLE_PRICING_REPEATER_KEY );
+					if ( is_array( $field ) ) {
+						$r = acf_update_value( $pricing, $tid, $field );
+						$ok = ( false !== $r );
+					}
 				}
-			}
-			if ( ! $ok && function_exists( 'acf_get_field' ) && function_exists( 'acf_update_value' ) ) {
-				$field = acf_get_field( BST_VEHICLE_PRICING_REPEATER_KEY );
-				if ( is_array( $field ) ) {
-					$r = acf_update_value( $pricing, $tid, $field );
-					$ok = ( false !== $r );
+				if ( ! $ok ) {
+					$ok = bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tid, $pending_cells, $results );
 				}
-			}
-			if ( ! $ok ) {
-				$ok = bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tid, $pending_cells, $results );
+			} finally {
+				bst_vehicle_migration_pop_post_object_query_bypass();
 			}
 			if ( $ok ) {
 				$tours_updated++;
 			} else {
 				$results[] = sprintf(
-					'Warning: could not save vehicle_pricing for tour %d (%s) (bulk update_field and per-cell update_sub_field both failed).',
+					'Warning: could not save vehicle_pricing for tour %d (%s) (postmeta, bulk update_field, and update_sub_field all failed).',
 					$tid,
 					get_the_title( $tid )
 				);

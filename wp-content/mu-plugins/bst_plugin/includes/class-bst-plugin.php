@@ -1778,6 +1778,11 @@ class BST_Plugin {
      * @return array
      */
     public function acf_tour_vehicle_pricing_cpt_query( $args, $field, $post_id ) {
+        // Picker restriction must not run during programmatic migration saves — ACF/SCF can reject
+        // update_field / update_sub_field when the new Vehicle ID is outside the restricted query.
+        if ( function_exists( 'bst_vehicle_migration_is_post_object_query_bypassed' ) && bst_vehicle_migration_is_post_object_query_bypassed() ) {
+            return $args;
+        }
         if ( ! function_exists( 'acf_get_valid_post_id' ) || ! function_exists( 'bst_vehicle_ids_for_tour_pricing_picker' ) ) {
             return $args;
         }
