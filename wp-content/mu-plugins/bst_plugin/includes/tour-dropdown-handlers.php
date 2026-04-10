@@ -430,20 +430,25 @@ function get_vehicle_data() {
                 }
 
                 if ($limited_display_remaining !== null) {
-                    if ($price > 0) {
-                        $price_fragment = '+' . $symbol . number_format($abs_price, 0);
-                    } elseif ($price < 0) {
-                        $price_fragment = '-' . $symbol . number_format($abs_price, 0);
+                    if ($limited_display_remaining <= 0) {
+                        /* translators: appended to vehicle title when limited inventory is exhausted (public tour page) */
+                        $vehicle_name = get_the_title($vehicle_id) . ' ' . __('(Unavailable)', 'bst-plugin');
                     } else {
-                        $price_fragment = $symbol . '0';
+                        if ($price > 0) {
+                            $price_fragment = '+' . $symbol . number_format($abs_price, 0);
+                        } elseif ($price < 0) {
+                            $price_fragment = '-' . $symbol . number_format($abs_price, 0);
+                        } else {
+                            $price_fragment = $symbol . '0';
+                        }
+                        /* translators: 1: price fragment e.g. +€1,400, 2: slots remaining, 3: word "left" */
+                        $vehicle_name = get_the_title($vehicle_id) . ' ' . sprintf(
+                            '(%1$s - %2$d %3$s)',
+                            $price_fragment,
+                            (int) $limited_display_remaining,
+                            __('left', 'bst-plugin')
+                        );
                     }
-                    /* translators: 1: price fragment e.g. +€1,400, 2: slots remaining, 3: word "left" */
-                    $vehicle_name = get_the_title($vehicle_id) . ' ' . sprintf(
-                        '(%1$s - %2$d %3$s)',
-                        $price_fragment,
-                        (int) $limited_display_remaining,
-                        __('left', 'bst-plugin')
-                    );
                 } else {
                     $vehicle_name = get_the_title($vehicle_id) . $formatted_price;
                 }
