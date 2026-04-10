@@ -2379,8 +2379,13 @@ class BST_Plugin {
             if ( $repair_repeater ) {
                 $rerun_note .= ' (Re-link from labels executed)';
             }
-            $message = "Release data cleanup completed successfully for version {$current_version}{$rerun_note}! The full text is saved in the database (see Tools → Last release cleanup log). " . implode('. ', $results);
-            wp_send_json_success($message);
+            $message = "Release data cleanup completed successfully for version {$current_version}{$rerun_note}! Full detail is logged to PHP error_log (lines prefixed [BST release cleanup]). " . implode('. ', $results);
+            wp_send_json_success(
+                array(
+                    'message'   => $message,
+                    'tools_url' => admin_url( 'admin.php?page=bst_tools_page' ),
+                )
+            );
             
         } catch (Exception $e) {
             error_log( '[BST release cleanup] [ERROR] ' . $e->getMessage() );

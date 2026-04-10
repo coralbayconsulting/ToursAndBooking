@@ -1413,96 +1413,116 @@ function bst_release_data_cleanup_callback() {
         echo '</div>';
     } elseif ( ! empty( $bucket['_legacy_release_cleanup_at'] ) && ! $already_run ) {
         echo '<div style="margin: 15px 0; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; color: #856404;">';
-        echo '<p><strong>Note:</strong> An older release cleanup was recorded on ' . esc_html( date( 'Y-m-d H:i:s', (int) $bucket['_legacy_release_cleanup_at'] ) ) . ' (before per-task tracking). The tasks listed above for this version have <strong>not</strong> been marked complete yet — use <strong>Run Release Data Cleanup</strong> for a first run (no vehicle deletion unless you check force reset).</p>';
+        echo '<p><strong>Note:</strong> An older release cleanup was recorded on ' . esc_html( date( 'Y-m-d H:i:s', (int) $bucket['_legacy_release_cleanup_at'] ) ) . ' (before per-task tracking). The tasks listed above for this version have <strong>not</strong> been marked complete yet — use <strong>Run standard release cleanup</strong> below for a first pass (no vehicle deletion).</p>';
         echo '</div>';
     }
     // HTML comment: if missing in View Source on a host, that server is not running this file revision (deploy/sync).
-    echo "<!-- BST release cleanup UI v2 (two checkboxes + re-link option) -->\n";
-    echo '<div style="margin: 15px 0;">';
-    echo '<label style="display:block;margin-bottom:10px;"><input type="checkbox" id="force-rerun-cleanup" value="1"> ';
-    echo '<strong>Force reset vehicle migration</strong> — permanently deletes <em>all</em> Vehicle CPT posts, recreates them from tour repeater <em>text</em> (inventory scan only) and booking vehicle text, and rewrites booking <code>vehicle1_id</code> / <code>vehicle2_id</code>. Does <strong>not</strong> save Tour → vehicle_pricing CPT links; use <strong>Re-link tour repeater from labels</strong> (same run or a second run) for that.';
-    echo '</label>';
-    echo '<label style="display:block;"><input type="checkbox" id="repair-repeater-links-from-text" value="1"> ';
-    echo '<strong>Re-link tour repeater from labels</strong> — ignores each row’s saved Vehicle (CPT) id and sets it again from the row’s vehicle <em>text</em> (same matching as migration). Does <em>not</em> delete Vehicle posts. Use after a bad save left wrong or stale CPT ids while labels are still correct.';
-    echo '</label></div>';
-    echo '<p class="description" style="margin-top:-8px;">';
-    if ($already_run) {
-        echo esc_html__( 'Only the checked options run. Check at least one box to rerun cleanup for this version.', 'bst-plugin' );
-    } else {
-        echo esc_html__( 'Only the checked options run. Leave both unchecked for standard migration (no force reset, no re-link-from-labels-only pass).', 'bst-plugin' );
-    }
-    echo ' ';
-    echo esc_html__( 'Clicking Run does not change these checkboxes.', 'bst-plugin' );
-    echo '</p>';
+    echo "<!-- BST release cleanup UI v3 (separate buttons; no checkboxes) -->\n";
 
     $tools_url = admin_url( 'admin.php?page=bst_tools_page' );
-    echo '<p class="description" style="max-width:960px;">' . esc_html__( 'After each run, the full log is saved in one place:', 'bst-plugin' ) . ' ';
-    echo '<a href="' . esc_url( $tools_url ) . '">' . esc_html__( 'BST Plugin → Tools → Release cleanup & vehicle migration', 'bst-plugin' ) . '</a>.</p>';
+    echo '<p class="description" style="max-width:960px;">' . esc_html__( 'After each run, lines are written to PHP error_log — open Tools → Error Log to view:', 'bst-plugin' ) . ' ';
+    echo '<a href="' . esc_url( $tools_url ) . '">' . esc_html__( 'BST Plugin → Tools → Error Log', 'bst-plugin' ) . '</a>.</p>';
 
-    echo '<button type="button" id="cleanup-release-data" class="button button-primary" style="margin-top: 15px;" title="Run release-specific data cleanup tasks">';
-    echo '<span class="dashicons dashicons-admin-tools" style="margin-right: 5px;"></span>';
-    echo $already_run ? 'Rerun Release Data Cleanup' : 'Run Release Data Cleanup';
+    echo '<div class="bst-release-cleanup-actions" style="margin: 20px 0; max-width: 960px;">';
+    echo '<p><strong>' . esc_html__( 'Run cleanup (each button sends a fixed mode — no checkboxes):', 'bst-plugin' ) . '</strong></p>';
+
+    if ( ! $already_run ) {
+        echo '<div style="margin: 16px 0; padding: 12px 14px; background: #f6f7f7; border: 1px solid #c3c4c7; border-radius: 4px;">';
+        echo '<p style="margin: 0 0 10px;"><strong>' . esc_html__( 'Step 1 — Standard release cleanup', 'bst-plugin' ) . '</strong></p>';
+        echo '<p class="description" style="margin: 0 0 10px;">' . esc_html__( 'Runs all tasks for this version with normal vehicle migration: no mass deletion of Vehicle CPTs, no “re-link from labels only” pass. Use this for the first run on a new version.', 'bst-plugin' ) . '</p>';
+        echo '<button type="button" id="bst-release-cleanup-standard" class="button button-primary">';
+        echo '<span class="dashicons dashicons-admin-tools" style="margin-right: 4px; vertical-align: text-top;"></span>';
+        echo esc_html__( 'Run standard release cleanup', 'bst-plugin' );
+        echo '</button>';
+        echo '</div>';
+    }
+
+    echo '<div style="margin: 16px 0; padding: 12px 14px; background: #fcf9e8; border: 1px solid #dba617; border-radius: 4px;">';
+    echo '<p style="margin: 0 0 10px;"><strong>' . ( $already_run
+        ? esc_html__( 'Step 1 — Force reset vehicle migration', 'bst-plugin' )
+        : esc_html__( 'Step 2 — Force reset vehicle migration', 'bst-plugin' )
+    ) . '</strong></p>';
+    echo '<p class="description" style="margin: 0 0 10px;">' . esc_html__( 'Permanently deletes all Vehicle CPT posts, recreates them from tour repeater text (inventory scan) and booking vehicle text, and rewrites booking vehicle1_id / vehicle2_id. Does not save Tour → vehicle_pricing CPT links — use the Re-link step below afterward if tours need CPT ids written from labels.', 'bst-plugin' ) . '</p>';
+    echo '<button type="button" id="bst-release-cleanup-force" class="button button-secondary">';
+    echo '<span class="dashicons dashicons-warning" style="margin-right: 4px; vertical-align: text-top;"></span>';
+    echo esc_html__( 'Force reset vehicle migration', 'bst-plugin' );
     echo '</button>';
-    echo '<span id="cleanup-release-spinner" class="spinner" style="margin-left: 10px; display: none;"></span>';
-    echo '<div id="cleanup-release-result" style="margin-top: 10px;"></div>';
-    
+    echo '</div>';
+
+    echo '<div style="margin: 16px 0; padding: 12px 14px; background: #f0f6fc; border: 1px solid #72aee6; border-radius: 4px;">';
+    echo '<p style="margin: 0 0 10px;"><strong>' . ( $already_run
+        ? esc_html__( 'Step 2 — Re-link tour pricing from labels', 'bst-plugin' )
+        : esc_html__( 'Step 3 — Re-link tour pricing from labels', 'bst-plugin' )
+    ) . '</strong></p>';
+    echo '<p class="description" style="margin: 0 0 10px;">' . esc_html__( 'Sets each vehicle_pricing row’s Vehicle (CPT) id from that row’s text label (same matching as migration). Does not delete Vehicle posts. Use when labels are correct but saved CPT links are wrong.', 'bst-plugin' ) . '</p>';
+    echo '<button type="button" id="bst-release-cleanup-relink" class="button button-secondary">';
+    echo '<span class="dashicons dashicons-admin-links" style="margin-right: 4px; vertical-align: text-top;"></span>';
+    echo esc_html__( 'Re-link tour pricing from labels', 'bst-plugin' );
+    echo '</button>';
+    echo '</div>';
+
+    echo '<span id="cleanup-release-spinner" class="spinner" style="float: none; margin: 8px 0 0 8px; vertical-align: middle; display: none;"></span>';
+    echo '<div id="cleanup-release-result" style="margin-top: 16px;"></div>';
+    echo '</div>';
 
     echo '</div>';
+
+    $bst_release_cleanup_task_list = '';
+    foreach ( $cleanup_tasks as $task ) {
+        if ( ! empty( $task['name'] ) ) {
+            $bst_release_cleanup_task_list .= '• ' . $task['name'] . "\n";
+        }
+    }
     
     // Add JavaScript
     ?>
     <script type="text/javascript">
     jQuery(document).ready(function($) {
-        $('#cleanup-release-data').on('click', function() {
-            var $button = $(this);
-            var $spinner = $('#cleanup-release-spinner');
-            var $result = $('#cleanup-release-result');
-            var $forceCheckbox = $('#force-rerun-cleanup');
-            var $repairCheckbox = $('#repair-repeater-links-from-text');
-            var alreadyRun = <?php echo $already_run ? 'true' : 'false'; ?>;
+        var alreadyRun = <?php echo $already_run ? 'true' : 'false'; ?>;
+        var $spinner = $('#cleanup-release-spinner');
+        var $result = $('#cleanup-release-result');
+        var $actionButtons = $('#bst-release-cleanup-standard, #bst-release-cleanup-force, #bst-release-cleanup-relink');
+        var taskList = <?php echo wp_json_encode( $bst_release_cleanup_task_list ); ?>;
 
-            var forceRerun = $forceCheckbox.is(':checked');
-            var repairRepeater = $repairCheckbox.is(':checked');
-
-            if (alreadyRun && !forceRerun && !repairRepeater) {
-                alert('Please check "Force reset vehicle migration" and/or "Re-link tour repeater from labels" to run cleanup again for this version.');
-                return;
-            }
-            
-            // Confirmation dialog
-            var taskList = '';
-            <?php foreach ($cleanup_tasks as $task): ?>
-            taskList += '• <?php echo esc_js($task['name']); ?>\n';
-            <?php endforeach; ?>
-            
+        function bstReleaseCleanupConfirm(force, repair) {
             var rerunNote = '';
-            if (forceRerun) {
+            if (force) {
                 rerunNote += '\n\n⚠️ FORCE RESET: Every Vehicle CPT post will be PERMANENTLY DELETED, then recreated. Tour and booking vehicle IDs will be reassigned. Backup your database first.';
             }
-            if (repairRepeater) {
-                rerunNote += '\n\nRe-link from labels: saved Vehicle (CPT) ids on tour pricing rows will be replaced using each row’s text label (existing Vehicle posts are kept unless force reset is also checked).';
+            if (repair) {
+                rerunNote += '\n\nRe-link from labels: saved Vehicle (CPT) ids on tour pricing rows will be replaced using each row’s text label (Vehicle posts are not deleted).';
             }
-            
-            if (!confirm('Are you sure you want to run the release data cleanup? This will modify existing data.\n\nTasks to be performed:\n' + taskList + rerunNote + '\n\nRecommended: Backup your database first.')) {
+            if (!force && !repair) {
+                rerunNote += '\n\nStandard mode: normal migration for this release (no mass Vehicle deletion, no label-only re-link pass).';
+            }
+            return window.confirm('Run release data cleanup? This will modify existing data.\n\nTasks:\n' + taskList + rerunNote + '\n\nRecommended: backup your database first.');
+        }
+
+        function bstRunReleaseCleanup(force, repair) {
+            if (alreadyRun && !force && !repair) {
+                window.alert(<?php echo wp_json_encode( __( 'Cleanup already completed for this version. Use “Force reset” or “Re-link from labels” to run vehicle migration again.', 'bst-plugin' ) ); ?>);
                 return;
             }
-            
-            $button.prop('disabled', true);
-            $spinner.show();
+            if (!bstReleaseCleanupConfirm(force, repair)) {
+                return;
+            }
+            $actionButtons.prop('disabled', true);
+            $spinner.addClass('is-active').css('display', 'inline-block');
             $result.html('');
-            
+
             $.ajax({
                 url: ajaxurl,
                 type: 'POST',
                 data: {
                     action: 'bst_release_data_cleanup',
-                    nonce: '<?php echo wp_create_nonce("bst_release_cleanup_nonce"); ?>',
-                    force: forceRerun ? 'true' : 'false',
-                    repair: repairRepeater ? 'true' : 'false'
+                    nonce: '<?php echo wp_create_nonce( 'bst_release_cleanup_nonce' ); ?>',
+                    force: force ? 'true' : 'false',
+                    repair: repair ? 'true' : 'false'
                 },
                 success: function(response) {
-                    $spinner.hide();
-                    
+                    $spinner.removeClass('is-active').hide();
+                    $actionButtons.prop('disabled', false);
+
                     if (response.success) {
                         var data = response.data;
                         var msg = '';
@@ -1512,34 +1532,41 @@ function bst_release_data_cleanup_callback() {
                             toolsUrl = data.tools_url || '';
                         } else if (typeof data === 'string') {
                             msg = data;
+                            toolsUrl = <?php echo wp_json_encode( admin_url( 'admin.php?page=bst_tools_page' ) ); ?>;
                         } else {
                             msg = 'Cleanup finished.';
+                            toolsUrl = <?php echo wp_json_encode( admin_url( 'admin.php?page=bst_tools_page' ) ); ?>;
                         }
                         var $box = $('<div class="notice notice-success" style="max-width:960px;"></div>');
                         $box.append($('<p></p>').append($('<strong>').text('Cleanup finished. ')).append(document.createTextNode(msg)));
                         if (toolsUrl) {
                             $box.append($('<p style="margin-top:10px;"></p>').append(
-                                $('<a class="button button-primary"></a>').attr('href', toolsUrl).text('Open Tools — full log')
+                                $('<a class="button button-primary"></a>').attr('href', toolsUrl).text('Open Tools — Error Log')
                             ));
                         }
                         $result.empty().append($box);
-                        if (!alreadyRun) {
-                            $button.text('Rerun Release Data Cleanup');
-                        }
-                        $button.prop('disabled', false);
                     } else {
                         var errText = (typeof response.data === 'string') ? response.data : (response.data && response.data.message) ? response.data.message : 'Unknown error';
                         var $errTa = $('<textarea readonly="readonly" rows="12" style="width:100%;max-width:100%;font-family:Consolas,Monaco,monospace;font-size:12px;box-sizing:border-box;margin-top:8px;" />').val(errText);
                         $result.html('<div class="notice notice-error"><p><strong>Cleanup failed or was blocked.</strong></p></div>').append($errTa);
-                        $button.prop('disabled', false);
                     }
                 },
                 error: function() {
-                    $spinner.hide();
-                    $button.prop('disabled', false);
+                    $spinner.removeClass('is-active').hide();
+                    $actionButtons.prop('disabled', false);
                     $result.html('<div class="notice notice-error"><p>AJAX request failed.</p></div>');
                 }
             });
+        }
+
+        $('#bst-release-cleanup-standard').on('click', function() {
+            bstRunReleaseCleanup(false, false);
+        });
+        $('#bst-release-cleanup-force').on('click', function() {
+            bstRunReleaseCleanup(true, false);
+        });
+        $('#bst-release-cleanup-relink').on('click', function() {
+            bstRunReleaseCleanup(false, true);
         });
     });
     </script>
@@ -1768,8 +1795,7 @@ function bst_get_release_cleanup_tasks() {
 }
 
 /**
- * Write release cleanup output lines to: PHP error_log, wp-content file, uploads dir file, and option
- * bst_last_release_cleanup_log (so Tools can always show output even when the filesystem is read-only).
+ * Write release cleanup / vehicle migration result lines to PHP’s error_log only (Tools → Error Log).
  *
  * @param string[] $lines Result strings from cleanup tasks / migrations.
  */
@@ -1778,11 +1804,9 @@ function bst_log_release_cleanup_results( array $lines ) {
 		return;
 	}
 
-	// One short line first — always visible next to other BST lines in php-fpm.www.log.
-	error_log( '[BST] release cleanup: persisting ' . count( $lines ) . ' result line(s) (see wp_options bst_last_release_cleanup_log).' );
+	error_log( '[BST] release cleanup: logging ' . count( $lines ) . ' result line(s) to PHP error_log.' );
 
 	$prefix = '[BST release cleanup] ';
-	$full_text = '';
 	foreach ( $lines as $line ) {
 		if ( ! is_string( $line ) ) {
 			$line = wp_json_encode( $line );
@@ -1795,46 +1819,7 @@ function bst_log_release_cleanup_results( array $lines ) {
 		if ( preg_match( '/\b(Warning|failed|error|Error)\b/i', $line ) ) {
 			$tag = 'WARNING';
 		}
-		$out_line = $prefix . '[' . $tag . '] ' . $line;
-		error_log( $out_line );
-		$full_text .= $out_line . "\n";
-	}
-
-	update_option(
-		'bst_last_release_cleanup_log',
-		array(
-			'time'    => current_time( 'mysql' ),
-			'text'    => $full_text,
-			'lines'   => $lines,
-			'success' => true,
-		),
-		false
-	);
-
-	$log_path = function_exists( 'bst_get_release_cleanup_log_path' ) ? bst_get_release_cleanup_log_path() : trailingslashit( WP_CONTENT_DIR ) . 'bst-release-cleanup.log';
-	$header   = sprintf(
-		"[%s] — %d line(s)\n",
-		current_time( 'mysql' ),
-		count( $lines )
-	);
-	$payload  = $header . $full_text . "\n";
-	// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- log destination may be read-only; DB copy still exists.
-	$w = @file_put_contents( $log_path, $payload, FILE_APPEND | LOCK_EX );
-	if ( false === $w ) {
-		error_log( '[BST release cleanup] [ERROR] Could not append to ' . $log_path );
-	}
-
-	$upload = wp_upload_dir();
-	if ( empty( $upload['error'] ) ) {
-		$dir = trailingslashit( $upload['basedir'] ) . 'bst-plugin-logs';
-		if ( wp_mkdir_p( $dir ) ) {
-			$up_log = trailingslashit( $dir ) . 'release-cleanup.log';
-			// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
-			$w2 = @file_put_contents( $up_log, $payload, FILE_APPEND | LOCK_EX );
-			if ( false === $w2 ) {
-				error_log( '[BST release cleanup] [ERROR] Could not append to ' . $up_log );
-			}
-		}
+		error_log( $prefix . '[' . $tag . '] ' . $line );
 	}
 }
 

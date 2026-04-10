@@ -187,28 +187,6 @@ function bst_vehicle_migration_normalize_vehicle_pricing_for_save( array &$prici
 }
 
 /**
- * Always persist migration text to the DB + one short FPM line (full release log can miss long runs).
- *
- * @param array $results Log lines.
- */
-function bst_vehicle_migration_persist_run_to_options( array $results ) {
-	$text = implode( "\n", $results );
-	if ( strlen( $text ) > 800000 ) {
-		$text = substr( $text, 0, 800000 ) . "\n... [truncated]";
-	}
-	$payload = array(
-		'time'  => current_time( 'mysql' ),
-		'utc'   => microtime( true ),
-		'text'  => $text,
-		'lines' => $results,
-	);
-	update_option( 'bst_migration_last_run', $payload, false );
-	set_transient( 'bst_migration_last_run_copy', $payload, WEEK_IN_SECONDS );
-	// Single line so it always appears next to other cron lines in php-fpm.www.log.
-	error_log( '[BST] vehicle migration finished — full output in WP Tools (option bst_migration_last_run). Line count: ' . count( $results ) );
-}
-
-/**
  * Find an existing vehicle post ID for a base name: normalized key or compact (no-space) key only.
  * Intentionally no similar_text / levenshtein — close names (e.g. R1300GS vs R1300RT) must not match.
  *
@@ -496,7 +474,6 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 		$tid = (int) $tid;
 		if ( ! function_exists( 'get_field' ) || ! function_exists( 'update_field' ) ) {
 			$results[] = 'ACF/SCF not available; aborting tour updates.';
-			bst_vehicle_migration_persist_run_to_options( $results );
 			return $results;
 		}
 
@@ -687,8 +664,6 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 
 	$results[] = sprintf( 'Bookings updated with vehicle IDs: %d', $b_updated );
 	$results[] = sprintf( 'Vehicle CPT count after migration: %d', count( $vehicles_by_id ) );
-
-	bst_vehicle_migration_persist_run_to_options( $results );
 
 	return $results;
 }

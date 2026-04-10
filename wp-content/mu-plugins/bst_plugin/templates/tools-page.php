@@ -1,9 +1,5 @@
 <?php
 $error_log_path = bst_get_tools_error_log_path();
-$release_cleanup_log_path = function_exists( 'bst_get_release_cleanup_log_path' ) ? bst_get_release_cleanup_log_path() : trailingslashit( WP_CONTENT_DIR ) . 'bst-release-cleanup.log';
-$upload_dir = wp_upload_dir();
-$bst_release_cleanup_upload_path = ( empty( $upload_dir['error'] ) ) ? trailingslashit( $upload_dir['basedir'] ) . 'bst-plugin-logs/release-cleanup.log' : '';
-$latest_release_migration = function_exists( 'bst_tools_get_latest_release_migration_log' ) ? bst_tools_get_latest_release_migration_log() : null;
 
 // Handle a download request BEFORE any output so headers can be sent.
 bst_tools_maybe_send_error_log_download();
@@ -129,14 +125,9 @@ $current_time = time();
 
     <h2>Error Log</h2>
     <div class="bst-tools-section">
-        <p>View and manage PHP error logs for debugging issues.</p>
-        <p class="description" style="max-width:920px;">
-            Code that calls PHP’s <code>error_log()</code> (including BST release cleanup, Airwallex/exchange-rate tasks, and most plugins) writes to the file configured in PHP’s <code>error_log</code> directive — set in <strong>php.ini</strong> or your <strong>PHP-FPM pool</strong> (or equivalent). That is independent of the web server brand (nginx, IIS, etc.); it is not an Apache-only feature.
-            WordPress’s <code>WP_DEBUG_LOG</code> in <code>wp-config.php</code> is separate: when enabled, WordPress also appends to <code>wp-content/debug.log</code>.
-            <strong>This page shows one file:</strong> we prefer the INI path when that file exists and is readable; otherwise we fall back to <code>debug.log</code> or other known locations. On a new testing host, if the INI path is empty or points somewhere the web user cannot read, use the <strong>Release cleanup &amp; vehicle migration</strong> section below (database copy) or align <code>WP_DEBUG_LOG</code> + <code>debug.log</code> with your host docs.
-        </p>
+        <p class="description" style="max-width:720px;"><?php esc_html_e( 'BST release cleanup and vehicle migration log each line here via PHP’s error_log(). This viewer shows the file we resolve below (INI error_log when it is a readable path, otherwise wp-content/debug.log when present).', 'bst-plugin' ); ?></p>
         <p><strong>PHP <code>error_log</code> (INI):</strong> <code><?php echo esc_html( function_exists( 'bst_tools_get_ini_error_log_display' ) ? bst_tools_get_ini_error_log_display() : ini_get( 'error_log' ) ); ?></code></p>
-        <p><strong>File used by this viewer:</strong> <code><?php echo esc_html( $error_log_path ); ?></code></p>
+        <p><strong>File shown below:</strong> <code><?php echo esc_html( $error_log_path ); ?></code></p>
 
         <?php if (isset($_GET['download_error']) && $_GET['download_error'] === 'headers_sent') : ?>
             <div class="notice notice-error"><p>Error: Could not download log file. Headers already sent. This may be due to output before the download request.</p></div>
@@ -184,45 +175,6 @@ $current_time = time();
             </form>
         </div>
     </div>
-
-    <h2>Release cleanup &amp; vehicle migration</h2>
-    <div class="bst-tools-section">
-        <p class="description" style="max-width:920px;">
-            <strong>One log for this workflow.</strong> After you run <strong>Release data cleanup</strong> (plugin settings), the newest saved output from the database is shown below. We pick the latest of the two internal copies (full release cleanup vs vehicle migration detail) so you always see what ran most recently.
-        </p>
-        <?php if ( is_array( $latest_release_migration ) && ! empty( $latest_release_migration['text'] ) ) : ?>
-            <p style="margin-bottom:8px;">
-                <strong>Latest run:</strong> <?php echo esc_html( $latest_release_migration['time'] ); ?>
-                <span class="description"> — source: <?php echo esc_html( $latest_release_migration['source'] ); ?></span>
-            </p>
-            <textarea readonly="readonly" id="bst-latest-release-migration-log" rows="22" style="width:100%;max-width:960px;box-sizing:border-box;font-family:Consolas,Monaco,monospace;font-size:12px;"><?php echo esc_textarea( $latest_release_migration['text'] ); ?></textarea>
-            <p style="margin-top:8px;">
-                <button type="button" class="button" id="bst-copy-latest-release-migration-log"><?php esc_html_e( 'Copy log to clipboard', 'bst-plugin' ); ?></button>
-            </p>
-        <?php else : ?>
-            <p><em>No saved output yet. Run <strong>Release data cleanup</strong> from BST Plugin settings.</em></p>
-        <?php endif; ?>
-
-        <p class="description" style="margin-top:16px; max-width:920px;">
-            The same run may also append to PHP’s <code>error_log</code> (see <strong>Error Log</strong> above) and, when writable, to <code><?php echo esc_html( $release_cleanup_log_path ); ?></code><?php echo $bst_release_cleanup_upload_path ? ' and <code>' . esc_html( $bst_release_cleanup_upload_path ) . '</code>' : ''; ?>. Use this box as the canonical copy for support.
-        </p>
-    </div>
-    <script>
-    (function() {
-        var btn = document.getElementById('bst-copy-latest-release-migration-log');
-        if (!btn) return;
-        btn.addEventListener('click', function() {
-            var ta = document.getElementById('bst-latest-release-migration-log');
-            if (!ta) return;
-            ta.focus();
-            ta.select();
-            try { document.execCommand('copy'); } catch (e) {}
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(ta.value);
-            }
-        });
-    })();
-    </script>
 
     <div class="postbox bst-tools-postbox">
         <h2 class="hndle" style="padding:12px 16px;">ID Encoding Tool</h2>
