@@ -1417,24 +1417,19 @@ function bst_release_data_cleanup_callback() {
         echo '</div>';
     }
     echo '<div style="margin: 15px 0;">';
-    echo '<label><input type="checkbox" id="force-rerun-cleanup" value="1"> ';
-    echo '<strong>Force reset vehicle migration</strong> — permanently deletes <em>all</em> Vehicle CPT posts, then rebuilds them from tour repeater labels and booking vehicle text, and rewrites <code>vehicle_id</code> / <code>vehicle1_id</code> / <code>vehicle2_id</code>. Leave unchecked for a normal run (keeps existing Vehicle posts and only fills missing links).';
+    echo '<label style="display:block;margin-bottom:10px;"><input type="checkbox" id="force-rerun-cleanup" value="1"> ';
+    echo '<strong>Force reset vehicle migration</strong> — permanently deletes <em>all</em> Vehicle CPT posts, recreates them from tour repeater <em>text</em> (inventory scan only) and booking vehicle text, and rewrites booking <code>vehicle1_id</code> / <code>vehicle2_id</code>. Does <strong>not</strong> save Tour → vehicle_pricing CPT links; use <strong>Re-link tour repeater from labels</strong> (same run or a second run) for that.';
+    echo '</label>';
+    echo '<label style="display:block;"><input type="checkbox" id="repair-repeater-links-from-text" value="1"> ';
+    echo '<strong>Re-link tour repeater from labels</strong> — ignores each row’s saved Vehicle (CPT) id and sets it again from the row’s vehicle <em>text</em> (same matching as migration). Does <em>not</em> delete Vehicle posts. Use after a bad save left wrong or stale CPT ids while labels are still correct.';
     echo '</label></div>';
     if ($already_run) {
-        echo '<p class="description" style="margin-top:-8px;">To run again after completion, check <strong>Force reset vehicle migration</strong> above.</p>';
+        echo '<p class="description" style="margin-top:-8px;">Clicking <strong>Rerun Release Data Cleanup</strong> checks both options above (you can uncheck either before confirming). You may also run with only <strong>Re-link from labels</strong> if you do not want to delete all Vehicle CPTs.</p>';
     }
 
-    $last_mig = get_option( 'bst_migration_last_run', null );
-    if ( is_array( $last_mig ) && ! empty( $last_mig['text'] ) ) {
-        echo '<div class="bst-saved-cleanup-output" style="margin: 20px 0; padding: 12px; background: #f6f7f7; border: 1px solid #c3c4c7; border-radius: 4px; max-width: 960px;">';
-        echo '<p style="margin: 0 0 8px;"><strong>' . esc_html__( 'Last saved migration output', 'bst-plugin' ) . '</strong> ';
-        echo '<span class="description">(' . esc_html( isset( $last_mig['time'] ) ? $last_mig['time'] : '' ) . ' — ' . esc_html__( 'copy this for support', 'bst-plugin' ) . ')</span></p>';
-        echo '<textarea readonly rows="16" id="bst-saved-migration-textarea" style="width:100%; max-width:100%; font-family: Consolas, Monaco, monospace; font-size: 12px; box-sizing: border-box;">';
-        echo esc_textarea( $last_mig['text'] );
-        echo '</textarea>';
-        echo '<p style="margin: 8px 0 0;"><button type="button" class="button" id="bst-copy-saved-migration">' . esc_html__( 'Copy saved output', 'bst-plugin' ) . '</button></p>';
-        echo '</div>';
-    }
+    $tools_url = admin_url( 'admin.php?page=bst_tools_page' );
+    echo '<p class="description" style="max-width:960px;">' . esc_html__( 'After each run, the full log is saved in one place:', 'bst-plugin' ) . ' ';
+    echo '<a href="' . esc_url( $tools_url ) . '">' . esc_html__( 'BST Plugin → Tools → Release cleanup & vehicle migration', 'bst-plugin' ) . '</a>.</p>';
 
     echo '<button type="button" id="cleanup-release-data" class="button button-primary" style="margin-top: 15px;" title="Run release-specific data cleanup tasks">';
     echo '<span class="dashicons dashicons-admin-tools" style="margin-right: 5px;"></span>';
@@ -1450,28 +1445,24 @@ function bst_release_data_cleanup_callback() {
     ?>
     <script type="text/javascript">
     jQuery(document).ready(function($) {
-        $('#bst-copy-saved-migration').on('click', function() {
-            var ta = document.getElementById('bst-saved-migration-textarea');
-            if (!ta) return;
-            ta.focus();
-            ta.select();
-            try {
-                document.execCommand('copy');
-            } catch (e) {}
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(ta.value);
-            }
-        });
         $('#cleanup-release-data').on('click', function() {
             var $button = $(this);
             var $spinner = $('#cleanup-release-spinner');
             var $result = $('#cleanup-release-result');
             var $forceCheckbox = $('#force-rerun-cleanup');
-            var forceRerun = $forceCheckbox.is(':checked');
+            var $repairCheckbox = $('#repair-repeater-links-from-text');
             var alreadyRun = <?php echo $already_run ? 'true' : 'false'; ?>;
-            
-            if (alreadyRun && !forceRerun) {
-                alert('Please check "Force reset vehicle migration" to run cleanup again for this version.');
+
+            if (alreadyRun) {
+                $forceCheckbox.prop('checked', true);
+                $repairCheckbox.prop('checked', true);
+            }
+
+            var forceRerun = $forceCheckbox.is(':checked');
+            var repairRepeater = $repairCheckbox.is(':checked');
+
+            if (alreadyRun && !forceRerun && !repairRepeater) {
+                alert('Please check "Force reset vehicle migration" and/or "Re-link tour repeater from labels" to run cleanup again for this version.');
                 return;
             }
             
@@ -1481,9 +1472,13 @@ function bst_release_data_cleanup_callback() {
             taskList += '• <?php echo esc_js($task['name']); ?>\n';
             <?php endforeach; ?>
             
-            var rerunNote = forceRerun
-                ? '\n\n⚠️ FORCE RESET: Every Vehicle CPT post will be PERMANENTLY DELETED, then recreated. Tour and booking vehicle IDs will be reassigned. Backup your database first.'
-                : '';
+            var rerunNote = '';
+            if (forceRerun) {
+                rerunNote += '\n\n⚠️ FORCE RESET: Every Vehicle CPT post will be PERMANENTLY DELETED, then recreated. Tour and booking vehicle IDs will be reassigned. Backup your database first.';
+            }
+            if (repairRepeater) {
+                rerunNote += '\n\nRe-link from labels: saved Vehicle (CPT) ids on tour pricing rows will be replaced using each row’s text label (existing Vehicle posts are kept unless force reset is also checked).';
+            }
             
             if (!confirm('Are you sure you want to run the release data cleanup? This will modify existing data.\n\nTasks to be performed:\n' + taskList + rerunNote + '\n\nRecommended: Backup your database first.')) {
                 return;
@@ -1499,25 +1494,32 @@ function bst_release_data_cleanup_callback() {
                 data: {
                     action: 'bst_release_data_cleanup',
                     nonce: '<?php echo wp_create_nonce("bst_release_cleanup_nonce"); ?>',
-                    force: forceRerun ? 'true' : 'false'
+                    force: forceRerun ? 'true' : 'false',
+                    repair: repairRepeater ? 'true' : 'false'
                 },
                 success: function(response) {
                     $spinner.hide();
                     
                     if (response.success) {
-                        var text = (typeof response.data === 'string') ? response.data : '';
-                        var $box = $('<div class="notice notice-success" style="max-width:960px;"><p><strong>Cleanup finished.</strong> Full output is below — it will not disappear. Copy it before leaving this page.</p></div>');
-                        var $ta = $('<textarea readonly="readonly" rows="20" style="width:100%;max-width:100%;font-family:Consolas,Monaco,monospace;font-size:12px;box-sizing:border-box;margin-top:10px;" />').val(text);
-                        var $copyBtn = $('<button type="button" class="button" style="margin-top:8px;">Copy full output to clipboard</button>');
-                        $copyBtn.on('click', function() {
-                            $ta.focus();
-                            $ta.select();
-                            try { document.execCommand('copy'); } catch (e) {}
-                            if (navigator.clipboard && navigator.clipboard.writeText) {
-                                navigator.clipboard.writeText($ta.val());
-                            }
-                        });
-                        $result.empty().append($box).append($ta).append($('<p style="margin-top:8px;">').append($copyBtn));
+                        var data = response.data;
+                        var msg = '';
+                        var toolsUrl = '';
+                        if (typeof data === 'object' && data !== null && data.message) {
+                            msg = data.message;
+                            toolsUrl = data.tools_url || '';
+                        } else if (typeof data === 'string') {
+                            msg = data;
+                        } else {
+                            msg = 'Cleanup finished.';
+                        }
+                        var $box = $('<div class="notice notice-success" style="max-width:960px;"></div>');
+                        $box.append($('<p></p>').append($('<strong>').text('Cleanup finished. ')).append(document.createTextNode(msg)));
+                        if (toolsUrl) {
+                            $box.append($('<p style="margin-top:10px;"></p>').append(
+                                $('<a class="button button-primary"></a>').attr('href', toolsUrl).text('Open Tools — full log')
+                            ));
+                        }
+                        $result.empty().append($box);
                         if (!alreadyRun) {
                             $button.text('Rerun Release Data Cleanup');
                         }
@@ -1836,17 +1838,18 @@ function bst_log_release_cleanup_results( array $lines ) {
 /**
  * Execute cleanup tasks for the current release
  */
-function bst_execute_release_cleanup_tasks($tasks, $version, $force_rerun = false) {
+function bst_execute_release_cleanup_tasks($tasks, $version, $force_rerun = false, $repair_repeater_links_from_text = false) {
     global $wpdb;
     $results = array();
     $force_rerun = (bool) $force_rerun;
-    
+    $repair_repeater_links_from_text = (bool) $repair_repeater_links_from_text;
+
     // Execute each cleanup task
     foreach ($tasks as $task) {
         switch ($task['name']) {
             case 'Migrate vehicle CPT links':
                 if ( function_exists( 'bst_migrate_vehicle_cpt_links' ) ) {
-                    $results = array_merge( $results, bst_migrate_vehicle_cpt_links( $force_rerun ) );
+                    $results = array_merge( $results, bst_migrate_vehicle_cpt_links( $force_rerun, $repair_repeater_links_from_text ) );
                 } else {
                     $results[] = 'Vehicle migration function not loaded.';
                 }

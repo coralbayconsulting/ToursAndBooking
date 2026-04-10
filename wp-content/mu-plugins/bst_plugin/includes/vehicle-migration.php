@@ -425,11 +425,14 @@ function bst_vehicle_migration_resolve_row_id( array $vehicle_item, $tour_id, ar
 /**
  * Run vehicle CPT migration: tours (repeater vehicle_id) + bookings (vehicle1_id/vehicle2_id).
  *
- * @param bool $force_reset When true (Tools → force rerun), delete all Vehicle CPT posts first, ignore stored
- *                          repeater IDs, and recompute booking vehicle*_id from text every time.
+ * @param bool $force_reset When true, delete all Vehicle CPT posts, recreate them from tour repeater **text** (scan
+ *                          only — does **not** save `vehicle_pricing`), then refresh booking `vehicle*_id`. Tour CPT
+ *                          links are set only when `$repair_repeater_links_from_text` is true in the same run.
+ * @param bool $repair_repeater_links_from_text When true, save tour `vehicle_pricing` by re-deriving each nested row’s
+ *                          Vehicle CPT id from label text (ignore stored post object). Does not delete Vehicle posts.
  * @return string[] Log lines for admin UI.
  */
-function bst_migrate_vehicle_cpt_links( $force_reset = false ) {
+function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_links_from_text = false ) {
 	global $wpdb;
 
 	if ( function_exists( 'bst_ensure_tour_booking_vehicle_id_columns' ) ) {
@@ -440,6 +443,14 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false ) {
 	$norm_to_id     = array();
 	$vehicles_by_id = array();
 	$force_reset    = (bool) $force_reset;
+	$repair_repeater_links_from_text = (bool) $repair_repeater_links_from_text;
+
+	if ( $repair_repeater_links_from_text && ! $force_reset ) {
+		$results[] = 'Re-link mode: saving tour vehicle_pricing from label text (ignoring stored Vehicle CPT links). Vehicle posts are not deleted.';
+	}
+	if ( $force_reset && ! $repair_repeater_links_from_text ) {
+		$results[] = 'Force reset only: recreated Vehicle CPTs from tour labels (inventory); tour vehicle_pricing was not saved. Check "Re-link tour repeater from labels" and run again to write CPT links on tours.';
+	}
 
 	if ( function_exists( 'acf_get_setting' ) ) {
 		$results[] = sprintf(
@@ -497,6 +508,28 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false ) {
 		}
 
 		$tours_with_pricing++;
+
+		// Force reset alone: recreate Vehicle CPTs from repeater label text only — never save vehicle_pricing here.
+		if ( $force_reset && ! $repair_repeater_links_from_text ) {
+			foreach ( $pricing as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				$nested = bst_vehicle_migration_get_nested_vehicle_rows( $row );
+				if ( empty( $nested ) ) {
+					continue;
+				}
+				foreach ( $nested as $vrow ) {
+					if ( ! is_array( $vrow ) ) {
+						continue;
+					}
+					++$rows_seen;
+					bst_vehicle_migration_resolve_row_id( $vrow, $tid, $norm_to_id, $vehicles_by_id, true );
+				}
+			}
+			continue;
+		}
+
 		$pending_cells = array();
 		foreach ( $pricing as $i => $row ) {
 			if ( ! is_array( $row ) ) {
@@ -513,13 +546,13 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false ) {
 					continue;
 				}
 				$rows_seen++;
-				$ignore_linked = $force_reset;
+				$ignore_linked = $repair_repeater_links_from_text;
 				$new_id        = bst_vehicle_migration_resolve_row_id( $vrow, $tid, $norm_to_id, $vehicles_by_id, $ignore_linked );
 				$old           = bst_vehicle_migration_row_linked_post_id( $vrow );
 				$write         = false;
 
-				if ( $force_reset ) {
-					if ( $old !== $new_id ) {
+				if ( $repair_repeater_links_from_text ) {
+					if ( $new_id > 0 && $old !== $new_id ) {
 						bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing[ $i ][ $nested_key ][ $j ], $new_id );
 						$write = true;
 						$rows_touched++;

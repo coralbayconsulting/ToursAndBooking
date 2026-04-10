@@ -2329,7 +2329,8 @@ class BST_Plugin {
 
         $current_version = get_option('bst_plugin_version', '1.0.0');
         $force_rerun = isset($_POST['force']) && $_POST['force'] === 'true';
-        
+        $repair_repeater = isset($_POST['repair']) && $_POST['repair'] === 'true';
+
         // Get cleanup tasks for current version
         $cleanup_tasks = bst_get_release_cleanup_tasks();
         if (empty($cleanup_tasks)) {
@@ -2337,11 +2338,11 @@ class BST_Plugin {
             return;
         }
 
-        // Block repeat runs unless force is checked (per-task completion, not legacy single timestamp).
-        if ( ! $force_rerun && function_exists( 'bst_release_cleanup_is_complete_for_tasks' )
+        // Block repeat runs unless force reset and/or re-link from labels is checked.
+        if ( ! $force_rerun && ! $repair_repeater && function_exists( 'bst_release_cleanup_is_complete_for_tasks' )
             && bst_release_cleanup_is_complete_for_tasks( $current_version, $cleanup_tasks ) ) {
             wp_send_json_error(
-                'Cleanup already completed for version ' . $current_version . ' for all current tasks. Check "Force reset vehicle migration" to run again.'
+                'Cleanup already completed for version ' . $current_version . ' for all current tasks. Check "Force reset vehicle migration" and/or "Re-link tour repeater from labels" to run again.'
             );
             return;
         }
@@ -2351,7 +2352,7 @@ class BST_Plugin {
         
         try {
             // Execute cleanup tasks based on current version
-            $results = bst_execute_release_cleanup_tasks($cleanup_tasks, $current_version, $force_rerun);
+            $results = bst_execute_release_cleanup_tasks($cleanup_tasks, $current_version, $force_rerun, $repair_repeater);
 
             if ( function_exists( 'bst_log_release_cleanup_results' ) ) {
                 bst_log_release_cleanup_results( $results );
@@ -2371,7 +2372,13 @@ class BST_Plugin {
             update_option( 'bst_release_cleanup_status', $cleanup_status );
             
             // Success message
-            $rerun_note = $force_rerun ? ' (Force rerun executed)' : '';
+            $rerun_note = '';
+            if ( $force_rerun ) {
+                $rerun_note .= ' (Force reset executed)';
+            }
+            if ( $repair_repeater ) {
+                $rerun_note .= ' (Re-link from labels executed)';
+            }
             $message = "Release data cleanup completed successfully for version {$current_version}{$rerun_note}! The full text is saved in the database (see Tools → Last release cleanup log). " . implode('. ', $results);
             wp_send_json_success($message);
             

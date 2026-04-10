@@ -596,7 +596,8 @@ function bst_vehicle_resolve_base_name_to_vehicle_id( $base_name, array $norm_to
 
 /**
  * Vehicle CPT IDs from a tour’s vehicle_pricing: linked vehicle_id rows plus label-only rows resolved to CPTs.
- * Aligns with how the Vehicles admin list builds “On Tours” (by_id + legacy text match).
+ * Vehicles admin “On Tours” uses linked CPT ids only (see bst_vehicle_usage_map); this helper still resolves
+ * label text for pickers / limits until the text subfield is removed.
  *
  * @param int $tour_id Tour post ID.
  * @return int[]
