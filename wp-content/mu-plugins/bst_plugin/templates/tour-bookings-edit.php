@@ -3425,6 +3425,9 @@ jQuery(document).ready(function($) {
         
         // Get currency for vehicle pricing display
         var currency = booking.tour_currency || 'EUR';
+        var tourDateRaw = $tile.find('#tour_date_id').val() || '';
+        var tourDateId = parseInt(String(tourDateRaw).split('|')[0], 10) || 0;
+        var bookingId = parseInt(booking.id, 10) || 0;
         
         $.ajax({
             url: window.ajaxurl,
@@ -3433,7 +3436,9 @@ jQuery(document).ready(function($) {
                 action: 'get_vehicle_data',
                 tour_id: tourId,
                 package_id: packageId,
-                currency: currency
+                currency: currency,
+                tour_date_id: tourDateId,
+                booking_id: bookingId
             },
             success: function(response) {
                 if (response.success && response.data && response.data.length > 0) {

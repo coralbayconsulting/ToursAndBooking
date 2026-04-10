@@ -107,6 +107,68 @@ function bst_limited_vehicle_slots_remaining( $tour_date_id, $vehicle_id ) {
 }
 
 /**
+ * Slots this booking already uses for the vehicle on the given tour date (0–2: vehicle1 + vehicle2).
+ *
+ * @param int $booking_id   BST tour booking row id.
+ * @param int $tour_date_id Requested tour-date context; must match the booking row or returns 0.
+ * @param int $vehicle_id   Vehicle CPT id.
+ * @return int
+ */
+function bst_limited_vehicle_booking_slot_count_for_vehicle( $booking_id, $tour_date_id, $vehicle_id ) {
+	$booking_id   = (int) $booking_id;
+	$tour_date_id = (int) $tour_date_id;
+	$vehicle_id   = (int) $vehicle_id;
+	if ( $booking_id <= 0 || $tour_date_id <= 0 || $vehicle_id <= 0 ) {
+		return 0;
+	}
+	global $wpdb;
+	$table = $wpdb->prefix . 'bst_tour_booking';
+	$row   = $wpdb->get_row(
+		$wpdb->prepare(
+			"SELECT tour_date_id, vehicle1_id, vehicle2_id FROM {$table} WHERE id = %d",
+			$booking_id
+		),
+		ARRAY_A
+	);
+	if ( ! $row ) {
+		return 0;
+	}
+	if ( (int) $row['tour_date_id'] !== $tour_date_id ) {
+		return 0;
+	}
+	$n = 0;
+	if ( (int) $row['vehicle1_id'] === $vehicle_id ) {
+		++$n;
+	}
+	if ( (int) $row['vehicle2_id'] === $vehicle_id ) {
+		++$n;
+	}
+	return $n;
+}
+
+/**
+ * Remaining limited slots for dropdown labels. When editing a booking, adds back slots this booking
+ * already holds so "N left" matches admin expectations (same vehicle stays selectable when at cap).
+ *
+ * @param int $tour_date_id Tour-date post ID.
+ * @param int $vehicle_id   Vehicle CPT ID.
+ * @param int $booking_id   Optional booking row id (only used if user can manage bookings).
+ * @return int|null        null when not a limited vehicle on this date.
+ */
+function bst_limited_vehicle_slots_remaining_for_display( $tour_date_id, $vehicle_id, $booking_id = 0 ) {
+	$remaining = bst_limited_vehicle_slots_remaining( $tour_date_id, $vehicle_id );
+	if ( $remaining === null ) {
+		return null;
+	}
+	$booking_id = (int) $booking_id;
+	$bonus      = 0;
+	if ( $booking_id > 0 && function_exists( 'bst_user_can_manage_bookings' ) && bst_user_can_manage_bookings() ) {
+		$bonus = bst_limited_vehicle_booking_slot_count_for_vehicle( $booking_id, $tour_date_id, $vehicle_id );
+	}
+	return $remaining + $bonus;
+}
+
+/**
  * Extract limited_vehicles repeater row key from ACF subfield prefix (acf[field_XXX][rowKey][field_YYY]).
  *
  * @param string $prefix Subfield input prefix.
