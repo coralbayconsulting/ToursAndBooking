@@ -124,6 +124,8 @@ function get_overbooked_tour_dates_for_dashboard() {
 
 $overbooked_tour_dates = get_overbooked_tour_dates_for_dashboard();
 
+$lv_oversold_rows = function_exists( 'bst_limited_vehicle_dashboard_oversold_rows' ) ? bst_limited_vehicle_dashboard_oversold_rows() : array();
+
 // Get reserved bookings
 $reserved_bookings = $wpdb->get_results("
     SELECT id, guest1_first_name, guest1_last_name, guest2_first_name, guest2_last_name, created_date, tour_id, tour_date_id, tour_package_id
@@ -422,6 +424,21 @@ if (!empty($waiting_list_bookings)) {
         border-left: 4px solid #dc3232;
     }
     
+    .dashboard-tile.limited-vehicle-oversold .dashboard-tile-count {
+        background: #c05621;
+    }
+    .dashboard-tile.limited-vehicle-oversold .dashboard-tile-header {
+        border-left: 4px solid #c05621;
+    }
+    .bst-lv-dash-detail-meta {
+        color: #666;
+        font-size: 0.9em;
+        margin-top: 6px;
+    }
+    .bst-lv-dash-bookings a {
+        margin-right: 6px;
+    }
+    
     /* Convertible waiting list styling */
     .dashboard-booking-item.convertible-waiting-list {
         background: #f0f8ff;
@@ -560,6 +577,74 @@ if (!empty($waiting_list_bookings)) {
                 <a href="<?php echo esc_url(admin_url('edit.php?post_type=tour-date')); ?>">
                     View All Tour Dates →
                 </a>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <?php if ( ! empty( $lv_oversold_rows ) ) : ?>
+        <!-- Limited vehicle oversold -->
+        <div class="dashboard-tile limited-vehicle-oversold">
+            <div class="dashboard-tile-header">
+                <h3 class="dashboard-tile-title">🚐 <?php esc_html_e( 'Oversold Limited Vehicles', 'bst-plugin' ); ?></h3>
+                <span class="dashboard-tile-count"><?php echo (int) count( $lv_oversold_rows ); ?></span>
+            </div>
+            <div class="dashboard-tile-content">
+                <ul class="dashboard-booking-list">
+                    <?php foreach ( $lv_oversold_rows as $lv_row ) : ?>
+                    <li class="dashboard-booking-item">
+                        <div class="dashboard-booking-info">
+                            <div class="dashboard-booking-name">
+                                <a href="<?php echo esc_url( admin_url( 'post.php?post=' . (int) $lv_row['vehicle_id'] . '&action=edit' ) ); ?>">
+                                    <?php echo esc_html( $lv_row['vehicle_title'] ); ?>
+                                </a>
+                                <span style="color: #c05621; font-weight: 600;">
+                                    <?php
+                                    printf(
+                                        /* translators: 1: sold count, 2: max count */
+                                        esc_html__( ' — sold %1$d, max %2$d', 'bst-plugin' ),
+                                        (int) $lv_row['sold'],
+                                        (int) $lv_row['max']
+                                    );
+                                    ?>
+                                </span>
+                            </div>
+                            <div class="bst-lv-dash-detail-meta">
+                                <?php esc_html_e( 'Tour date:', 'bst-plugin' ); ?>
+                                <a href="<?php echo esc_url( admin_url( 'post.php?post=' . (int) $lv_row['tour_date_id'] . '&action=edit' ) ); ?>">
+                                    <?php echo esc_html( $lv_row['tour_date_title'] ); ?>
+                                </a>
+                                <?php
+                                printf(
+                                    /* translators: %d: tour-date post ID */
+                                    esc_html__( ' (ID %d)', 'bst-plugin' ),
+                                    (int) $lv_row['tour_date_id']
+                                );
+                                ?>
+                            </div>
+                            <div class="bst-lv-dash-detail-meta bst-lv-dash-bookings">
+                                <?php if ( ! empty( $lv_row['booking_ids'] ) ) : ?>
+                                    <strong><?php esc_html_e( 'Bookings with this vehicle:', 'bst-plugin' ); ?></strong>
+                                    <?php
+                                    $b_first = true;
+                                    foreach ( $lv_row['booking_ids'] as $bid ) {
+                                        $bid = (int) $bid;
+                                        if ( ! $b_first ) {
+                                            echo ', ';
+                                        }
+                                        $b_first = false;
+                                        ?>
+                                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=view_booking&id=' . $bid ) ); ?>">#<?php echo (int) $bid; ?></a>
+                                        <?php
+                                    }
+                                    ?>
+                                <?php else : ?>
+                                    <em><?php esc_html_e( 'No bookings found with vehicle1_id / vehicle2_id set to this vehicle on this tour date.', 'bst-plugin' ); ?></em>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </li>
+                    <?php endforeach; ?>
+                </ul>
             </div>
         </div>
         <?php endif; ?>

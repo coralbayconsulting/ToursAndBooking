@@ -3978,7 +3978,7 @@ class BST_Plugin {
     public function add_overbooking_dashboard_widget() {
         wp_add_dashboard_widget(
             'bst_dashboard_summary_widget',
-            'BST Tours & Bookings Summary',
+            __( 'Tours & Bookings Summary', 'bst-plugin' ),
             array($this, 'bst_dashboard_summary_widget_content')
         );
     }
@@ -3988,8 +3988,14 @@ class BST_Plugin {
         $plugin_dashboard_url = admin_url('admin.php?page=bst-plugin');
         $booking_table = $wpdb->prefix . 'bst_tour_booking';
 
-        // 1. Overbooked tour dates
+        // 1. Overbooked tour dates (slot capacity)
         $overbooked_dates = $this->get_overbooked_tour_dates();
+
+        // 1b. Limited-vehicle oversold (sold from bookings > max on tour-date repeater)
+        $lv_oversold_count = 0;
+        if ( function_exists( 'bst_limited_vehicle_dashboard_oversold_rows' ) ) {
+            $lv_oversold_count = count( bst_limited_vehicle_dashboard_oversold_rows() );
+        }
 
         // 2. Waiting list bookings
         $waiting_list_count = $wpdb->get_var("SELECT COUNT(*) FROM $booking_table WHERE booking_status = 'Waiting List'");
@@ -4064,8 +4070,9 @@ class BST_Plugin {
         
         // Always show all summary tiles - complete overview
         $tiles = array(
-            array('🚨', 'Overbooked Tour Dates', count($overbooked_dates), '#dc3545', true),
-            array('💰', 'Refunds Due', $refunds_due_count, '#dc3232', true),
+            array('🚨', __('Overbooked Tour Dates', 'bst-plugin'), count($overbooked_dates), '#dc3545', true),
+            array('🚐', __('Oversold Limited Vehicles', 'bst-plugin'), $lv_oversold_count, '#c05621', true),
+            array('💰', __('Refunds Due', 'bst-plugin'), $refunds_due_count, '#dc3232', true),
             array('🏦', 'Bank Transfer Pending', $bank_wire_count, '#dc3232', true),
             array('⏳', 'Processing Payments', $processing_count, '#ff9500', true),
             array('❌', 'Payment Failed', $payment_failed_count, '#dc3232', true),
@@ -4103,7 +4110,7 @@ class BST_Plugin {
         
         echo '<div style="text-align: center; margin-top: 15px; padding-top: 10px; border-top: 1px solid #ddd;">';
         echo '<a href="' . esc_url($plugin_dashboard_url) . '" class="button button-primary">';
-        echo 'View Full BST Dashboard →';
+        esc_html_e('View full dashboard →', 'bst-plugin');
         echo '</a>';
         echo '</div>';
         

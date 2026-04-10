@@ -1005,6 +1005,103 @@ function bst_migrate_limited_vehicles_sync_sold_batch() {
 }
 
 /**
+ * Booking IDs on a tour date that selected this vehicle (vehicle1_id or vehicle2_id).
+ * Uses the same booking-status rules as {@see bst_limited_vehicle_sold_count()}.
+ *
+ * @param int $tour_date_id Tour-date post ID.
+ * @param int $vehicle_id   Vehicle CPT ID.
+ * @return int[]
+ */
+function bst_limited_vehicle_booking_ids_using_vehicle( $tour_date_id, $vehicle_id ) {
+	$tour_date_id = (int) $tour_date_id;
+	$vehicle_id   = (int) $vehicle_id;
+	if ( $tour_date_id <= 0 || $vehicle_id <= 0 ) {
+		return array();
+	}
+	global $wpdb;
+	$table    = $wpdb->prefix . 'bst_tour_booking';
+	$statuses = bst_booking_statuses_for_limited_vehicle_usage();
+	$excluded = bst_booking_statuses_never_count_limited_vehicle();
+	if ( empty( $statuses ) ) {
+		return array();
+	}
+	$in_ph     = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
+	$not_in_ph = implode( ',', array_fill( 0, count( $excluded ), '%s' ) );
+	$sql       = "SELECT id FROM {$table}
+		WHERE tour_date_id = %d
+		AND (vehicle1_id = %d OR vehicle2_id = %d)
+		AND booking_status IN ({$in_ph})
+		AND booking_status NOT IN ({$not_in_ph})
+		ORDER BY id ASC";
+	$prepare_args = array_merge( array( $tour_date_id, $vehicle_id, $vehicle_id ), $statuses, $excluded );
+	$sql          = $wpdb->prepare( $sql, $prepare_args );
+	$ids          = $wpdb->get_col( $sql );
+	return array_map( 'intval', is_array( $ids ) ? $ids : array() );
+}
+
+/**
+ * Limited-vehicle rows where calculated sold (from bookings) exceeds max — for admin dashboard.
+ *
+ * @return array<int, array{ tour_date_id: int, vehicle_id: int, max: int, sold: int, vehicle_title: string, tour_date_title: string, booking_ids: int[] }>
+ */
+function bst_limited_vehicle_dashboard_oversold_rows() {
+	static $cached = null;
+	if ( is_array( $cached ) ) {
+		return $cached;
+	}
+	if ( ! function_exists( 'get_field' ) ) {
+		$cached = array();
+		return $cached;
+	}
+	$out = array();
+	$tour_dates = get_posts(
+		array(
+			'post_type'              => 'tour-date',
+			'post_status'            => 'publish',
+			'posts_per_page'         => -1,
+			'fields'                 => 'ids',
+			'orderby'                => 'ID',
+			'order'                  => 'ASC',
+			'update_post_meta_cache' => false,
+		)
+	);
+	foreach ( $tour_dates as $td_id ) {
+		$td_id = (int) $td_id;
+		$rows  = get_field( 'limited_vehicles', $td_id, false );
+		if ( ! is_array( $rows ) || empty( $rows ) ) {
+			continue;
+		}
+		$td_title = bst_plain_text_for_notice( get_post_field( 'post_title', $td_id ) );
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$vid = bst_lv_coerce_vehicle_post_id( bst_lv_repeater_sub_value( $row, 'limited_vehicle', 'field_696e8b1a0a002' ) );
+			if ( $vid <= 0 ) {
+				continue;
+			}
+			$max  = (int) bst_lv_repeater_sub_value( $row, 'limited_vehicle_max', 'field_696e8b1a0a003' );
+			$sold = bst_limited_vehicle_sold_count( $td_id, $vid );
+			if ( $max > 0 && $sold > $max ) {
+				$vtitle = function_exists( 'bst_vehicle_display_title' ) ? bst_vehicle_display_title( $vid ) : get_post_field( 'post_title', $vid );
+				$vtitle = bst_plain_text_for_notice( $vtitle );
+				$out[]  = array(
+					'tour_date_id'    => $td_id,
+					'vehicle_id'      => $vid,
+					'max'             => $max,
+					'sold'            => $sold,
+					'vehicle_title'   => $vtitle,
+					'tour_date_title' => $td_title,
+					'booking_ids'     => bst_limited_vehicle_booking_ids_using_vehicle( $td_id, $vid ),
+				);
+			}
+		}
+	}
+	$cached = $out;
+	return $cached;
+}
+
+/**
  * AJAX: list limited-by-default tour vehicles for filling the tour-date repeater (admin).
  */
 function bst_ajax_limited_vehicles_from_tour() {
