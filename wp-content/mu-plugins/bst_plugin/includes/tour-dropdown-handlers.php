@@ -393,14 +393,23 @@ function get_vehicle_data() {
                 $symbol    = ($currency === 'USD') ? '$' : '€';
                 $abs_price = abs($price);
 
+                $raw_limited_remaining = null;
+                if ($tour_date_id > 0 && function_exists('bst_limited_vehicle_slots_remaining')) {
+                    $raw_limited_remaining = bst_limited_vehicle_slots_remaining($tour_date_id, $vehicle_id);
+                }
+
                 $limited_display_remaining = null;
-                if ($tour_date_id > 0 && function_exists('bst_limited_vehicle_slots_remaining_for_display')) {
+                if ($raw_limited_remaining !== null && function_exists('bst_limited_vehicle_slots_remaining_for_display')) {
                     $limited_display_remaining = bst_limited_vehicle_slots_remaining_for_display(
                         $tour_date_id,
                         $vehicle_id,
                         $booking_id_for_display
                     );
                 }
+
+                $admin_booking_edit = ($booking_id_for_display > 0 && function_exists('bst_user_can_manage_bookings')
+                    && bst_user_can_manage_bookings());
+                $limited_sold_out_block = ($raw_limited_remaining !== null && $raw_limited_remaining <= 0 && ! $admin_booking_edit);
 
                 if ($limited_display_remaining !== null) {
                     if ($price > 0) {
@@ -410,7 +419,7 @@ function get_vehicle_data() {
                     } else {
                         $price_fragment = $symbol . '0';
                     }
-                    /* translators: 1: price fragment e.g. +€1,400, 2: slots remaining */
+                    /* translators: 1: price fragment e.g. +€1,400, 2: slots remaining, 3: word "left" */
                     $vehicle_name = get_the_title($vehicle_id) . ' ' . sprintf(
                         '(%1$s - %2$d %3$s)',
                         $price_fragment,
@@ -426,13 +435,15 @@ function get_vehicle_data() {
                     $vehicle_name = get_the_title($vehicle_id) . $formatted_price;
                 }
 
+                $out_price = $limited_sold_out_block ? 0 : $price;
+
                 $data[] = array(
                     'text' => $vehicle_name,
-                    'value' => $price,
-                    'price' => $price,
+                    'value' => $out_price,
+                    'price' => $out_price,
                     'data-id' => $class, // Vehicle class ID
                     'vehicle_id' => $vehicle_id,
-                    'unavailable' => false,
+                    'unavailable' => $limited_sold_out_block,
                     '_order' => $vehicle_row_order++,
                 );
             }
