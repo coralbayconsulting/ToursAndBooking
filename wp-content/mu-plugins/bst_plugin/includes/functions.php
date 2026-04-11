@@ -730,6 +730,27 @@ function bst_auto_sync_sold_slots($tour_date_id, $context = 'unknown') {
     }
     
     $results = bst_sync_tour_date_sold_slots($tour_date_id, $context);
+
+    if ( function_exists( 'bst_sync_limited_vehicle_sold_for_tour_date' ) ) {
+        $lv = bst_sync_limited_vehicle_sold_for_tour_date( (int) $tour_date_id );
+        if ( is_wp_error( $lv ) ) {
+            error_log(
+                sprintf(
+                    'BST Auto-Sync limited vehicles failed for tour date %d: %s',
+                    (int) $tour_date_id,
+                    $lv->get_error_message()
+                )
+            );
+        } elseif ( is_array( $lv ) && ! empty( $lv['rows_updated'] ) ) {
+            error_log(
+                sprintf(
+                    'BST Auto-Sync limited vehicles: tour date %d, rows updated %d',
+                    (int) $tour_date_id,
+                    (int) $lv['rows_updated']
+                )
+            );
+        }
+    }
     
     // Log context if any updates occurred
     if (isset($results['sold_updated']) && $results['sold_updated'] || 

@@ -643,9 +643,18 @@ jQuery(document).ready(function ($) {
     var tourPackage = tourpackagedropdown.find("option:selected").data("id"); // Get package ID from data attribute
 
     console.log('About to check availability for tourDate:', tourDate, 'tourPackage:', tourPackage);
+
+    var precheckVehicle1Id = 0;
+    var precheckVehicle2Id = 0;
+    if (vehicleDropdown1Container.is(":visible") && vehicleDropdown1.val() && vehicleDropdown1.prop('selectedIndex') !== 0) {
+      precheckVehicle1Id = parseInt(vehicleDropdown1.find("option:selected").data("vehicle-id"), 10) || 0;
+    }
+    if (vehicleDropdown2Container.is(":visible") && vehicleDropdown2.val() && vehicleDropdown2.prop('selectedIndex') !== 0) {
+      precheckVehicle2Id = parseInt(vehicleDropdown2.find("option:selected").data("vehicle-id"), 10) || 0;
+    }
     
     // Real-time availability check before proceeding
-    checkAvailabilityBeforeBooking(tourDate, tourPackage, function(available, debugData) {
+    checkAvailabilityBeforeBooking(tourDate, tourPackage, precheckVehicle1Id, precheckVehicle2Id, function(available, debugData) {
       console.log('Availability check callback - available:', available, 'debugData:', debugData);
       if (!available) {
         // Alert and refresh are handled in the checkAvailabilityBeforeBooking function
@@ -839,14 +848,16 @@ jQuery(document).ready(function ($) {
   });
 
   // Function to check real-time availability before booking
-  function checkAvailabilityBeforeBooking(tourDateId, packageId, callback) {
+  function checkAvailabilityBeforeBooking(tourDateId, packageId, vehicle1Id, vehicle2Id, callback) {
     $.ajax({
       url: ajax_object.ajaxurl,
       type: 'POST',
       data: {
         action: 'check_tour_availability',
         tour_date_id: tourDateId,
-        package_id: packageId
+        package_id: packageId,
+        vehicle1_id: vehicle1Id || 0,
+        vehicle2_id: vehicle2Id || 0
       },
       success: function(response) {
         if (response.success && response.data) {
@@ -856,15 +867,24 @@ jQuery(document).ready(function ($) {
           if (!response.data.can_book) {
             var availableSlots = response.data.available_slots;
             var requiredSlots = response.data.package_vehicles;
-            var message;
-            
-            if (availableSlots === 0) {
-              message = 'Sorry, this tour is now fully booked. There are no remaining spots available.';
-            } else {
-              message = 'Sorry, there isn\'t enough space for your selected package. There ' + (availableSlots === 1 ? 'is' : 'are') + ' ' + availableSlots + ' remaining spot' + (availableSlots === 1 ? '' : 's') + ', but the selected package requires ' + requiredSlots + '.';
+            var slotsOk = response.data.slots_ok !== false;
+            var vehicleOk = response.data.vehicle_ok !== false;
+            var vehicleIssue = response.data.vehicle_issue || '';
+            var messageParts = [];
+            if (!slotsOk) {
+              if (availableSlots === 0) {
+                messageParts.push('Sorry, this tour is now fully booked. There are no remaining spots available.');
+              } else {
+                messageParts.push('Sorry, there isn\'t enough space for your selected package. There ' + (availableSlots === 1 ? 'is' : 'are') + ' ' + availableSlots + ' remaining spot' + (availableSlots === 1 ? '' : 's') + ', but the selected package requires ' + requiredSlots + '.');
+              }
             }
-            
-            alert(message + '\n\nThe page will refresh to show current availability and other package options.');
+            if (!vehicleOk && vehicleIssue) {
+              messageParts.push(vehicleIssue);
+            }
+            if (messageParts.length === 0) {
+              messageParts.push('Sorry, this booking cannot be completed with the current selection.');
+            }
+            alert(messageParts.join('\n\n') + '\n\nThe page will refresh to show current availability and other package options.');
           }
           
           callback(response.data.can_book === true);

@@ -287,7 +287,7 @@
                     "name": "limited_vehicle_sold",
                     "aria-label": "",
                     "type": "number",
-                    "instructions": "Enter manually until automatic counts are available.",
+                    "instructions": "Calculated from bookings; not editable here.",
                     "required": 0,
                     "conditional_logic": 0,
                     "wrapper": {
@@ -298,6 +298,7 @@
                     "default_value": 0,
                     "min": 0,
                     "max": "",
+                    "readonly": 1,
                     "allow_in_bindings": 0,
                     "placeholder": "",
                     "step": "",

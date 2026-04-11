@@ -161,6 +161,7 @@ class BST_Plugin {
         add_filter('acf/prepare_field/name=sold_slots', array($this, 'make_sold_slots_readonly'));
         add_filter('acf/prepare_field/name=reserved_slots', array($this, 'make_reserved_slots_readonly'));
         add_filter('acf/prepare_field/name=available_slots', array($this, 'make_available_slots_readonly'));
+        add_filter('acf/prepare_field/name=limited_vehicle_sold', array($this, 'make_limited_vehicle_sold_readonly'));
         add_filter('acf/fields/post_object/query/key=field_696e8b1a0a002', array($this, 'acf_limited_vehicle_post_object_query'), 10, 3);
         add_filter('acf/fields/post_object/query/key=field_67f9e40b1c001', array($this, 'acf_tour_vehicle_pricing_cpt_query'), 10, 3);
 
@@ -1728,6 +1729,19 @@ class BST_Plugin {
             $field['readonly'] = 1;
             $field['wrapper']['class'] .= ' readonly-field';
             $field['instructions'] = 'This field is automatically calculated as: Max Slots - Sold Slots - Offline Sold - Reserved Slots. Updated during sync operations from the tour dates list.';
+        }
+        return $field;
+    }
+
+    /**
+     * Make limited_vehicle_sold (repeater sub-field) readonly on tour-date — value comes from bookings.
+     */
+    public function make_limited_vehicle_sold_readonly($field) {
+        global $post;
+        if ($post && $post->post_type === 'tour-date') {
+            $field['readonly'] = 1;
+            $field['wrapper']['class'] .= ' readonly-field';
+            $field['instructions'] = 'Calculated automatically from booking records (vehicle selections for this tour date). Updates when bookings are saved, during availability sync, and on the daily sync.';
         }
         return $field;
     }
@@ -3807,21 +3821,50 @@ class BST_Plugin {
                 return;
             }
 
-            // Simple check: get available slots from tour date
+            $vehicle1_id = isset($_POST['vehicle1_id']) ? intval($_POST['vehicle1_id']) : 0;
+            $vehicle2_id = isset($_POST['vehicle2_id']) ? intval($_POST['vehicle2_id']) : 0;
+
+            bst_sync_tour_date_sold_slots($tour_date_id, 'pre_book_check');
+            if (function_exists('bst_sync_limited_vehicle_sold_for_tour_date')) {
+                $lv_sync = bst_sync_limited_vehicle_sold_for_tour_date($tour_date_id);
+                if (is_wp_error($lv_sync)) {
+                    error_log('BST pre_book_check limited vehicle sync failed for tour date ' . $tour_date_id . ': ' . $lv_sync->get_error_message());
+                }
+            }
+
             $available_slots = intval(get_field('available_slots', $tour_date_id));
 
-            // Can book if package vehicles needed <= available slots
-            $can_book = ($package_vehicles <= $available_slots);
+            $slots_ok = ($package_vehicles <= $available_slots);
+            $vehicle_ok = true;
+            $vehicle_issue = '';
+            if (function_exists('bst_limited_vehicle_selection_allowed')) {
+                $vcheck = bst_limited_vehicle_selection_allowed($tour_date_id, $vehicle1_id, $vehicle2_id);
+                $vehicle_ok = !empty($vcheck['allowed']);
+                if (!$vehicle_ok && !empty($vcheck['issue'])) {
+                    $vehicle_issue = $vcheck['issue'];
+                }
+            }
 
-            // Send admin notification if availability check fails
+            $can_book = ($slots_ok && $vehicle_ok);
+
             if (!$can_book) {
-                $this->send_availability_failure_notification($tour_date_id, $available_slots, $package_vehicles);
+                $this->send_availability_failure_notification(
+                    $tour_date_id,
+                    $available_slots,
+                    $package_vehicles,
+                    $slots_ok,
+                    $vehicle_ok,
+                    $vehicle_issue
+                );
             }
 
             wp_send_json_success([
                 'available_slots' => $available_slots,
                 'package_vehicles' => $package_vehicles,
-                'can_book' => $can_book
+                'can_book' => $can_book,
+                'slots_ok' => $slots_ok,
+                'vehicle_ok' => $vehicle_ok,
+                'vehicle_issue' => $vehicle_issue,
             ]);
 
         } catch (Exception $e) {
@@ -3833,7 +3876,7 @@ class BST_Plugin {
     /**
      * Send admin notification when availability check fails
      */
-    private function send_availability_failure_notification($tour_date_id, $available_slots, $package_vehicles) {
+    private function send_availability_failure_notification($tour_date_id, $available_slots, $package_vehicles, $slots_ok = null, $vehicle_ok = null, $vehicle_issue = '') {
         // Get tour date information
         $tour_date_post = get_post($tour_date_id);
         $tour_id = get_field('tour', $tour_date_id);
@@ -3859,8 +3902,15 @@ class BST_Plugin {
         $message .= "Date: {$tour_date_title}\n";
         $message .= "Start Date: {$start_date}\n";
         $message .= "Available Slots: {$available_slots}\n";
-        $message .= "Required Slots: {$package_vehicles}\n\n";
-        $message .= "Time: " . current_time('Y-m-d H:i:s') . "\n";
+        $message .= "Required Slots: {$package_vehicles}\n";
+        if ($slots_ok !== null && $vehicle_ok !== null) {
+            $message .= 'Slots OK: ' . ($slots_ok ? 'yes' : 'no') . "\n";
+            $message .= 'Vehicle OK: ' . ($vehicle_ok ? 'yes' : 'no') . "\n";
+            if ($vehicle_issue !== '') {
+                $message .= 'Vehicle issue: ' . $vehicle_issue . "\n";
+            }
+        }
+        $message .= "\nTime: " . current_time('Y-m-d H:i:s') . "\n";
         $message .= "IP Address: " . ($_SERVER['REMOTE_ADDR'] ?? 'Unknown') . "\n\n";
         $message .= "The customer was shown an error message and the booking was prevented.\n\n";
         $message .= "Admin Panel: " . admin_url('edit.php?post_type=tour-date');
@@ -3891,6 +3941,11 @@ class BST_Plugin {
     public function run_daily_availability_sync() {
         // Call the existing sync function
         $results = bst_sync_sold_slots();
+
+        $lv_batch = null;
+        if (function_exists('bst_migrate_limited_vehicles_sync_sold_batch')) {
+            $lv_batch = bst_migrate_limited_vehicles_sync_sold_batch();
+        }
         
         // Send notification email to admin only if running automated (not manual button click)
         $admin_email = get_option('admin_email');
@@ -3907,6 +3962,17 @@ class BST_Plugin {
             $message .= "Total tour dates processed: {$total_processed}\n";
             $message .= "Tour dates updated: {$updated_count}\n";
             $message .= "Tour dates unchanged: {$unchanged_count}\n\n";
+            if (is_array($lv_batch)) {
+                $lv_rows = isset($lv_batch['rows_updated']) ? (int) $lv_batch['rows_updated'] : 0;
+                $lv_errs = isset($lv_batch['error_count']) ? (int) $lv_batch['error_count'] : 0;
+                $message .= "Limited-vehicle sold recalc: repeater rows updated (total): {$lv_rows}\n";
+                $message .= "Limited-vehicle batch errors: {$lv_errs}\n";
+                if (!empty($lv_batch['oversold']) && is_array($lv_batch['oversold'])) {
+                    $os_count = count($lv_batch['oversold']);
+                    $message .= "Oversold limited-vehicle warnings: {$os_count}\n";
+                }
+                $message .= "\n";
+            }
             
             if (!empty($results['errors'])) {
                 $error_count = count($results['errors']);

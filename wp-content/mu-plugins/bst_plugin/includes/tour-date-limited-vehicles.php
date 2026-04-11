@@ -141,6 +141,57 @@ function bst_limited_vehicle_slots_remaining( $tour_date_id, $vehicle_id ) {
 }
 
 /**
+ * Whether selected vehicle CPT IDs have enough remaining limited inventory for this tour date.
+ * Uses repeater max/sold (caller should run {@see bst_sync_limited_vehicle_sold_for_tour_date()} first).
+ *
+ * @param int $tour_date_id Tour-date post ID.
+ * @param int $vehicle1_id  First vehicle CPT ID (0 = none / not used).
+ * @param int $vehicle2_id  Second vehicle CPT ID (0 = none / not used).
+ * @return array{allowed: bool, issue?: string}
+ */
+function bst_limited_vehicle_selection_allowed( $tour_date_id, $vehicle1_id, $vehicle2_id ) {
+	$tour_date_id = (int) $tour_date_id;
+	$vehicle1_id  = (int) $vehicle1_id;
+	$vehicle2_id  = (int) $vehicle2_id;
+	if ( $tour_date_id <= 0 ) {
+		return array(
+			'allowed' => false,
+			'issue'   => __( 'Invalid tour date.', 'bst-plugin' ),
+		);
+	}
+	$counts = array();
+	if ( $vehicle1_id > 0 ) {
+		$counts[ $vehicle1_id ] = isset( $counts[ $vehicle1_id ] ) ? $counts[ $vehicle1_id ] + 1 : 1;
+	}
+	if ( $vehicle2_id > 0 ) {
+		$counts[ $vehicle2_id ] = isset( $counts[ $vehicle2_id ] ) ? $counts[ $vehicle2_id ] + 1 : 1;
+	}
+	foreach ( $counts as $vehicle_id => $slot_count ) {
+		$stats = bst_limited_vehicle_max_sold_for_vehicle( $tour_date_id, $vehicle_id );
+		if ( $stats === null ) {
+			continue;
+		}
+		$remaining = max( 0, $stats['max'] - $stats['sold'] );
+		if ( $remaining >= $slot_count ) {
+			continue;
+		}
+		$title = function_exists( 'bst_vehicle_display_title' ) ? bst_vehicle_display_title( $vehicle_id ) : get_post_field( 'post_title', $vehicle_id );
+		$title = is_string( $title ) ? $title : (string) $vehicle_id;
+		return array(
+			'allowed' => false,
+			'issue'   => sprintf(
+				/* translators: 1: vehicle name, 2: remaining slots, 3: slots needed for this booking */
+				__( 'Not enough availability for %1$s (%2$d left; this booking needs %3$d).', 'bst-plugin' ),
+				$title,
+				$remaining,
+				$slot_count
+			),
+		);
+	}
+	return array( 'allowed' => true );
+}
+
+/**
  * Slots this booking already uses for the vehicle on the given tour date (0–2: vehicle1 + vehicle2).
  *
  * @param int $booking_id   BST tour booking row id.
