@@ -77,6 +77,7 @@ function bst_vehicle_migration_bust_caches_for_tour( $tour_id ) {
 
 /**
  * While non-zero, acf_tour_vehicle_pricing_cpt_query must not restrict post_object choices (migration writes).
+ * Paired with {@see bst_vehicle_migration_acf_pass_vehicle_pricing_vehicle_id} on acf/validate_value for the same field.
  */
 function bst_vehicle_migration_push_post_object_query_bypass() {
 	$g = &$GLOBALS['bst_vehicle_migration_po_query_bypass'];
@@ -588,6 +589,11 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 		)
 	);
 
+	// Entire migration: UI picker filter (car vs motorcycle) must not block programmatic saves or create_vehicle()'s update_field.
+	// Nested inner bypass removed — single scope covers tour loop + booking loop + vehicle CPT field updates.
+	bst_vehicle_migration_push_post_object_query_bypass();
+	try {
+
 	foreach ( $tour_posts as $tid ) {
 		$tid = (int) $tid;
 		if ( ! function_exists( 'get_field' ) || ! function_exists( 'update_field' ) ) {
@@ -680,39 +686,34 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 			}
 			// Critical: unchanged rows may still have vehicle_id as WP_Post; bulk update_field rejects that.
 			bst_vehicle_migration_normalize_vehicle_pricing_for_save( $pricing );
-			bst_vehicle_migration_push_post_object_query_bypass();
 			$ok = false;
-			try {
-				bst_vehicle_migration_bust_caches_for_tour( $tid );
-				// 1) Direct postmeta (matches ACF DB layout; avoids post_object picker restrictions on save).
-				$ok = bst_vehicle_migration_apply_pricing_vehicle_ids_via_postmeta( $tid, $pending_cells, $results );
-				// 2) Whole repeater via API (optional if postmeta already succeeded).
-				if ( ! $ok ) {
-					foreach ( array( $tid, 'post_' . $tid ) as $post_ref ) {
-						$r = update_field( 'vehicle_pricing', $pricing, $post_ref );
-						if ( false !== $r ) {
-							$ok = true;
-							break;
-						}
-						$r = update_field( BST_VEHICLE_PRICING_REPEATER_KEY, $pricing, $post_ref );
-						if ( false !== $r ) {
-							$ok = true;
-							break;
-						}
+			bst_vehicle_migration_bust_caches_for_tour( $tid );
+			// 1) Direct postmeta (matches ACF DB layout; avoids post_object picker restrictions on save).
+			$ok = bst_vehicle_migration_apply_pricing_vehicle_ids_via_postmeta( $tid, $pending_cells, $results );
+			// 2) Whole repeater via API (optional if postmeta already succeeded).
+			if ( ! $ok ) {
+				foreach ( array( $tid, 'post_' . $tid ) as $post_ref ) {
+					$r = update_field( 'vehicle_pricing', $pricing, $post_ref );
+					if ( false !== $r ) {
+						$ok = true;
+						break;
+					}
+					$r = update_field( BST_VEHICLE_PRICING_REPEATER_KEY, $pricing, $post_ref );
+					if ( false !== $r ) {
+						$ok = true;
+						break;
 					}
 				}
-				if ( ! $ok && function_exists( 'acf_get_field' ) && function_exists( 'acf_update_value' ) ) {
-					$field = acf_get_field( BST_VEHICLE_PRICING_REPEATER_KEY );
-					if ( is_array( $field ) ) {
-						$r = acf_update_value( $pricing, $tid, $field );
-						$ok = ( false !== $r );
-					}
+			}
+			if ( ! $ok && function_exists( 'acf_get_field' ) && function_exists( 'acf_update_value' ) ) {
+				$field = acf_get_field( BST_VEHICLE_PRICING_REPEATER_KEY );
+				if ( is_array( $field ) ) {
+					$r = acf_update_value( $pricing, $tid, $field );
+					$ok = ( false !== $r );
 				}
-				if ( ! $ok ) {
-					$ok = bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tid, $pending_cells, $results );
-				}
-			} finally {
-				bst_vehicle_migration_pop_post_object_query_bypass();
+			}
+			if ( ! $ok ) {
+				$ok = bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tid, $pending_cells, $results );
 			}
 			if ( $ok ) {
 				$tours_updated++;
@@ -801,4 +802,27 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 	$results[] = sprintf( 'Vehicle CPT count after migration: %d', count( $vehicles_by_id ) );
 
 	return $results;
+
+	} finally {
+		bst_vehicle_migration_pop_post_object_query_bypass();
+	}
 }
+
+/**
+ * During vehicle migration, allow saving Tour → vehicle_pricing → Vehicle (CPT) even when the id is not in the
+ * car/motorcycle picker list. ACF/SCF may validate post_object values against the field’s query; the query filter
+ * alone is not always sufficient.
+ *
+ * @param mixed $valid Prior validation (true, false, or error string).
+ * @param mixed $value Submitted value.
+ * @param array $field Field array.
+ * @param string $input Input name.
+ * @return mixed
+ */
+function bst_vehicle_migration_acf_pass_vehicle_pricing_vehicle_id( $valid, $value, $field, $input ) {
+	if ( function_exists( 'bst_vehicle_migration_is_post_object_query_bypassed' ) && bst_vehicle_migration_is_post_object_query_bypassed() ) {
+		return true;
+	}
+	return $valid;
+}
+add_filter( 'acf/validate_value/key=field_67f9e40b1c001', 'bst_vehicle_migration_acf_pass_vehicle_pricing_vehicle_id', 5, 4 );
