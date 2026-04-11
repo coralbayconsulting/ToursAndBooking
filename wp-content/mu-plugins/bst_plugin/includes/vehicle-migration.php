@@ -68,25 +68,78 @@ function bst_vehicle_migration_coalesce_vehicle_pricing_tree_keys( array &$prici
 }
 
 /**
- * Force 0-based sequential keys on the outer vehicle_pricing repeater and each nested `vehicles` / field_* branch.
+ * Whether a repeater array uses non–zero-based keys (e.g. 1,2,3 with row_index_offset=1).
  *
- * ACF maps PHP index 0 to the first repeater row. Raw/meta loads often use keys 1,2,3… when row_index_offset=1, so
- * the first row’s data lives at [1] and [0] is empty — Vehicle (CPT) appears one row below the label (first row
- * shows “Select”, each row shows the previous vehicle).
+ * @param array $nested Repeater rows.
+ * @return bool True if {@see array_values()} should be applied so index 0 is the first row.
+ */
+function bst_vehicle_migration_nested_repeater_needs_array_reindex( array $nested ) {
+	if ( empty( $nested ) || ! is_array( $nested ) ) {
+		return false;
+	}
+	$keys  = array_keys( $nested );
+	$first = reset( $keys );
+	return $first !== 0 && $first !== '0';
+}
+
+/**
+ * When both nested branches exist, copy vehicle label + CPT id from the primary branch into the sibling so both
+ * stay row-aligned. Independent {@see array_values()} on each branch can reorder them differently and shift CPT
+ * one row forward or back relative to labels.
+ *
+ * @param array  $row         One vehicle_pricing row (by reference).
+ * @param string $primary_key {@see bst_vehicle_migration_nested_repeater_primary_key()}.
+ * @param string $other_key   The other nested key (`vehicles` or field_*).
+ */
+function bst_vehicle_migration_sync_nested_vehicle_branches_from_primary( array &$row, $primary_key, $other_key ) {
+	if ( empty( $row[ $primary_key ] ) || ! is_array( $row[ $primary_key ] ) ) {
+		return;
+	}
+	$n      = count( $row[ $primary_key ] );
+	$synced = array();
+	for ( $j = 0; $j < $n; $j++ ) {
+		$pvrow = isset( $row[ $primary_key ][ $j ] ) && is_array( $row[ $primary_key ][ $j ] ) ? $row[ $primary_key ][ $j ] : array();
+		$vid   = bst_vehicle_migration_row_linked_post_id( $pvrow );
+		$txt   = bst_vehicle_migration_row_vehicle_text( $pvrow );
+		$synced[ $j ] = array();
+		bst_vehicle_migration_assign_vehicle_id_on_nested_row( $synced[ $j ], $vid > 0 ? $vid : false );
+		if ( '' !== $txt ) {
+			$synced[ $j ]['vehicle'] = $txt;
+			$synced[ $j ][ BST_VEHICLE_ROW_TEXT_KEY ] = $txt;
+		}
+	}
+	$row[ $other_key ] = $synced;
+}
+
+/**
+ * Normalize repeater PHP keys only when needed, then sync duplicate nested branches.
+ *
+ * ACF maps PHP index 0 to the first repeater row. Keys 1,2,3… leave [0] empty in the UI. Calling {@see array_values()}
+ * on every load fixes that but, if both `vehicles` and field_* arrays exist, doing it separately can misalign rows;
+ * we rebuild the sibling from the primary branch after reindexing the primary.
  *
  * @param array $pricing vehicle_pricing repeater (by reference).
  */
 function bst_vehicle_migration_reindex_vehicle_pricing_repeaters( array &$pricing ) {
-	$pricing = array_values( $pricing );
+	if ( bst_vehicle_migration_nested_repeater_needs_array_reindex( $pricing ) ) {
+		$pricing = array_values( $pricing );
+	}
 	foreach ( $pricing as $i => &$row ) {
 		if ( ! is_array( $row ) ) {
 			continue;
 		}
-		foreach ( array( 'vehicles', BST_VEHICLE_NESTED_REPEATER_KEY ) as $nk ) {
-			if ( ! empty( $row[ $nk ] ) && is_array( $row[ $nk ] ) ) {
-				$row[ $nk ] = array_values( $row[ $nk ] );
-			}
+		$pk = bst_vehicle_migration_nested_repeater_primary_key( $row );
+		if ( ! $pk || empty( $row[ $pk ] ) || ! is_array( $row[ $pk ] ) ) {
+			continue;
 		}
+		if ( bst_vehicle_migration_nested_repeater_needs_array_reindex( $row[ $pk ] ) ) {
+			$row[ $pk ] = array_values( $row[ $pk ] );
+		}
+		$other = ( BST_VEHICLE_NESTED_REPEATER_KEY === $pk ) ? 'vehicles' : BST_VEHICLE_NESTED_REPEATER_KEY;
+		if ( empty( $row[ $other ] ) || ! is_array( $row[ $other ] ) ) {
+			continue;
+		}
+		bst_vehicle_migration_sync_nested_vehicle_branches_from_primary( $row, $pk, $other );
 	}
 	unset( $row );
 }
