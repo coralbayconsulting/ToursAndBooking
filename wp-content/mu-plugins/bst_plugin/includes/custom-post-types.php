@@ -794,7 +794,7 @@ add_action('init', function () {
 /**
  * Map Vehicle CPT post ID → tours that reference it in Tour → vehicle_pricing → vehicles → Vehicle (CPT).
  *
- * Uses `get_field` format=true (same as tour edit UI) so nested `vehicles` vs field_* keys resolve consistently.
+ * Uses `get_field` with format false (raw) so nested `vehicles` vs field_* keys match postmeta and migration output.
  * No booking table or repeater text-label fallbacks — the linked CPT id is the source of truth.
  *
  * @return array<int, array<int, string>> vehicle_post_id => [ tour_post_id => tour_title, ... ]
@@ -823,8 +823,7 @@ function bst_vehicle_usage_map() {
 	foreach ( $tour_ids as $tour_id ) {
 		$tour_id    = (int) $tour_id;
 		$tour_title = get_the_title( $tour_id );
-		// Use format=true so nested repeaters match the edit screen; raw (false) can omit keys ACF uses in admin.
-		$pricing    = get_field( 'vehicle_pricing', $tour_id, true );
+		$pricing    = get_field( 'vehicle_pricing', $tour_id, false );
 		if ( empty( $pricing ) || ! is_array( $pricing ) ) {
 			continue;
 		}

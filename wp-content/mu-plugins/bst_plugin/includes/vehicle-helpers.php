@@ -507,7 +507,8 @@ function bst_tour_linked_vehicle_ids( $tour_id ) {
         return array();
     }
     $ids     = array();
-    $pricing = get_field( 'vehicle_pricing', $tour_id, true );
+    // Raw (false): same structure as postmeta / migration; formatted (true) can omit or duplicate nested field_* rows.
+    $pricing = get_field( 'vehicle_pricing', $tour_id, false );
     if ( empty( $pricing ) || ! is_array( $pricing ) ) {
         return array();
     }
@@ -618,7 +619,7 @@ function bst_tour_pricing_vehicle_ids_resolved( $tour_id ) {
     if ( $tour_id <= 0 || ! function_exists( 'get_field' ) ) {
         return array();
     }
-    $pricing = get_field( 'vehicle_pricing', $tour_id, true );
+    $pricing = get_field( 'vehicle_pricing', $tour_id, false );
     if ( empty( $pricing ) || ! is_array( $pricing ) ) {
         return array();
     }

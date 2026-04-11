@@ -2,6 +2,14 @@
 /**
  * One-time / Tools: migrate tour vehicle rows and bookings to Vehicle CPT IDs.
  *
+ * Never pass a reduced repeater tree to {@see update_field()} (e.g. only name keys without copying field_* values)
+ * — that can clear Class / Vehicle Price Addition when raw loads use field keys. Use full tree + coalesce.
+ *
+ * Tour `vehicle_pricing` is saved only via {@see update_field()} while programmatic bypasses are active:
+ * {@see BST_Plugin::acf_tour_vehicle_pricing_cpt_query} must not restrict `post__in`, and
+ * {@see bst_vehicle_migration_acf_pass_vehicle_pricing_vehicle_id} must allow the Vehicle post_object subfield.
+ * Diagnostics: PHP `error_log` lines prefixed `[BST release cleanup]`.
+ *
  * @package BST_Plugin
  */
 
@@ -14,45 +22,49 @@ const BST_VEHICLE_PRICING_REPEATER_KEY       = 'field_67ad570616fd2';
 const BST_VEHICLE_NESTED_REPEATER_KEY        = 'field_67ad574316fd3';
 const BST_VEHICLE_ROW_TEXT_KEY               = 'field_67ad5facdf416';
 const BST_VEHICLE_ROW_POST_OBJECT_KEY        = 'field_67f9e40b1c001';
+/** @var string vehicle_pricing row → Class (number). */
+const BST_VEHICLE_PRICING_ROW_CLASS_KEY      = 'field_67ad575f16fd4';
+/** @var string vehicle_pricing row → Vehicle Price Addition. */
+const BST_VEHICLE_PRICING_ROW_PRICE_ADD_KEY  = 'field_67b89cf27ef01';
 
 /**
- * Convert 0-based PHP repeater keys from get_field() to the row index update_sub_field() expects.
- * ACF defaults to 1-based repeater positions; the row_index_offset setting can switch to 0-based.
+ * Copy ACF field_* values into name keys when names are missing/empty so {@see update_field()} never saves stripped rows.
+ * Raw/meta-heavy loads often populate only field keys; a partial “names only” tree must never be written (it wipes pricing).
  *
- * @param int $php_zero_based Index from foreach ( $arr as $i => $row ).
- * @return int
+ * @param array $pricing vehicle_pricing repeater (by reference).
  */
-function bst_vehicle_migration_acf_repeater_selector_index( $php_zero_based ) {
-	$php_zero_based = (int) $php_zero_based;
-	if ( function_exists( 'acf_get_setting' ) ) {
-		$off = acf_get_setting( 'row_index_offset' );
-		// Only use 0-based selectors when the setting is explicitly numeric zero (filtered).
-		if ( is_numeric( $off ) && 0 === (int) $off ) {
-			return $php_zero_based;
+function bst_vehicle_migration_coalesce_vehicle_pricing_tree_keys( array &$pricing ) {
+	foreach ( $pricing as $i => &$row ) {
+		if ( ! is_array( $row ) ) {
+			continue;
 		}
-	}
-	return $php_zero_based + 1;
-}
-
-/**
- * Whether a repeater array key is valid for ACF (numeric index or row_* layout id).
- *
- * @param mixed $key Key from foreach ( $repeater as $key => $row ).
- * @return bool
- */
-function bst_vehicle_migration_is_acf_repeater_row_key( $key ) {
-	if ( is_int( $key ) || is_float( $key ) ) {
-		return $key >= 0;
-	}
-	if ( is_string( $key ) ) {
-		if ( preg_match( '/^row_[a-zA-Z0-9]+$/', $key ) ) {
-			return true;
+		if ( isset( $row[ BST_VEHICLE_PRICING_ROW_CLASS_KEY ] ) ) {
+			if ( ! array_key_exists( 'class', $row ) || $row['class'] === '' || $row['class'] === null ) {
+				$row['class'] = $row[ BST_VEHICLE_PRICING_ROW_CLASS_KEY ];
+			}
 		}
-		if ( '' !== $key && ctype_digit( $key ) ) {
-			return true;
+		if ( isset( $row[ BST_VEHICLE_PRICING_ROW_PRICE_ADD_KEY ] ) ) {
+			if ( ! array_key_exists( 'vehicle_price_addition', $row ) || $row['vehicle_price_addition'] === '' || $row['vehicle_price_addition'] === null ) {
+				$row['vehicle_price_addition'] = $row[ BST_VEHICLE_PRICING_ROW_PRICE_ADD_KEY ];
+			}
 		}
+		$pk = bst_vehicle_migration_nested_repeater_primary_key( $row );
+		if ( ! $pk || empty( $row[ $pk ] ) || ! is_array( $row[ $pk ] ) ) {
+			continue;
+		}
+		foreach ( $row[ $pk ] as $j => &$vrow ) {
+			if ( ! is_array( $vrow ) ) {
+				continue;
+			}
+			if ( isset( $vrow[ BST_VEHICLE_ROW_TEXT_KEY ] ) ) {
+				if ( ! array_key_exists( 'vehicle', $vrow ) || $vrow['vehicle'] === '' || $vrow['vehicle'] === null ) {
+					$vrow['vehicle'] = $vrow[ BST_VEHICLE_ROW_TEXT_KEY ];
+				}
+			}
+		}
+		unset( $vrow );
 	}
-	return false;
+	unset( $row );
 }
 
 /**
@@ -105,28 +117,481 @@ function bst_vehicle_migration_is_post_object_query_bypassed() {
 }
 
 /**
- * ACF/SCF postmeta key for Tour → vehicle_pricing[pi].vehicles[pj].vehicle_id (0-based row indices in DB).
+ * Structured diagnostic line for release cleanup (always error_log; search for prefix in PHP error log).
  *
- * @param int $package_index_0 Parent repeater row (0-based, order in stored repeater).
- * @param int $vehicle_index_0 Nested repeater row (0-based).
- * @return string
+ * @param string $message Single line, no HTML.
  */
-function bst_vehicle_migration_vehicle_id_value_meta_key( $package_index_0, $vehicle_index_0 ) {
-	return BST_VEHICLE_PRICING_REPEATER_KEY . '_' . (int) $package_index_0 . '_' . BST_VEHICLE_NESTED_REPEATER_KEY . '_' . (int) $vehicle_index_0 . '_' . BST_VEHICLE_ROW_POST_OBJECT_KEY;
+function bst_vehicle_migration_release_cleanup_log( $message ) {
+	$message = trim( (string) $message );
+	if ( '' === $message ) {
+		return;
+	}
+	error_log( '[BST release cleanup] ' . $message );
 }
 
 /**
- * Value for update_sub_field() row position: pass through ACF row_* keys; map numeric indices via row_index_offset.
+ * All plausible postmeta keys for a vehicle_id cell (canonical write path + legacy inner-index variant for diagnostics).
  *
- * @param mixed $key Repeater key from get_field().
- * @return int|string
+ * @param int $pi Parent ordinal 0-based.
+ * @param int $pj Nested ordinal 0-based.
+ * @return array<int, string>
  */
-function bst_vehicle_migration_repeater_key_for_subfield( $key ) {
-	if ( is_string( $key ) && preg_match( '/^row_[a-zA-Z0-9]+$/', $key ) ) {
-		return $key;
+function bst_vehicle_migration_vehicle_id_postmeta_key_candidates( $pi, $pj ) {
+	$pi   = (int) $pi;
+	$pj   = (int) $pj;
+	$keys = array(
+		bst_vehicle_migration_vehicle_id_value_meta_key( $pi, $pj ),
+	);
+	// Previous bug: nested segment used parent offset — same cell may still exist under this key on old runs.
+	$pi_seg = bst_vehicle_migration_acf_repeater_selector_index( $pi );
+	$pj_alt = bst_vehicle_migration_acf_repeater_selector_index( $pj );
+	$keys[] = BST_VEHICLE_PRICING_REPEATER_KEY . '_' . $pi_seg . '_' . BST_VEHICLE_NESTED_REPEATER_KEY . '_' . $pj_alt . '_' . BST_VEHICLE_ROW_POST_OBJECT_KEY;
+	$pj0 = bst_vehicle_migration_nested_repeater_meta_row_segment( $pj );
+	$keys[] = 'vehicle_pricing_' . $pi_seg . '_vehicles_' . $pj0 . '_vehicle_id';
+	$keys[] = 'vehicle_pricing_' . $pi_seg . '_vehicles_' . $pj_alt . '_vehicle_id';
+
+	return array_values( array_unique( array_filter( $keys ) ) );
+}
+
+/**
+ * Read linked vehicle CPT id for one pending cell from get_field (formatted, matches admin).
+ *
+ * @param int   $tour_id Tour post ID.
+ * @param array $c       One pending_cells item.
+ * @return int
+ */
+function bst_vehicle_migration_read_vehicle_id_for_pending_cell( $tour_id, array $c ) {
+	$tour_id = (int) $tour_id;
+	if ( ! function_exists( 'get_field' ) ) {
+		return 0;
 	}
-	$num = is_numeric( $key ) ? (int) $key : 0;
-	return bst_vehicle_migration_acf_repeater_selector_index( $num );
+	$pricing = get_field( 'vehicle_pricing', $tour_id, false );
+	if ( empty( $pricing ) || ! is_array( $pricing ) ) {
+		return 0;
+	}
+	if ( isset( $c['i'], $c['j'], $pricing[ $c['i'] ] ) && is_array( $pricing[ $c['i'] ] ) ) {
+		$nested = bst_vehicle_migration_get_nested_vehicle_rows( $pricing[ $c['i'] ] );
+		if ( isset( $nested[ $c['j'] ] ) && is_array( $nested[ $c['j'] ] ) ) {
+			return bst_vehicle_migration_row_linked_post_id( $nested[ $c['j'] ] );
+		}
+	}
+	$pi = isset( $c['meta_row'] ) ? (int) $c['meta_row'] : 0;
+	$pj = isset( $c['meta_subrow'] ) ? (int) $c['meta_subrow'] : 0;
+	$prows = array_values( $pricing );
+	if ( ! isset( $prows[ $pi ] ) || ! is_array( $prows[ $pi ] ) ) {
+		return 0;
+	}
+	$nested = bst_vehicle_migration_get_nested_vehicle_rows( $prows[ $pi ] );
+	$nrows  = array_values( $nested );
+	if ( ! isset( $nrows[ $pj ] ) || ! is_array( $nrows[ $pj ] ) ) {
+		return 0;
+	}
+	return bst_vehicle_migration_row_linked_post_id( $nrows[ $pj ] );
+}
+
+/**
+ * Confirm each pending cell’s vehicle_id after save: canonical postmeta first, then alternate keys (legacy indexing),
+ * then get_field() as a last resort when ACF wrote values but meta key shape differs.
+ *
+ * @param int   $tour_id Tour post ID.
+ * @param array $cells   pending_cells.
+ * @return string[] Empty if OK; else human-readable mismatch lines.
+ */
+function bst_vehicle_migration_verify_pending_cells( $tour_id, array $cells ) {
+	$tour_id = (int) $tour_id;
+	$issues  = array();
+	bst_vehicle_migration_bust_caches_for_tour( $tour_id );
+
+	foreach ( $cells as $c ) {
+		$expected = isset( $c['vehicle_id'] ) ? (int) $c['vehicle_id'] : 0;
+		$pi       = isset( $c['meta_row'] ) ? (int) $c['meta_row'] : null;
+		$pj       = isset( $c['meta_subrow'] ) ? (int) $c['meta_subrow'] : null;
+		if ( null === $pi || null === $pj ) {
+			$issues[] = sprintf( 'tour %d verify: missing meta_row/meta_subrow', $tour_id );
+			continue;
+		}
+
+		$canonical   = bst_vehicle_migration_vehicle_id_value_meta_key( $pi, $pj );
+		$from_canon  = (int) get_post_meta( $tour_id, $canonical, true );
+		if ( $from_canon === $expected ) {
+			continue;
+		}
+
+		$matched_alt = false;
+		foreach ( bst_vehicle_migration_vehicle_id_postmeta_key_candidates( $pi, $pj ) as $k ) {
+			if ( $k === $canonical ) {
+				continue;
+			}
+			if ( (int) get_post_meta( $tour_id, $k, true ) === $expected ) {
+				$matched_alt = true;
+				bst_vehicle_migration_release_cleanup_log(
+					sprintf(
+						'VERIFY note tour=%d pi=%d pj=%d expected=%d matched postmeta key %s (canonical had %d)',
+						$tour_id,
+						$pi,
+						$pj,
+						$expected,
+						$k,
+						$from_canon
+					)
+				);
+				break;
+			}
+		}
+		if ( $matched_alt ) {
+			continue;
+		}
+
+		$from_field = (int) bst_vehicle_migration_read_vehicle_id_for_pending_cell( $tour_id, $c );
+		if ( $from_field === $expected ) {
+			bst_vehicle_migration_release_cleanup_log(
+				sprintf(
+					'VERIFY note tour=%d pi=%d pj=%d expected=%d matched get_field (canonical postmeta had %d)',
+					$tour_id,
+					$pi,
+					$pj,
+					$expected,
+					$from_canon
+				)
+			);
+			continue;
+		}
+
+		$issues[] = sprintf(
+			'tour %d package[%d] vehicle[%d] expected vehicle_id %d; postmeta canonical=%d; get_field=%d',
+			$tour_id,
+			$pi,
+			$pj,
+			$expected,
+			$from_canon,
+			$from_field
+		);
+	}
+
+	return $issues;
+}
+
+/**
+ * Row index segment for ACF nested postmeta keys (respects row_index_offset).
+ *
+ * @param int $php_zero_based Ordinal from migration loops (0 = first row).
+ * @return int
+ */
+function bst_vehicle_migration_acf_repeater_selector_index( $php_zero_based ) {
+	$php_zero_based = (int) $php_zero_based;
+	if ( function_exists( 'acf_get_setting' ) ) {
+		$off = acf_get_setting( 'row_index_offset' );
+		if ( is_numeric( $off ) && 0 === (int) $off ) {
+			return $php_zero_based;
+		}
+	}
+	return $php_zero_based + 1;
+}
+
+/**
+ * Nested repeater row index segment in ACF/SCF postmeta keys (vehicles under one package row).
+ *
+ * Parent repeater segments use {@see bst_vehicle_migration_acf_repeater_selector_index()} (honours row_index_offset).
+ * Inner (nested) repeater segments are 0-based in storage: first vehicle row = 0. Applying the parent offset to
+ * both levels shifts vehicle_id values one slot in the admin (CPT appears on the wrong nested row).
+ *
+ * @param int $php_zero_based Inner ordinal from migration loops (0 = first vehicle in that package).
+ * @return int
+ */
+function bst_vehicle_migration_nested_repeater_meta_row_segment( $php_zero_based ) {
+	$php_zero_based = (int) $php_zero_based;
+	/**
+	 * @param int $segment        Default nested segment (0-based).
+	 * @param int $php_zero_based Inner row ordinal passed in.
+	 */
+	return (int) apply_filters( 'bst_vehicle_migration_nested_repeater_meta_row_segment', $php_zero_based, $php_zero_based );
+}
+
+/**
+ * Postmeta key for Tour → vehicle_pricing[pi].vehicles[pj].vehicle_id (field_67f9e40b1c001).
+ *
+ * @param int $package_index_0 Parent row ordinal (0-based).
+ * @param int $vehicle_index_0 Nested row ordinal (0-based).
+ * @return string
+ */
+function bst_vehicle_migration_vehicle_id_value_meta_key( $package_index_0, $vehicle_index_0 ) {
+	$pi = bst_vehicle_migration_acf_repeater_selector_index( (int) $package_index_0 );
+	$pj = bst_vehicle_migration_nested_repeater_meta_row_segment( (int) $vehicle_index_0 );
+	return BST_VEHICLE_PRICING_REPEATER_KEY . '_' . $pi . '_' . BST_VEHICLE_NESTED_REPEATER_KEY . '_' . $pj . '_' . BST_VEHICLE_ROW_POST_OBJECT_KEY;
+}
+
+/**
+ * Whether an ACF save call succeeded ({@see bst_acf_save_returned_ok} when available).
+ *
+ * @param mixed $r Return value from update_field / acf_update_value.
+ * @return bool
+ */
+function bst_vehicle_migration_acf_save_returned_ok( $r ) {
+	return function_exists( 'bst_acf_save_returned_ok' ) ? bst_acf_save_returned_ok( $r ) : ( false !== $r );
+}
+
+/**
+ * Write vehicle_id cells using the same meta keys ACF uses (works when update_field rejects nested repeaters).
+ *
+ * @param int    $tour_id Tour post ID.
+ * @param array  $cells   pending_cells.
+ * @param array  $results Log (append warnings on verify miss).
+ * @return bool True if every cell written and verified.
+ */
+function bst_vehicle_migration_apply_pricing_vehicle_ids_via_postmeta( $tour_id, array $cells, array &$results ) {
+	$tour_id = (int) $tour_id;
+	if ( $tour_id <= 0 || empty( $cells ) ) {
+		return false;
+	}
+
+	$all_ok = true;
+	foreach ( $cells as $c ) {
+		$vid = isset( $c['vehicle_id'] ) ? (int) $c['vehicle_id'] : 0;
+		$pi  = isset( $c['meta_row'] ) ? (int) $c['meta_row'] : null;
+		$pj  = isset( $c['meta_subrow'] ) ? (int) $c['meta_subrow'] : null;
+		if ( null === $pi || null === $pj ) {
+			$all_ok    = false;
+			$results[] = sprintf( 'Error: missing meta_row/meta_subrow for tour %d postmeta write.', $tour_id );
+			continue;
+		}
+
+		$value_key = bst_vehicle_migration_vehicle_id_value_meta_key( $pi, $pj );
+		$ref_key   = '_' . $value_key;
+
+		if ( $vid > 0 ) {
+			update_post_meta( $tour_id, $value_key, $vid );
+			update_post_meta( $tour_id, $ref_key, BST_VEHICLE_ROW_POST_OBJECT_KEY );
+			$read = get_post_meta( $tour_id, $value_key, true );
+			if ( (int) $read !== $vid ) {
+				$all_ok = false;
+				bst_vehicle_migration_release_cleanup_log(
+					sprintf(
+						'postmeta verify FAILED tour=%d key=%s expected=%d got=%s',
+						$tour_id,
+						$value_key,
+						$vid,
+						is_scalar( $read ) ? (string) $read : '?'
+					)
+				);
+				$results[] = sprintf(
+					'Error: postmeta verify failed tour %1$d row %2$d/%3$d (vehicle_id %4$d).',
+					$tour_id,
+					$pi,
+					$pj,
+					$vid
+				);
+			}
+		} else {
+			delete_post_meta( $tour_id, $value_key );
+			delete_post_meta( $tour_id, $ref_key );
+		}
+
+		// Legacy name-based meta keys — use same inner segment rule as field-key path.
+		$pi_acf   = bst_vehicle_migration_acf_repeater_selector_index( (int) $pi );
+		$pj_acf   = bst_vehicle_migration_nested_repeater_meta_row_segment( (int) $pj );
+		$name_val = 'vehicle_pricing_' . $pi_acf . '_vehicles_' . $pj_acf . '_vehicle_id';
+		$name_ref = '_' . $name_val;
+		if ( $vid > 0 ) {
+			update_post_meta( $tour_id, $name_val, $vid );
+			update_post_meta( $tour_id, $name_ref, BST_VEHICLE_ROW_POST_OBJECT_KEY );
+		} else {
+			delete_post_meta( $tour_id, $name_val );
+			delete_post_meta( $tour_id, $name_ref );
+		}
+	}
+
+	bst_vehicle_migration_bust_caches_for_tour( $tour_id );
+	return $all_ok;
+}
+
+/**
+ * Persist vehicle_pricing: prefer ACF {@see update_field()} / {@see acf_update_value()} with filter bypasses; if those
+ * return false (common with nested repeaters / SCF), write vehicle_id cells via the same postmeta keys ACF uses.
+ *
+ * Requires {@see bst_vehicle_migration_push_post_object_query_bypass()} and
+ * {@see bst_vehicle_migration_acf_pass_vehicle_pricing_vehicle_id} during the run.
+ *
+ * @param int    $tour_id       Tour post ID.
+ * @param array  $pricing       Normalized vehicle_pricing tree.
+ * @param array  $pending_cells Cells we changed (for verification / postmeta).
+ * @param array  $results       User-visible result lines (append).
+ * @return bool True if get_field verification passes for pending cells.
+ */
+function bst_vehicle_migration_save_vehicle_pricing_for_tour( $tour_id, array $pricing, array $pending_cells, array &$results ) {
+	$tour_id = (int) $tour_id;
+	if ( $tour_id <= 0 || empty( $pending_cells ) ) {
+		bst_vehicle_migration_release_cleanup_log( sprintf( 'save_vehicle_pricing aborted: invalid tour_id=%d or empty pending_cells', $tour_id ) );
+		return false;
+	}
+	if ( ! function_exists( 'update_field' ) ) {
+		bst_vehicle_migration_release_cleanup_log( 'save_vehicle_pricing aborted: update_field() not available (ACF inactive?)' );
+		$results[] = 'Error: ACF update_field() not available; cannot save vehicle_pricing.';
+		return false;
+	}
+
+	$bypass = isset( $GLOBALS['bst_vehicle_migration_po_query_bypass'] ) ? (int) $GLOBALS['bst_vehicle_migration_po_query_bypass'] : 0;
+	if ( $bypass < 1 ) {
+		bst_vehicle_migration_release_cleanup_log(
+			sprintf(
+				'CRITICAL tour=%d: post_object query bypass depth is %d (must be >= 1). BST_Plugin::acf_tour_vehicle_pricing_cpt_query may restrict vehicle IDs.',
+				$tour_id,
+				$bypass
+			)
+		);
+	}
+
+	$offset = function_exists( 'acf_get_setting' ) ? acf_get_setting( 'row_index_offset' ) : null;
+	bst_vehicle_migration_release_cleanup_log(
+		sprintf(
+			'save_vehicle_pricing start tour=%d title=%s pending_cells=%d acf_row_index_offset=%s bypass_depth=%d',
+			$tour_id,
+			str_replace( array( "\r", "\n" ), ' ', get_the_title( $tour_id ) ),
+			count( $pending_cells ),
+			null !== $offset && is_scalar( $offset ) ? (string) $offset : wp_json_encode( $offset ),
+			$bypass
+		)
+	);
+
+	bst_vehicle_migration_coalesce_vehicle_pricing_tree_keys( $pricing );
+
+	$field_defs = array(
+		array( 'vehicle_pricing', 'name vehicle_pricing' ),
+		array( BST_VEHICLE_PRICING_REPEATER_KEY, 'key ' . BST_VEHICLE_PRICING_REPEATER_KEY ),
+	);
+	$post_refs = array( $tour_id, 'post_' . $tour_id );
+
+	$saved_via = null;
+
+	foreach ( $post_refs as $post_ref ) {
+		foreach ( $field_defs as $fd ) {
+			$field_id = $fd[0];
+			$label    = $fd[1];
+			$r        = update_field( $field_id, $pricing, $post_ref );
+			$ref_s    = is_int( $post_ref ) ? (string) $post_ref : $post_ref;
+			if ( ! bst_vehicle_migration_acf_save_returned_ok( $r ) ) {
+				bst_vehicle_migration_release_cleanup_log(
+					sprintf(
+						'update_field FAILED tour=%d field=%s post_ref=%s return=%s',
+						$tour_id,
+						$label,
+						$ref_s,
+						false === $r ? 'false' : wp_json_encode( $r )
+					)
+				);
+				continue;
+			}
+			$saved_via = 'update_field:full_tree:' . $label . ':' . $ref_s;
+			bst_vehicle_migration_release_cleanup_log(
+				sprintf(
+					'update_field OK tour=%d field=%s post_ref=%s return=%s',
+					$tour_id,
+					$label,
+					$ref_s,
+					null === $r ? 'null' : wp_json_encode( $r )
+				)
+			);
+			break 2;
+		}
+	}
+
+	if ( ! $saved_via && function_exists( 'acf_get_field' ) && function_exists( 'acf_update_value' ) ) {
+		$field = acf_get_field( BST_VEHICLE_PRICING_REPEATER_KEY );
+		if ( is_array( $field ) ) {
+			foreach ( array( $tour_id, 'post_' . $tour_id ) as $pid ) {
+				$r = acf_update_value( $pricing, $pid, $field );
+				if ( bst_vehicle_migration_acf_save_returned_ok( $r ) ) {
+					$saved_via = 'acf_update_value:full_tree:' . ( is_int( $pid ) ? (string) $pid : $pid );
+					bst_vehicle_migration_release_cleanup_log(
+						sprintf(
+							'acf_update_value OK tour=%d post_id=%s return=%s',
+							$tour_id,
+							is_int( $pid ) ? (string) $pid : $pid,
+							null === $r ? 'null' : wp_json_encode( $r )
+						)
+					);
+					break;
+				}
+				bst_vehicle_migration_release_cleanup_log(
+					sprintf(
+						'acf_update_value FAILED tour=%d post_id=%s return=%s',
+						$tour_id,
+						is_int( $pid ) ? (string) $pid : $pid,
+						false === $r ? 'false' : wp_json_encode( $r )
+					)
+				);
+			}
+		}
+	}
+
+	if ( ! $saved_via ) {
+		$top_n = is_array( $pricing ) ? count( $pricing ) : 0;
+		$k0    = array();
+		if ( isset( $pricing[0] ) && is_array( $pricing[0] ) ) {
+			$k0 = array_keys( $pricing[0] );
+		}
+		bst_vehicle_migration_release_cleanup_log(
+			sprintf(
+				'all ACF API attempts failed tour=%d top_level_rows=%d first_row_keys=%s — using direct postmeta for vehicle_id cells',
+				$tour_id,
+				$top_n,
+				wp_json_encode( $k0 )
+			)
+		);
+		if ( ! bst_vehicle_migration_apply_pricing_vehicle_ids_via_postmeta( $tour_id, $pending_cells, $results ) ) {
+			$results[] = sprintf(
+				'Error: could not save vehicle_pricing for tour %d (%s) (update_field, acf_update_value, and postmeta all failed). See [BST release cleanup] in error_log.',
+				$tour_id,
+				get_the_title( $tour_id )
+			);
+			return false;
+		}
+		$saved_via = 'direct_postmeta';
+	}
+
+	bst_vehicle_migration_release_cleanup_log( sprintf( 'SAVED_VIA=%s tour=%d', $saved_via, $tour_id ) );
+
+	bst_vehicle_migration_bust_caches_for_tour( $tour_id );
+	$mismatches = bst_vehicle_migration_verify_pending_cells( $tour_id, $pending_cells );
+	if ( ! empty( $mismatches ) ) {
+		foreach ( $mismatches as $m ) {
+			bst_vehicle_migration_release_cleanup_log( 'VERIFY_FAIL ' . $m );
+		}
+		$results[] = sprintf(
+			'Error: vehicle_pricing save verification failed for tour %d (%s). See [BST release cleanup] VERIFY_FAIL lines.',
+			$tour_id,
+			get_the_title( $tour_id )
+		);
+		return false;
+	}
+
+	bst_vehicle_migration_release_cleanup_log(
+		sprintf( 'save_vehicle_pricing complete tour=%d verified_cells=%d', $tour_id, count( $pending_cells ) )
+	);
+	return true;
+}
+
+/**
+ * Which nested repeater key is authoritative when both `vehicles` and field_* exist (must match
+ * {@see bst_vehicle_migration_get_nested_vehicle_rows()}).
+ *
+ * @param array $pricing_row One vehicle_pricing row.
+ * @return string|null 'vehicles', BST_VEHICLE_NESTED_REPEATER_KEY, or null if neither.
+ */
+function bst_vehicle_migration_nested_repeater_primary_key( array $pricing_row ) {
+	$by_name = ( ! empty( $pricing_row['vehicles'] ) && is_array( $pricing_row['vehicles'] ) ) ? $pricing_row['vehicles'] : null;
+	$by_key  = ( ! empty( $pricing_row[ BST_VEHICLE_NESTED_REPEATER_KEY ] ) && is_array( $pricing_row[ BST_VEHICLE_NESTED_REPEATER_KEY ] ) )
+		? $pricing_row[ BST_VEHICLE_NESTED_REPEATER_KEY ] : null;
+	// After mixed API/postmeta saves, both branches can exist; field-key data usually holds the CPT id ACF loads.
+	if ( $by_key && $by_name && $by_key !== $by_name ) {
+		return BST_VEHICLE_NESTED_REPEATER_KEY;
+	}
+	if ( $by_key ) {
+		return BST_VEHICLE_NESTED_REPEATER_KEY;
+	}
+	if ( $by_name ) {
+		return 'vehicles';
+	}
+	return null;
 }
 
 /**
@@ -136,13 +601,31 @@ function bst_vehicle_migration_repeater_key_for_subfield( $key ) {
  * @return array<int, array>
  */
 function bst_vehicle_migration_get_nested_vehicle_rows( array $pricing_row ) {
-	if ( ! empty( $pricing_row['vehicles'] ) && is_array( $pricing_row['vehicles'] ) ) {
-		return $pricing_row['vehicles'];
+	$k = bst_vehicle_migration_nested_repeater_primary_key( $pricing_row );
+	if ( ! $k ) {
+		return array();
 	}
-	if ( ! empty( $pricing_row[ BST_VEHICLE_NESTED_REPEATER_KEY ] ) && is_array( $pricing_row[ BST_VEHICLE_NESTED_REPEATER_KEY ] ) ) {
-		return $pricing_row[ BST_VEHICLE_NESTED_REPEATER_KEY ];
+	$nested = $pricing_row[ $k ];
+	return is_array( $nested ) ? $nested : array();
+}
+
+/**
+ * Set vehicle CPT id on primary nested row and mirror to the sibling branch when both exist (same index $j).
+ *
+ * @param array $pricing_row One vehicle_pricing row (by reference).
+ * @param mixed $j           Nested row key/index.
+ * @param string $primary_key From {@see bst_vehicle_migration_nested_repeater_primary_key()}.
+ * @param int   $new_id      Vehicle post ID.
+ */
+function bst_vehicle_migration_assign_nested_vehicle_id_mirrored( array &$pricing_row, $j, $primary_key, $new_id ) {
+	if ( ! isset( $pricing_row[ $primary_key ][ $j ] ) || ! is_array( $pricing_row[ $primary_key ][ $j ] ) ) {
+		return;
 	}
-	return array();
+	bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing_row[ $primary_key ][ $j ], $new_id );
+	$other = ( BST_VEHICLE_NESTED_REPEATER_KEY === $primary_key ) ? 'vehicles' : BST_VEHICLE_NESTED_REPEATER_KEY;
+	if ( ! empty( $pricing_row[ $other ] ) && is_array( $pricing_row[ $other ] ) && isset( $pricing_row[ $other ][ $j ] ) && is_array( $pricing_row[ $other ][ $j ] ) ) {
+		bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing_row[ $other ][ $j ], $new_id );
+	}
 }
 
 /**
@@ -180,7 +663,7 @@ function bst_vehicle_migration_row_linked_post_id( array $vrow ) {
 
 /**
  * Set Vehicle CPT id on a nested repeater row. ACF often stores the post object under both name and field_* key;
- * writing only one can leave stale meta and make update_field / update_sub_field fail (especially after raw DB loads).
+ * writing only one can leave stale meta and make update_field() fail (especially after raw DB loads).
  *
  * @param array $vrow   Nested vehicles row (by reference).
  * @param int   $new_id Vehicle post ID.
@@ -209,12 +692,7 @@ function bst_vehicle_migration_normalize_vehicle_pricing_for_save( array &$prici
 		if ( ! is_array( $row ) ) {
 			continue;
 		}
-		$nested_key = null;
-		if ( ! empty( $row['vehicles'] ) && is_array( $row['vehicles'] ) ) {
-			$nested_key = 'vehicles';
-		} elseif ( ! empty( $row[ BST_VEHICLE_NESTED_REPEATER_KEY ] ) && is_array( $row[ BST_VEHICLE_NESTED_REPEATER_KEY ] ) ) {
-			$nested_key = BST_VEHICLE_NESTED_REPEATER_KEY;
-		}
+		$nested_key = bst_vehicle_migration_nested_repeater_primary_key( $row );
 		if ( ! $nested_key ) {
 			continue;
 		}
@@ -223,7 +701,7 @@ function bst_vehicle_migration_normalize_vehicle_pricing_for_save( array &$prici
 				continue;
 			}
 			$vid = bst_vehicle_migration_row_linked_post_id( $vrow );
-			bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing[ $i ][ $nested_key ][ $j ], $vid );
+			bst_vehicle_migration_assign_nested_vehicle_id_mirrored( $pricing[ $i ], $j, $nested_key, $vid );
 		}
 	}
 	unset( $row );
@@ -259,156 +737,6 @@ function bst_vehicle_migration_find_existing_id( $base_name, array &$norm_to_id,
 	}
 
 	return 0;
-}
-
-/**
- * Write Vehicle (CPT) ids directly to postmeta using ACF’s nested repeater key pattern (0-based row indices).
- * This bypasses update_field / update_sub_field, which can fail when post_object query filters or SCF validation
- * reject programmatic updates even though the target Vehicle posts exist.
- *
- * @param int    $tour_id Tour post ID.
- * @param array  $cells   Each item: vehicle_id, plus meta_row & meta_subrow (0-based positions in repeater rows).
- * @param array  $results Log (append warnings).
- * @return bool True if every cell was written and verified.
- */
-function bst_vehicle_migration_apply_pricing_vehicle_ids_via_postmeta( $tour_id, array $cells, array &$results ) {
-	$tour_id = (int) $tour_id;
-	if ( $tour_id <= 0 || empty( $cells ) ) {
-		return false;
-	}
-
-	$all_ok = true;
-	foreach ( $cells as $c ) {
-		$vid = isset( $c['vehicle_id'] ) ? (int) $c['vehicle_id'] : 0;
-		$pi  = isset( $c['meta_row'] ) ? (int) $c['meta_row'] : null;
-		$pj  = isset( $c['meta_subrow'] ) ? (int) $c['meta_subrow'] : null;
-		if ( null === $pi || null === $pj ) {
-			if ( isset( $c['i'], $c['j'] ) && is_numeric( $c['i'] ) && is_numeric( $c['j'] ) ) {
-				$pi = (int) $c['i'];
-				$pj = (int) $c['j'];
-			} else {
-				$all_ok = false;
-				$results[] = sprintf(
-					'Warning: cannot write vehicle_id via postmeta for tour %d — missing meta_row/meta_subrow.',
-					$tour_id
-				);
-				continue;
-			}
-		}
-
-		$value_key = bst_vehicle_migration_vehicle_id_value_meta_key( $pi, $pj );
-		$ref_key   = '_' . $value_key;
-
-		if ( $vid > 0 ) {
-			update_post_meta( $tour_id, $value_key, $vid );
-			update_post_meta( $tour_id, $ref_key, BST_VEHICLE_ROW_POST_OBJECT_KEY );
-			$read = get_post_meta( $tour_id, $value_key, true );
-			if ( (int) $read !== $vid ) {
-				$all_ok = false;
-				$results[] = sprintf(
-					'Warning: postmeta verify failed for tour %1$d package row %2$d vehicle row %3$d (expected vehicle_id %4$d, read %5$s).',
-					$tour_id,
-					$pi,
-					$pj,
-					$vid,
-					is_scalar( $read ) ? (string) $read : '?'
-				);
-			}
-		} else {
-			delete_post_meta( $tour_id, $value_key );
-			delete_post_meta( $tour_id, $ref_key );
-		}
-
-		// Legacy name-based keys (some imports / older saves); keep in sync only if that row already used names.
-		$name_val = 'vehicle_pricing_' . $pi . '_vehicles_' . $pj . '_vehicle_id';
-		$name_ref = '_' . $name_val;
-		if ( metadata_exists( 'post', $tour_id, $name_val ) ) {
-			if ( $vid > 0 ) {
-				update_post_meta( $tour_id, $name_val, $vid );
-				update_post_meta( $tour_id, $name_ref, BST_VEHICLE_ROW_POST_OBJECT_KEY );
-			} else {
-				delete_post_meta( $tour_id, $name_val );
-				delete_post_meta( $tour_id, $name_ref );
-			}
-		}
-	}
-
-	bst_vehicle_migration_bust_caches_for_tour( $tour_id );
-	return $all_ok;
-}
-
-/**
- * Fallback: write each vehicle_id cell via update_sub_field (nested repeater).
- *
- * @param int    $tour_id Tour post ID.
- * @param array  $cells   List of arrays with keys i, j, vehicle_id (and ideally meta_row, meta_subrow).
- * @param array  $results Log lines (append warnings here).
- * @return bool True if every cell saved.
- */
-function bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tour_id, array $cells, array &$results ) {
-	$tour_id = (int) $tour_id;
-	if ( $tour_id <= 0 || empty( $cells ) || ! function_exists( 'update_sub_field' ) ) {
-		return false;
-	}
-
-	$all_ok = true;
-	foreach ( $cells as $c ) {
-		if ( ! isset( $c['i'], $c['j'] ) ) {
-			$all_ok = false;
-			continue;
-		}
-		$i   = $c['i'];
-		$j   = $c['j'];
-		$vid = isset( $c['vehicle_id'] ) ? (int) $c['vehicle_id'] : 0;
-		if ( ! bst_vehicle_migration_is_acf_repeater_row_key( $i ) || ! bst_vehicle_migration_is_acf_repeater_row_key( $j ) ) {
-			$all_ok = false;
-			continue;
-		}
-
-		$aci = bst_vehicle_migration_repeater_key_for_subfield( $i );
-		$acj = bst_vehicle_migration_repeater_key_for_subfield( $j );
-
-		$selectors = array(
-			array( 'vehicle_pricing', $aci, 'vehicles', $acj, 'vehicle_id' ),
-			array(
-				BST_VEHICLE_PRICING_REPEATER_KEY,
-				$aci,
-				BST_VEHICLE_NESTED_REPEATER_KEY,
-				$acj,
-				BST_VEHICLE_ROW_POST_OBJECT_KEY,
-			),
-			// Mixed name/key paths (some ACF versions are picky about nested repeater identity).
-			array( 'vehicle_pricing', $aci, BST_VEHICLE_NESTED_REPEATER_KEY, $acj, 'vehicle_id' ),
-			array( BST_VEHICLE_PRICING_REPEATER_KEY, $aci, 'vehicles', $acj, BST_VEHICLE_ROW_POST_OBJECT_KEY ),
-		);
-
-		$wrote = false;
-		bst_vehicle_migration_bust_caches_for_tour( $tour_id );
-		foreach ( $selectors as $selector ) {
-			foreach ( array( $tour_id, 'post_' . $tour_id ) as $post_ref ) {
-				$r = update_sub_field( $selector, $vid, $post_ref );
-				// ACF: only boolean false means failure; null/true often indicate success.
-				if ( false !== $r ) {
-					$wrote = true;
-					break 2;
-				}
-			}
-		}
-
-		if ( ! $wrote ) {
-			$all_ok = false;
-			$results[] = sprintf(
-				'Warning: update_sub_field failed for tour %1$d (%2$s) package row %3$s vehicle row %4$s (vehicle_id %5$d).',
-				$tour_id,
-				get_the_title( $tour_id ),
-				is_scalar( $i ) ? (string) $i : '',
-				is_scalar( $j ) ? (string) $j : '',
-				$vid
-			);
-		}
-	}
-
-	return $all_ok;
 }
 
 /**
@@ -551,7 +879,7 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 
 	if ( function_exists( 'acf_get_setting' ) ) {
 		$results[] = sprintf(
-			'ACF row_index_offset=%s (repeater selectors use this; 1 = first row is index 1).',
+			'ACF row_index_offset=%s (see error_log [BST release cleanup] save_vehicle_pricing lines for context).',
 			var_export( acf_get_setting( 'row_index_offset' ), true )
 		);
 	}
@@ -602,8 +930,8 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 		}
 
 		bst_vehicle_migration_bust_caches_for_tour( $tid );
-		// Formatted values match the field registry (names/return formats). We also set both name + field_* keys on write.
-		$pricing = get_field( 'vehicle_pricing', $tid, true );
+		// Raw (false) matches postmeta branches the migration writes; formatted can skew nested vehicles vs field_*.
+		$pricing = get_field( 'vehicle_pricing', $tid, false );
 		if ( empty( $pricing ) || ! is_array( $pricing ) ) {
 			continue;
 		}
@@ -643,9 +971,14 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 				++$pi;
 				continue;
 			}
-			// Write back into the same nested key shape we read (name or field key).
-			$nested_key = ( ! empty( $row['vehicles'] ) && is_array( $row['vehicles'] ) ) ? 'vehicles' : BST_VEHICLE_NESTED_REPEATER_KEY;
-			$pj         = 0;
+			// Must write the same branch {@see bst_vehicle_migration_get_nested_vehicle_rows()} uses; if both `vehicles`
+			// and field_* exist and differ, preferring `vehicles` left CPT ids on the branch ACF actually loads.
+			$nested_key = bst_vehicle_migration_nested_repeater_primary_key( $row );
+			if ( null === $nested_key ) {
+				++$pi;
+				continue;
+			}
+			$pj = 0;
 			foreach ( $nested as $j => $vrow ) {
 				if ( is_array( $vrow ) ) {
 					$rows_seen++;
@@ -656,12 +989,12 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 
 					if ( $repair_repeater_links_from_text ) {
 						if ( $new_id > 0 && $old !== $new_id ) {
-							bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing[ $i ][ $nested_key ][ $j ], $new_id );
+							bst_vehicle_migration_assign_nested_vehicle_id_mirrored( $pricing[ $i ], $j, $nested_key, $new_id );
 							$write = true;
 							$rows_touched++;
 						}
 					} elseif ( $new_id > 0 && $old !== $new_id ) {
-						bst_vehicle_migration_assign_vehicle_id_on_nested_row( $pricing[ $i ][ $nested_key ][ $j ], $new_id );
+						bst_vehicle_migration_assign_nested_vehicle_id_mirrored( $pricing[ $i ], $j, $nested_key, $new_id );
 						$write = true;
 						$rows_touched++;
 					}
@@ -684,45 +1017,15 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 			if ( function_exists( 'acf_get_field_groups' ) ) {
 				acf_get_field_groups( array( 'post_id' => $tid ) );
 			}
-			// Critical: unchanged rows may still have vehicle_id as WP_Post; bulk update_field rejects that.
+			// Unchanged rows may still have vehicle_id as WP_Post; update_field rejects that — normalize first.
 			bst_vehicle_migration_normalize_vehicle_pricing_for_save( $pricing );
-			$ok = false;
 			bst_vehicle_migration_bust_caches_for_tour( $tid );
-			// 1) Direct postmeta (matches ACF DB layout; avoids post_object picker restrictions on save).
-			$ok = bst_vehicle_migration_apply_pricing_vehicle_ids_via_postmeta( $tid, $pending_cells, $results );
-			// 2) Whole repeater via API (optional if postmeta already succeeded).
-			if ( ! $ok ) {
-				foreach ( array( $tid, 'post_' . $tid ) as $post_ref ) {
-					$r = update_field( 'vehicle_pricing', $pricing, $post_ref );
-					if ( false !== $r ) {
-						$ok = true;
-						break;
-					}
-					$r = update_field( BST_VEHICLE_PRICING_REPEATER_KEY, $pricing, $post_ref );
-					if ( false !== $r ) {
-						$ok = true;
-						break;
-					}
-				}
-			}
-			if ( ! $ok && function_exists( 'acf_get_field' ) && function_exists( 'acf_update_value' ) ) {
-				$field = acf_get_field( BST_VEHICLE_PRICING_REPEATER_KEY );
-				if ( is_array( $field ) ) {
-					$r = acf_update_value( $pricing, $tid, $field );
-					$ok = ( false !== $r );
-				}
-			}
-			if ( ! $ok ) {
-				$ok = bst_vehicle_migration_apply_pricing_vehicle_ids_via_subfields( $tid, $pending_cells, $results );
-			}
+			// Single save path: ACF update_field() while post_object query bypass + validate_value bypass are active
+			// (see BST_Plugin::acf_tour_vehicle_pricing_cpt_query and bst_vehicle_migration_acf_pass_vehicle_pricing_vehicle_id).
+			$ok = bst_vehicle_migration_save_vehicle_pricing_for_tour( $tid, $pricing, $pending_cells, $results );
 			if ( $ok ) {
+				bst_vehicle_migration_bust_caches_for_tour( $tid );
 				$tours_updated++;
-			} else {
-				$results[] = sprintf(
-					'Warning: could not save vehicle_pricing for tour %d (%s) (postmeta, bulk update_field, and update_sub_field all failed).',
-					$tid,
-					get_the_title( $tid )
-				);
 			}
 		}
 	}
@@ -810,8 +1113,8 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 
 /**
  * During vehicle migration, allow saving Tour → vehicle_pricing → Vehicle (CPT) even when the id is not in the
- * car/motorcycle picker list. ACF/SCF may validate post_object values against the field’s query; the query filter
- * alone is not always sufficient.
+ * car/motorcycle picker list. Pairs with {@see BST_Plugin::acf_tour_vehicle_pricing_cpt_query}: that filter narrows
+ * `post__in` for the admin picker; without this validate bypass, ACF/SCF can still reject programmatic update_field().
  *
  * @param mixed $valid Prior validation (true, false, or error string).
  * @param mixed $value Submitted value.

@@ -1786,14 +1786,18 @@ class BST_Plugin {
     /**
      * On Tour → Vehicle Pricing → Vehicle (CPT): only cars for driving tours, only motorcycles for motorcycle tours.
      *
+     * Migration / remap uses {@see update_field()} on the whole `vehicle_pricing` repeater. If this filter applies
+     * `post__in` to a list that excludes the Vehicle IDs being written, ACF/SCF may refuse the save. The migration
+     * therefore calls {@see bst_vehicle_migration_push_post_object_query_bypass()} for the duration of
+     * {@see bst_migrate_vehicle_cpt_links()}, and {@see bst_vehicle_migration_acf_pass_vehicle_pricing_vehicle_id}
+     * relaxes validate_value for the same field key. Do not remove those without replacing the save strategy.
+     *
      * @param array $args WP_Query args for post_object field.
      * @param array $field ACF field array.
      * @param int|string $post_id Post ID being edited.
      * @return array
      */
     public function acf_tour_vehicle_pricing_cpt_query( $args, $field, $post_id ) {
-        // Picker restriction must not run during programmatic migration saves — ACF/SCF can reject
-        // update_field / update_sub_field when the new Vehicle ID is outside the restricted query.
         if ( function_exists( 'bst_vehicle_migration_is_post_object_query_bypassed' ) && bst_vehicle_migration_is_post_object_query_bypassed() ) {
             return $args;
         }
