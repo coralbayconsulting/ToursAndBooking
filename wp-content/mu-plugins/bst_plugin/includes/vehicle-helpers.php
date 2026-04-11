@@ -512,18 +512,25 @@ function bst_tour_linked_vehicle_ids( $tour_id ) {
         return array();
     }
     foreach ( $pricing as $row ) {
-        if ( empty( $row['vehicles'] ) || ! is_array( $row['vehicles'] ) ) {
+        if ( ! is_array( $row ) ) {
             continue;
         }
-        foreach ( $row['vehicles'] as $vrow ) {
+        $nested = array();
+        if ( function_exists( 'bst_vehicle_migration_get_nested_vehicle_rows' ) ) {
+            $nested = bst_vehicle_migration_get_nested_vehicle_rows( $row );
+        } elseif ( ! empty( $row['vehicles'] ) && is_array( $row['vehicles'] ) ) {
+            $nested = $row['vehicles'];
+        }
+        foreach ( $nested as $vrow ) {
             if ( ! is_array( $vrow ) ) {
                 continue;
             }
-            $linked_id = isset( $vrow['vehicle_id'] ) ? $vrow['vehicle_id'] : 0;
-            if ( is_array( $linked_id ) && isset( $linked_id['ID'] ) ) {
-                $linked_id = (int) $linked_id['ID'];
-            } else {
-                $linked_id = (int) $linked_id;
+            $linked_id = 0;
+            if ( function_exists( 'bst_vehicle_migration_row_linked_post_id' ) ) {
+                $linked_id = bst_vehicle_migration_row_linked_post_id( $vrow );
+            } elseif ( isset( $vrow['vehicle_id'] ) ) {
+                $x = $vrow['vehicle_id'];
+                $linked_id = is_array( $x ) && isset( $x['ID'] ) ? (int) $x['ID'] : ( is_object( $x ) && isset( $x->ID ) ? (int) $x->ID : (int) $x );
             }
             if ( $linked_id > 0 ) {
                 $ids[] = $linked_id;

@@ -1806,6 +1806,27 @@ class BST_Plugin {
         }
         $tour_id = (int) $resolved;
         $ids     = bst_vehicle_ids_for_tour_pricing_picker( $tour_id );
+        // Belt-and-suspenders: include every vehicle id already on pricing rows (linked or label-resolved) so
+        // post__in always contains saved selections (nested rows may use field_* keys that linked_ids missed before).
+        if ( function_exists( 'bst_tour_pricing_vehicle_ids_resolved' ) ) {
+            $ids = array_values( array_unique( array_merge( $ids, bst_tour_pricing_vehicle_ids_resolved( $tour_id ) ) ) );
+        }
+        // Ensure the value for this subfield is in the query (ACF may omit it from merged lists in edge cases).
+        if ( ! empty( $field['value'] ) ) {
+            $v = $field['value'];
+            $vid = 0;
+            if ( is_numeric( $v ) ) {
+                $vid = (int) $v;
+            } elseif ( is_array( $v ) && isset( $v['ID'] ) ) {
+                $vid = (int) $v['ID'];
+            } elseif ( is_object( $v ) && isset( $v->ID ) ) {
+                $vid = (int) $v->ID;
+            }
+            if ( $vid > 0 ) {
+                $ids[] = $vid;
+                $ids   = array_values( array_unique( array_map( 'intval', $ids ) ) );
+            }
+        }
         if ( empty( $ids ) ) {
             $args['post__in'] = array( 0 );
         } else {
