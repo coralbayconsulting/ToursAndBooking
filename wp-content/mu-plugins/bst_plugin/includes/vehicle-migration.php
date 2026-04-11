@@ -68,6 +68,30 @@ function bst_vehicle_migration_coalesce_vehicle_pricing_tree_keys( array &$prici
 }
 
 /**
+ * Force 0-based sequential keys on the outer vehicle_pricing repeater and each nested `vehicles` / field_* branch.
+ *
+ * ACF maps PHP index 0 to the first repeater row. Raw/meta loads often use keys 1,2,3… when row_index_offset=1, so
+ * the first row’s data lives at [1] and [0] is empty — Vehicle (CPT) appears one row below the label (first row
+ * shows “Select”, each row shows the previous vehicle).
+ *
+ * @param array $pricing vehicle_pricing repeater (by reference).
+ */
+function bst_vehicle_migration_reindex_vehicle_pricing_repeaters( array &$pricing ) {
+	$pricing = array_values( $pricing );
+	foreach ( $pricing as $i => &$row ) {
+		if ( ! is_array( $row ) ) {
+			continue;
+		}
+		foreach ( array( 'vehicles', BST_VEHICLE_NESTED_REPEATER_KEY ) as $nk ) {
+			if ( ! empty( $row[ $nk ] ) && is_array( $row[ $nk ] ) ) {
+				$row[ $nk ] = array_values( $row[ $nk ] );
+			}
+		}
+	}
+	unset( $row );
+}
+
+/**
  * Clear WP/ACF caches for a tour before reading or writing repeater meta (helps migration round-trip).
  *
  * @param int $tour_id Tour post ID.
@@ -144,11 +168,12 @@ function bst_vehicle_migration_vehicle_id_postmeta_key_candidates( $pi, $pj ) {
 	);
 	$pi_seg = bst_vehicle_migration_acf_repeater_selector_index( $pi );
 	$pj_seg = bst_vehicle_migration_nested_repeater_meta_row_segment( $pj );
-	// Legacy / mis-indexed runs may have written with 0-based inner segment while offset=1.
-	$pj_zero_raw = (int) $pj;
-	$keys[]      = BST_VEHICLE_PRICING_REPEATER_KEY . '_' . $pi_seg . '_' . BST_VEHICLE_NESTED_REPEATER_KEY . '_' . $pj_zero_raw . '_' . BST_VEHICLE_ROW_POST_OBJECT_KEY;
-	$keys[]      = 'vehicle_pricing_' . $pi_seg . '_vehicles_' . $pj_seg . '_vehicle_id';
-	$keys[]      = 'vehicle_pricing_' . $pi_seg . '_vehicles_' . $pj_zero_raw . '_vehicle_id';
+	// Legacy: some runs used parent offset rule for nested segment (wrong for standard ACF keys).
+	$pj_wrong_offset = bst_vehicle_migration_acf_repeater_selector_index( $pj );
+	$pj_zero_raw     = (int) $pj;
+	$keys[]          = BST_VEHICLE_PRICING_REPEATER_KEY . '_' . $pi_seg . '_' . BST_VEHICLE_NESTED_REPEATER_KEY . '_' . $pj_wrong_offset . '_' . BST_VEHICLE_ROW_POST_OBJECT_KEY;
+	$keys[]          = 'vehicle_pricing_' . $pi_seg . '_vehicles_' . $pj_seg . '_vehicle_id';
+	$keys[]          = 'vehicle_pricing_' . $pi_seg . '_vehicles_' . $pj_zero_raw . '_vehicle_id';
 
 	return array_values( array_unique( array_filter( $keys ) ) );
 }
@@ -289,25 +314,23 @@ function bst_vehicle_migration_acf_repeater_selector_index( $php_zero_based ) {
 }
 
 /**
- * Nested repeater row index segment in ACF/SCF postmeta keys (vehicles under one package row).
+ * Nested repeater row index segment in ACF postmeta keys (vehicles under one package row).
  *
- * Uses the same rule as the parent {@see bst_vehicle_migration_acf_repeater_selector_index()}: with ACF
- * `row_index_offset=1`, meta keys use 1-based row segments for **both** outer and inner repeaters. Using 0-based
- * inner segments writes `vehicle_id` one slot behind the labels (first row empty, CPT appears on next row).
- *
- * Filter to force 0-based inner keys only if your ACF build stores nested rows with segment 0 for the first row.
+ * Standard ACF keys look like `field_outer_1_field_nested_0_field_vehicle` — the **outer** row uses
+ * {@see bst_vehicle_migration_acf_repeater_selector_index()} (honours row_index_offset); the **inner** row index in
+ * the meta name is **0-based** (first nested row = 0). The “one off” UI bug is usually **PHP array keys** 1,2,3 on
+ * the nested array passed to {@see update_field()}, not this segment — see {@see bst_vehicle_migration_reindex_vehicle_pricing_repeaters()}.
  *
  * @param int $php_zero_based Inner ordinal from migration loops (0 = first vehicle in that package).
  * @return int
  */
 function bst_vehicle_migration_nested_repeater_meta_row_segment( $php_zero_based ) {
 	$php_zero_based = (int) $php_zero_based;
-	$default        = bst_vehicle_migration_acf_repeater_selector_index( $php_zero_based );
 	/**
-	 * @param int $segment        Default nested segment (honours row_index_offset like parent repeater).
+	 * @param int $segment        Default nested segment (0-based in meta keys).
 	 * @param int $php_zero_based Inner row ordinal passed in.
 	 */
-	return (int) apply_filters( 'bst_vehicle_migration_nested_repeater_meta_row_segment', $default, $php_zero_based );
+	return (int) apply_filters( 'bst_vehicle_migration_nested_repeater_meta_row_segment', $php_zero_based, $php_zero_based );
 }
 
 /**
@@ -456,6 +479,7 @@ function bst_vehicle_migration_save_vehicle_pricing_for_tour( $tour_id, array $p
 	);
 
 	bst_vehicle_migration_coalesce_vehicle_pricing_tree_keys( $pricing );
+	bst_vehicle_migration_reindex_vehicle_pricing_repeaters( $pricing );
 
 	$field_defs = array(
 		array( 'vehicle_pricing', 'name vehicle_pricing' ),
@@ -938,6 +962,7 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 		if ( empty( $pricing ) || ! is_array( $pricing ) ) {
 			continue;
 		}
+		bst_vehicle_migration_reindex_vehicle_pricing_repeaters( $pricing );
 
 		$tours_with_pricing++;
 
