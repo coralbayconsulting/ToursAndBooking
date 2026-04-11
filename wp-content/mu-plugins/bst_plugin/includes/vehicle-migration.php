@@ -142,13 +142,13 @@ function bst_vehicle_migration_vehicle_id_postmeta_key_candidates( $pi, $pj ) {
 	$keys = array(
 		bst_vehicle_migration_vehicle_id_value_meta_key( $pi, $pj ),
 	);
-	// Previous bug: nested segment used parent offset — same cell may still exist under this key on old runs.
 	$pi_seg = bst_vehicle_migration_acf_repeater_selector_index( $pi );
-	$pj_alt = bst_vehicle_migration_acf_repeater_selector_index( $pj );
-	$keys[] = BST_VEHICLE_PRICING_REPEATER_KEY . '_' . $pi_seg . '_' . BST_VEHICLE_NESTED_REPEATER_KEY . '_' . $pj_alt . '_' . BST_VEHICLE_ROW_POST_OBJECT_KEY;
-	$pj0 = bst_vehicle_migration_nested_repeater_meta_row_segment( $pj );
-	$keys[] = 'vehicle_pricing_' . $pi_seg . '_vehicles_' . $pj0 . '_vehicle_id';
-	$keys[] = 'vehicle_pricing_' . $pi_seg . '_vehicles_' . $pj_alt . '_vehicle_id';
+	$pj_seg = bst_vehicle_migration_nested_repeater_meta_row_segment( $pj );
+	// Legacy / mis-indexed runs may have written with 0-based inner segment while offset=1.
+	$pj_zero_raw = (int) $pj;
+	$keys[]      = BST_VEHICLE_PRICING_REPEATER_KEY . '_' . $pi_seg . '_' . BST_VEHICLE_NESTED_REPEATER_KEY . '_' . $pj_zero_raw . '_' . BST_VEHICLE_ROW_POST_OBJECT_KEY;
+	$keys[]      = 'vehicle_pricing_' . $pi_seg . '_vehicles_' . $pj_seg . '_vehicle_id';
+	$keys[]      = 'vehicle_pricing_' . $pi_seg . '_vehicles_' . $pj_zero_raw . '_vehicle_id';
 
 	return array_values( array_unique( array_filter( $keys ) ) );
 }
@@ -291,20 +291,23 @@ function bst_vehicle_migration_acf_repeater_selector_index( $php_zero_based ) {
 /**
  * Nested repeater row index segment in ACF/SCF postmeta keys (vehicles under one package row).
  *
- * Parent repeater segments use {@see bst_vehicle_migration_acf_repeater_selector_index()} (honours row_index_offset).
- * Inner (nested) repeater segments are 0-based in storage: first vehicle row = 0. Applying the parent offset to
- * both levels shifts vehicle_id values one slot in the admin (CPT appears on the wrong nested row).
+ * Uses the same rule as the parent {@see bst_vehicle_migration_acf_repeater_selector_index()}: with ACF
+ * `row_index_offset=1`, meta keys use 1-based row segments for **both** outer and inner repeaters. Using 0-based
+ * inner segments writes `vehicle_id` one slot behind the labels (first row empty, CPT appears on next row).
+ *
+ * Filter to force 0-based inner keys only if your ACF build stores nested rows with segment 0 for the first row.
  *
  * @param int $php_zero_based Inner ordinal from migration loops (0 = first vehicle in that package).
  * @return int
  */
 function bst_vehicle_migration_nested_repeater_meta_row_segment( $php_zero_based ) {
 	$php_zero_based = (int) $php_zero_based;
+	$default        = bst_vehicle_migration_acf_repeater_selector_index( $php_zero_based );
 	/**
-	 * @param int $segment        Default nested segment (0-based).
+	 * @param int $segment        Default nested segment (honours row_index_offset like parent repeater).
 	 * @param int $php_zero_based Inner row ordinal passed in.
 	 */
-	return (int) apply_filters( 'bst_vehicle_migration_nested_repeater_meta_row_segment', $php_zero_based, $php_zero_based );
+	return (int) apply_filters( 'bst_vehicle_migration_nested_repeater_meta_row_segment', $default, $php_zero_based );
 }
 
 /**
