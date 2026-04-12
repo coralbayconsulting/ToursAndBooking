@@ -2,7 +2,7 @@
 /**
  * Tools: remap booking vehicle1_id / vehicle2_id from legacy text only (no CPT creates).
  *
- * Run after consolidating Vehicle CPT duplicates so exact normalized/compact matching resolves to one canonical post.
+ * Run after consolidating Vehicle CPT duplicates: matches booking text to Vehicle post_title exactly (trim + strip tags).
  *
  * @package BST_Plugin
  */
@@ -12,8 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * For each booking, set vehicle*_id by matching legacy vehicle1/vehicle2 text to existing Vehicle CPT
- * titles (normalized / compact key only), same helpers as migration find — never creates posts.
+ * For each booking, set vehicle*_id by exact text match to existing Vehicle CPT post_title — never creates posts.
  *
  * @return string[] Log lines.
  */
@@ -36,7 +35,9 @@ function bst_remap_booking_vehicle_ids_from_legacy_text() {
 
 	foreach ( $vehicles as $p ) {
 		$vehicles_by_id[ (int) $p->ID ] = $p->post_title;
-		$norm_to_id[ bst_vehicle_normalize_key( $p->post_title ) ] = (int) $p->ID;
+		if ( function_exists( 'bst_vehicle_exact_text_key' ) ) {
+			$norm_to_id[ bst_vehicle_exact_text_key( $p->post_title ) ] = (int) $p->ID;
+		}
 	}
 
 	$table    = $wpdb->prefix . 'bst_tour_booking';
@@ -55,11 +56,8 @@ function bst_remap_booking_vehicle_ids_from_legacy_text() {
 			if ( '' === $text ) {
 				continue;
 			}
-			$base = bst_vehicle_base_name_from_text( $text );
-			$vid  = bst_vehicle_migration_find_existing_id( $base, $norm_to_id, $vehicles_by_id );
-			if ( $vid <= 0 && $base !== trim( $text ) ) {
-				$vid = bst_vehicle_migration_find_existing_id( trim( $text ), $norm_to_id, $vehicles_by_id );
-			}
+			$key = function_exists( 'bst_vehicle_exact_text_key' ) ? bst_vehicle_exact_text_key( $text ) : trim( $text );
+			$vid = bst_vehicle_migration_find_existing_id( $key, $norm_to_id, $vehicles_by_id );
 			if ( $vid <= 0 ) {
 				continue;
 			}

@@ -309,14 +309,41 @@ function get_vehicle_data() {
     $selected_package_id = intval($_POST['package_id']);
     $tour_date_id        = isset($_POST['tour_date_id']) ? intval($_POST['tour_date_id']) : 0;
     $booking_id_for_display = isset($_POST['booking_id']) ? intval($_POST['booking_id']) : 0;
-    $vehicle_label_context  = isset($_POST['vehicle_label_context'])
-        ? sanitize_text_field(wp_unslash($_POST['vehicle_label_context']))
-        : 'public';
-    if (! in_array($vehicle_label_context, array('admin', 'public'), true)) {
-        $vehicle_label_context = 'public';
+
+    // Option text / extra fields: customer (tour page) vs staff (WP booking UI). Not the same as archived visibility.
+    // Preferred: vehicle_labels_for = customer | staff. Legacy: audience (customer|cust|admin), vehicle_label_context (public|admin).
+    // If none sent: referer wp-admin → staff, else customer.
+    $labels_for = null;
+    if ( isset( $_POST['vehicle_labels_for'] ) ) {
+        $v = sanitize_text_field( wp_unslash( $_POST['vehicle_labels_for'] ) );
+        if ( in_array( $v, array( 'customer', 'staff' ), true ) ) {
+            $labels_for = $v;
+        }
+    } elseif ( isset( $_POST['audience'] ) ) {
+        $a = sanitize_text_field( wp_unslash( $_POST['audience'] ) );
+        if ( 'cust' === $a || 'customer' === $a ) {
+            $labels_for = 'customer';
+        } elseif ( 'admin' === $a ) {
+            $labels_for = 'staff';
+        }
+    } elseif ( isset( $_POST['vehicle_label_context'] ) ) {
+        $vlc = sanitize_text_field( wp_unslash( $_POST['vehicle_label_context'] ) );
+        $labels_for = ( 'admin' === $vlc ) ? 'staff' : 'customer';
     }
-    $is_admin_vehicle_labels = ('admin' === $vehicle_label_context);
-    
+    if ( null === $labels_for ) {
+        $ref              = function_exists( 'wp_get_referer' ) ? wp_get_referer() : '';
+        $is_from_wp_admin = ( is_string( $ref ) && strpos( $ref, '/wp-admin/' ) !== false );
+        $labels_for       = $is_from_wp_admin ? 'staff' : 'customer';
+    }
+    if ( ! in_array( $labels_for, array( 'customer', 'staff' ), true ) ) {
+        $labels_for = 'customer';
+    }
+    $is_admin_vehicle_labels = ( 'staff' === $labels_for );
+
+    // Archived repeater rows: booking edit sends show_archived=1; new booking + single tour send 0.
+    $show_archived                    = isset( $_POST['show_archived'] ) ? (int) $_POST['show_archived'] : 0;
+    $include_archived_vehicle_choices = ( 1 === $show_archived );
+
     // Get tour-type from taxonomy relationship
     $tour_type_id = null;
     $taxonomy_terms = get_the_terms($tour_id, 'tour-type-code');
@@ -362,7 +389,13 @@ function get_vehicle_data() {
             if (empty($vehicle['vehicles']) || !is_array($vehicle['vehicles'])) {
                 continue;
             }
-            foreach ($vehicle['vehicles'] as $vehicle_item) {
+            foreach ( $vehicle['vehicles'] as $vehicle_item ) {
+                if ( ! $include_archived_vehicle_choices
+                    && function_exists( 'bst_vehicle_pricing_vehicle_choice_is_archived' )
+                    && bst_vehicle_pricing_vehicle_choice_is_archived( $vehicle_item ) ) {
+                    continue;
+                }
+
                 $linked_id = isset($vehicle_item['vehicle_id']) ? $vehicle_item['vehicle_id'] : 0;
                 if (is_array($linked_id) && isset($linked_id['ID'])) {
                     $linked_id = (int) $linked_id['ID'];
@@ -470,6 +503,9 @@ function get_vehicle_data() {
                     $limited_slots_remaining_public = (int) $limited_display_remaining;
                 }
 
+                $choice_archived = function_exists( 'bst_vehicle_pricing_vehicle_choice_is_archived' )
+                    && bst_vehicle_pricing_vehicle_choice_is_archived( $vehicle_item );
+
                 $data[] = array(
                     'text' => $vehicle_name,
                     'value' => $out_price,
@@ -480,6 +516,7 @@ function get_vehicle_data() {
                     'limited_max' => $limited_row_stats ? (int) $limited_row_stats['max'] : null,
                     'limited_sold_other_bookings' => $limited_sold_other,
                     'limited_slots_remaining' => $limited_slots_remaining_public,
+                    'choice_archived' => $choice_archived,
                     '_order' => $vehicle_row_order++,
                 );
             }

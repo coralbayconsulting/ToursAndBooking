@@ -910,7 +910,38 @@ function bst_vehicle_admin_booking_edit_url( $booking_id ) {
 }
 
 /**
+ * Whether a vehicle CPT id is still plausible for this booking’s tour (Tour → vehicle_pricing links).
+ * If the tour has no linked vehicle ids in pricing, we do not filter (legacy / odd data).
+ *
+ * @param int   $vehicle_id Vehicle CPT id.
+ * @param int   $tour_id    Tour post id on the booking row.
+ * @param array $tour_linked_cache Map tour_id => int[] (by ref, filled as we go).
+ * @return bool
+ */
+function bst_vehicle_id_allowed_for_booking_tour( $vehicle_id, $tour_id, array &$tour_linked_cache ) {
+    $vehicle_id = (int) $vehicle_id;
+    $tour_id    = (int) $tour_id;
+    if ( $vehicle_id <= 0 ) {
+        return false;
+    }
+    if ( $tour_id <= 0 ) {
+        return true;
+    }
+    if ( ! isset( $tour_linked_cache[ $tour_id ] ) ) {
+        $tour_linked_cache[ $tour_id ] = function_exists( 'bst_tour_linked_vehicle_ids' )
+            ? bst_tour_linked_vehicle_ids( $tour_id )
+            : array();
+    }
+    $linked = $tour_linked_cache[ $tour_id ];
+    if ( empty( $linked ) ) {
+        return true;
+    }
+    return in_array( $vehicle_id, $linked, true );
+}
+
+/**
  * Map vehicle post ID => sorted list of booking IDs referencing that vehicle (vehicle1_id or vehicle2_id).
+ * Omits bookings where the row still has an old vehicle*_id after the tour was switched (vehicle not on the current tour’s pricing).
  * One query per request (cached) for the Vehicles list screen.
  *
  * @return array<int, int[]>
@@ -922,10 +953,11 @@ function bst_vehicle_bookings_by_vehicle_map() {
     }
 
     global $wpdb;
-    $cache = array();
+    $cache            = array();
+    $tour_linked_cache = array();
     $table = $wpdb->prefix . 'bst_tour_booking';
     // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is prefixed, not user input.
-    $rows = $wpdb->get_results( "SELECT id, vehicle1_id, vehicle2_id FROM {$table} WHERE vehicle1_id > 0 OR vehicle2_id > 0", ARRAY_A );
+    $rows = $wpdb->get_results( "SELECT id, tour_id, vehicle1_id, vehicle2_id FROM {$table} WHERE vehicle1_id > 0 OR vehicle2_id > 0", ARRAY_A );
     if ( empty( $rows ) || ! is_array( $rows ) ) {
         return $cache;
     }
@@ -935,15 +967,16 @@ function bst_vehicle_bookings_by_vehicle_map() {
         if ( $bid <= 0 ) {
             continue;
         }
-        $v1 = isset( $row['vehicle1_id'] ) ? (int) $row['vehicle1_id'] : 0;
-        $v2 = isset( $row['vehicle2_id'] ) ? (int) $row['vehicle2_id'] : 0;
-        if ( $v1 > 0 ) {
+        $tour_id = isset( $row['tour_id'] ) ? (int) $row['tour_id'] : 0;
+        $v1      = isset( $row['vehicle1_id'] ) ? (int) $row['vehicle1_id'] : 0;
+        $v2      = isset( $row['vehicle2_id'] ) ? (int) $row['vehicle2_id'] : 0;
+        if ( $v1 > 0 && bst_vehicle_id_allowed_for_booking_tour( $v1, $tour_id, $tour_linked_cache ) ) {
             if ( empty( $cache[ $v1 ] ) ) {
                 $cache[ $v1 ] = array();
             }
             $cache[ $v1 ][ $bid ] = $bid;
         }
-        if ( $v2 > 0 && $v2 !== $v1 ) {
+        if ( $v2 > 0 && $v2 !== $v1 && bst_vehicle_id_allowed_for_booking_tour( $v2, $tour_id, $tour_linked_cache ) ) {
             if ( empty( $cache[ $v2 ] ) ) {
                 $cache[ $v2 ] = array();
             }

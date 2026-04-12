@@ -1763,7 +1763,15 @@ body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name
 body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > thead > tr > th:nth-child(3),
 body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr.acf-row > td:nth-child(3) {
     width: auto !important;
-    min-width: 200px !important;
+    min-width: 180px !important;
+}
+
+/* Col 4: Archived (new bookings) toggle */
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > thead > tr > th:nth-child(4),
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr.acf-row > td:nth-child(4) {
+    width: 22% !important;
+    min-width: 160px !important;
+    max-width: 260px !important;
 }
 
 body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr > .acf-field[data-name="vehicle"] {
@@ -1774,5 +1782,11 @@ body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name
 
 body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr > .acf-field[data-name="vehicle_id"] {
     width: auto !important;
-    min-width: 200px !important;
+    min-width: 180px !important;
+}
+
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr > .acf-field[data-name="vehicle_choice_archived"] {
+    width: 22% !important;
+    min-width: 160px !important;
+    max-width: 260px !important;
 }

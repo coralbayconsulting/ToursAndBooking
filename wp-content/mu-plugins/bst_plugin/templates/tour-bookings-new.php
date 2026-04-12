@@ -724,7 +724,8 @@ jQuery(document).ready(function($) {
                 tour_id: formData.tour_id,
                 package_id: formData.tour_package_id,
                 currency: formData.tour_currency,
-                vehicle_label_context: 'admin'
+                vehicle_labels_for: 'staff',
+                show_archived: 0
             },
             success: function(response) {
                 if (response.success && response.data && Array.isArray(response.data)) {

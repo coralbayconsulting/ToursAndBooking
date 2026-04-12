@@ -6,6 +6,25 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+/** ACF Tour → Vehicle Pricing → Vehicles → vehicle_choice_archived (sync with acf-json/group_6781b21fb4ca6.json). */
+if ( ! defined( 'BST_VEHICLE_VEHICLE_CHOICE_ARCHIVED_KEY' ) ) {
+    define( 'BST_VEHICLE_VEHICLE_CHOICE_ARCHIVED_KEY', 'field_68a1b2c3d4e5' );
+}
+
+/**
+ * Whether this pricing row is archived (hidden from new bookings, kept for historical data).
+ *
+ * @param array $vehicle_item One row from vehicle_pricing → vehicles.
+ * @return bool
+ */
+function bst_vehicle_pricing_vehicle_choice_is_archived( array $vehicle_item ) {
+    if ( ! empty( $vehicle_item['vehicle_choice_archived'] ) ) {
+        return true;
+    }
+    $k = BST_VEHICLE_VEHICLE_CHOICE_ARCHIVED_KEY;
+    return array_key_exists( $k, $vehicle_item ) && ! empty( $vehicle_item[ $k ] );
+}
+
 /**
  * Post status argument for get_posts/WP_Query when scanning Tour (or related) CPT rows in admin tooling.
  * Default `any` includes publish, draft, pending, private, future, and custom statuses — not trash.
@@ -18,19 +37,33 @@ function bst_post_statuses_for_admin_scan( $post_type = 'tour' ) {
 }
 
 /**
- * Strip a vehicle dropdown label down to its base name (remove trailing " (+€...)" etc).
+ * Remove `(...)` segments from a plain-text label (upgrade prices, class labels, etc.).
+ * Repeats until stable so nested or multiple segments are removed.
  *
- * @param string $vehicle_text Raw stored vehicle text (often includes "(+€450)").
+ * @param string $s Plain text (not HTML).
+ * @return string
+ */
+function bst_vehicle_strip_parenthetical_segments( $s ) {
+    $s = (string) $s;
+    if ( '' === $s ) {
+        return '';
+    }
+    do {
+        $prev = $s;
+        $s    = preg_replace( '/\s*\([^()]*\)/u', '', $s );
+    } while ( $s !== $prev );
+
+    return $s;
+}
+
+/**
+ * Strip a vehicle label to its meaningful name: same rules as {@see bst_vehicle_exact_text_key()}.
+ *
+ * @param string $vehicle_text Raw stored vehicle text (may include "(+€450)", "(Class 2)", etc.).
  * @return string
  */
 function bst_vehicle_base_name_from_text( $vehicle_text ) {
-    $v = trim( (string) $vehicle_text );
-    if ( '' === $v ) {
-        return '';
-    }
-    // Split at first " (" to match existing code behavior.
-    $parts = preg_split( '/\s*\(/', $v, 2 );
-    return trim( (string) ( $parts[0] ?? $v ) );
+    return bst_vehicle_exact_text_key( $vehicle_text );
 }
 
 /**
@@ -53,6 +86,22 @@ function bst_vehicle_normalize_key( $text ) {
  */
 function bst_vehicle_compact_key( $text ) {
     return preg_replace( '/\s+/u', '', bst_vehicle_normalize_key( $text ) );
+}
+
+/**
+ * Canonical vehicle label for matching Vehicle `post_title`: strip HTML, remove all parenthetical
+ * segments (upgrade price, class, etc.), trim ends, collapse internal whitespace to a single space.
+ * Case- and spelling-sensitive; no fuzzy keys.
+ *
+ * @param string $text Raw label from repeater, booking column, or Vehicle post_title.
+ * @return string
+ */
+function bst_vehicle_exact_text_key( $text ) {
+    $s = wp_strip_all_tags( (string) $text );
+    $s = bst_vehicle_strip_parenthetical_segments( $s );
+    $s = trim( preg_replace( '/\s+/u', ' ', $s ) );
+
+    return $s;
 }
 
 /**
@@ -546,7 +595,7 @@ function bst_tour_linked_vehicle_ids( $tour_id ) {
 /**
  * Cached maps for resolving tour repeater label text → Vehicle CPT (same rules as migration / “On Tours”).
  *
- * @return array{norm_to_id: array<string,int>, vehicles_by_id: array<int,string>}
+ * @return array{norm_to_id: array<string,int>, vehicles_by_id: array<int,string>} norm_to_id keys are {@see bst_vehicle_exact_text_key()} of post_title.
  */
 function bst_vehicle_label_resolution_maps() {
     static $cache = null;
@@ -571,7 +620,7 @@ function bst_vehicle_label_resolution_maps() {
         $vid   = (int) $vid;
         $title = get_the_title( $vid );
         $vehicles_by_id[ $vid ] = $title;
-        $norm_to_id[ bst_vehicle_normalize_key( $title ) ] = $vid;
+        $norm_to_id[ bst_vehicle_exact_text_key( $title ) ] = $vid;
     }
     $cache = array(
         'norm_to_id'     => $norm_to_id,
@@ -581,25 +630,23 @@ function bst_vehicle_label_resolution_maps() {
 }
 
 /**
- * Resolve legacy / label base name to Vehicle CPT id (read-only; same matching as migration find_existing).
+ * Resolve vehicle label text to Vehicle CPT id (read-only; exact string match vs migration).
  *
- * @param string $base_name      Normalized vehicle label (e.g. after bst_vehicle_base_name_from_text).
- * @param array  $norm_to_id     Map normalized title key → vehicle id.
+ * @param string $label_text     Same string as repeater `vehicle` field (after {@see bst_vehicle_exact_text_key()}).
+ * @param array  $norm_to_id     Map exact text key → vehicle id (see {@see bst_vehicle_label_resolution_maps()}).
  * @param array  $vehicles_by_id Map vehicle id → title.
  * @return int 0 if none.
  */
-function bst_vehicle_resolve_base_name_to_vehicle_id( $base_name, array $norm_to_id, array $vehicles_by_id ) {
-    $base_name = trim( (string) $base_name );
-    if ( '' === $base_name ) {
+function bst_vehicle_resolve_base_name_to_vehicle_id( $label_text, array $norm_to_id, array $vehicles_by_id ) {
+    $key = bst_vehicle_exact_text_key( $label_text );
+    if ( '' === $key ) {
         return 0;
     }
-    $key     = bst_vehicle_normalize_key( $base_name );
-    $compact = bst_vehicle_compact_key( $base_name );
     if ( isset( $norm_to_id[ $key ] ) ) {
         return (int) $norm_to_id[ $key ];
     }
     foreach ( $vehicles_by_id as $vid => $title ) {
-        if ( $compact && $compact === bst_vehicle_compact_key( $title ) ) {
+        if ( $key === bst_vehicle_exact_text_key( $title ) ) {
             return (int) $vid;
         }
     }
@@ -663,7 +710,7 @@ function bst_tour_pricing_vehicle_ids_resolved( $tour_id ) {
             } else {
                 $raw = isset( $vrow['vehicle'] ) ? (string) $vrow['vehicle'] : '';
             }
-            $base = trim( (string) bst_vehicle_base_name_from_text( $raw ) );
+            $base = bst_vehicle_exact_text_key( $raw );
             if ( '' !== $base ) {
                 $resolved = bst_vehicle_resolve_base_name_to_vehicle_id( $base, $maps['norm_to_id'], $maps['vehicles_by_id'] );
                 if ( $resolved > 0 ) {

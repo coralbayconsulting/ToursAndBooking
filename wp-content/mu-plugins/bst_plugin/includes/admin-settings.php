@@ -307,6 +307,7 @@ function bst_register_settings() {
         'bst_tools_page',
         'bst_admin_operations_section'
     );
+
 }
 add_action('admin_init', 'bst_register_settings');
 
@@ -1455,6 +1456,7 @@ function bst_release_data_cleanup_callback() {
         : esc_html__( 'Step 3 — Re-link tour pricing from labels', 'bst-plugin' )
     ) . '</strong></p>';
     echo '<p class="description" style="margin: 0 0 10px;">' . esc_html__( 'Sets each vehicle_pricing row’s Vehicle (CPT) id from that row’s text label (same matching as migration). Does not delete Vehicle posts. Use when labels are correct but saved CPT links are wrong.', 'bst-plugin' ) . '</p>';
+    echo '<p class="description" style="margin: 0 0 10px;">' . esc_html__( 'ACF: If the Tour field group (or Vehicle) shows “Sync available” under Local JSON, sync it before re-link. Until the DB field definitions match the JSON in this project, reading repeater data can work while programmatic saves (update_field) may still fail.', 'bst-plugin' ) . '</p>';
     echo '<button type="button" id="bst-release-cleanup-relink" class="button button-secondary">';
     echo '<span class="dashicons dashicons-admin-links" style="margin-right: 4px; vertical-align: text-top;"></span>';
     echo esc_html__( 'Re-link tour pricing from labels', 'bst-plugin' );
@@ -1584,7 +1586,7 @@ function bst_tour_vehicle_names_export_callback() {
 
     $url = admin_url( 'admin-post.php' );
     echo '<div class="bst-tour-vehicle-names-export" style="max-width: 720px;">';
-    echo '<p>' . esc_html__( 'Download a CSV of every distinct text stored in the tour Vehicle Pricing → Vehicles repeater (exact string as saved), which tours it appears on, linked Vehicle CPT post IDs and titles, and helper columns (normalized / compact keys, base name after stripping price suffix in parentheses) to spot spelling variants migration links only when keys match exactly.' ) . '</p>';
+    echo '<p>' . esc_html__( 'Download a CSV of every distinct text stored in the tour Vehicle Pricing → Vehicles repeater (exact string as saved), which tours it appears on, linked Vehicle CPT post IDs and titles, and helper columns (normalized / compact keys, base name after stripping parenthetical segments) to spot spelling variants. Migration matches the canonical name (same as bst_vehicle_exact_text_key), not the raw cell text.' ) . '</p>';
     echo '<form method="post" action="' . esc_url( $url ) . '" style="margin-top: 8px;">';
     echo '<input type="hidden" name="action" value="bst_export_tour_vehicle_names" />';
     wp_nonce_field( 'bst_export_tour_vehicle_names' );
@@ -1775,7 +1777,7 @@ function bst_get_release_cleanup_tasks() {
         '1.0.0' => array(
             array(
                 'name' => 'Migrate vehicle CPT links',
-                'description' => 'Link tour vehicle repeater rows and bookings to Vehicle CPT posts (normalized / compact title match only; no similar-text guessing). Sets vehicle type from tour Type Code (Driving→car, Motorcycle→motorcycle). Use “Force reset vehicle migration” to wipe all Vehicle posts and rebuild. Sync ACF JSON for Vehicle + Tour before running.'
+                'description' => 'Link tour vehicle_pricing rows and booking vehicle text to Vehicle CPT posts (canonical name match: strip HTML/parentheticals, collapse spaces; same as bst_vehicle_exact_text_key). Sets vehicle type from tour Type Code. Sync ACF field groups (Tour + Vehicle) from Local JSON before running; use Force reset only to wipe and rebuild Vehicle posts.'
             )
         ),
         // Example for future releases:

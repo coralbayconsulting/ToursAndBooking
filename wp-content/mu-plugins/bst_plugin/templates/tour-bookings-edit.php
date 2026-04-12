@@ -3476,7 +3476,8 @@ jQuery(document).ready(function($) {
                 currency: currency,
                 tour_date_id: tourDateId,
                 booking_id: bookingId,
-                vehicle_label_context: 'admin'
+                vehicle_labels_for: 'staff',
+                show_archived: 1
             },
             success: function(response) {
                 if (response.success && response.data && response.data.length > 0) {
@@ -3505,12 +3506,9 @@ jQuery(document).ready(function($) {
                                     .attr('data-limited-sold-other', vehicle.limited_sold_other_bookings);
                             }
                             
-                            // Populate vehicle1 if it's visible
                             if ($vehicle1Select.closest('.edit-form-field').is(':visible')) {
                                 $vehicle1Select.append($opt.clone());
                             }
-                            
-                            // Populate vehicle2 if it's visible
                             if ($vehicle2Select.closest('.edit-form-field').is(':visible')) {
                                 $vehicle2Select.append($opt.clone());
                             }
@@ -3518,13 +3516,24 @@ jQuery(document).ready(function($) {
                         
                         // Don't modify visibility - respect the initial HTML state set during generation
                         
-                        // Set selected values: prefer saved CPT id; fall back to legacy full text / prefix match.
+                        // Set selected values from saved CPT id (match option value as string).
                         function selectVehicleDropdown($select, booking, slot) {
                             var idKey = slot === 2 ? 'vehicle2_id' : 'vehicle1_id';
-                            var savedId = booking[idKey];
-                            if (savedId) {
-                                $select.val(String(savedId));
+                            var raw = booking[idKey];
+                            if (raw === undefined || raw === null || raw === '' || raw === 0) {
+                                return;
                             }
+                            var want = String(raw);
+                            $select.val(want);
+                            if ($select.val() === want) {
+                                return;
+                            }
+                            $select.find('option').each(function() {
+                                if (String(this.value) === want) {
+                                    $select.val(this.value);
+                                    return false;
+                                }
+                            });
                         }
                         selectVehicleDropdown($vehicle1Select, booking, 1);
                         if (vehicleChoices >= 2) {
@@ -3550,9 +3559,12 @@ jQuery(document).ready(function($) {
                         
                         updateVehicleLimitedNotes($tile);
                         
-                        // Trigger initial calculation if vehicles are already selected
-                        if (booking.vehicle1 || booking.vehicle2) {
-                            calculateCompleteTourPrice($tile);
+                        updateExtensionPriceAndLabel($tile);
+                        // After programmatic .val(), defer so :selected + data-price apply before totaling.
+                        if ($vehicle1Select.val() || (vehicleChoices >= 2 && $vehicle2Select.val())) {
+                            setTimeout(function() {
+                                calculateCompleteTourPrice($tile);
+                            }, 0);
                         }
                     }
                 } else {
@@ -3630,11 +3642,10 @@ jQuery(document).ready(function($) {
                 window.bstBookingData.tour_price = price.toFixed(2);
             }
             
-            // Show base price, then add vehicle (and extension) costs for any currency
+            // Show base price; vehicle/extension totals are applied in calculateCompleteTourPrice when
+            // loadVehicles finishes (async). Do not setTimeout here — a fixed delay often fires AFTER
+            // loadVehicles and overwrites the correct price with base-only.
             $tourPriceField.val(currencySymbol + ' ' + price.toFixed(2));
-            setTimeout(function() {
-                recalculateTourPriceWithVehicles($tile);
-            }, 100); // Small delay to ensure vehicle dropdowns are populated
         } else {
             $tourPriceField.val('TBD');
         }
@@ -3661,11 +3672,8 @@ jQuery(document).ready(function($) {
         var $vehicle1Select = $tile.find('#vehicle1');
         var $vehicle2Select = $tile.find('#vehicle2');
         
-        var vehicle1Price = parseFloat($vehicle1Select.find('option:selected').data('price')) || 0;
-        totalPrice += vehicle1Price;
-        
-        var vehicle2Price = parseFloat($vehicle2Select.find('option:selected').data('price')) || 0;
-        totalPrice += vehicle2Price;
+        totalPrice += bstVehicleUpgradeFromOption($vehicle1Select.find('option:selected'));
+        totalPrice += bstVehicleUpgradeFromOption($vehicle2Select.find('option:selected'));
         
         // Add extension price if checkbox is checked
         var $extensionCheckbox = $tile.find('#tour_extension_added');
@@ -3687,6 +3695,19 @@ jQuery(document).ready(function($) {
     // Alias for backward compatibility
     function recalculateTourPriceWithVehicles($tile) {
         calculateCompleteTourPrice($tile);
+    }
+
+    /** Numeric upgrade from a vehicle <option> (prefer attr; jQuery .data on options can be unreliable). */
+    function bstVehicleUpgradeFromOption($opt) {
+        if (!$opt || !$opt.length) {
+            return 0;
+        }
+        var raw = $opt.attr('data-price');
+        if (raw === undefined || raw === null || raw === '') {
+            raw = $opt.data('price');
+        }
+        var n = parseFloat(raw);
+        return isNaN(n) ? 0 : n;
     }
     
     function updateExtensionPriceAndLabel($tile) {
@@ -3719,20 +3740,13 @@ jQuery(document).ready(function($) {
         var adminDrivingDays = parseFloat(window.tourExtensionSettings.adminVehicleDrivingDays) || 0;
         
         if (adminDrivingDays > 0 && extensionDays > 0) {
-            // Calculate vehicle 1 upcharge using formula: round((upcharge / adminDrivingDays) * extensionDays)
-            var vehicle1Selected = $tile.find('#vehicle1').find('option:selected').data('price');
-            if (vehicle1Selected && vehicle1Selected !== '' && vehicle1Selected !== '0') {
-                var vehicle1Upcharge = parseFloat(vehicle1Selected) || 0;
-                var vehicle1ExtensionUpcharge = Math.round(vehicle1Upcharge / adminDrivingDays * extensionDays);
-                extensionPrice += vehicle1ExtensionUpcharge;
+            var vehicle1Upcharge = bstVehicleUpgradeFromOption($tile.find('#vehicle1').find('option:selected'));
+            if (vehicle1Upcharge > 0) {
+                extensionPrice += Math.round(vehicle1Upcharge / adminDrivingDays * extensionDays);
             }
-            
-            // Calculate vehicle 2 upcharge using formula: round((upcharge / adminDrivingDays) * extensionDays)
-            var vehicle2Selected = $tile.find('#vehicle2').find('option:selected').data('price');
-            if (vehicle2Selected && vehicle2Selected !== '' && vehicle2Selected !== '0') {
-                var vehicle2Upcharge = parseFloat(vehicle2Selected) || 0;
-                var vehicle2ExtensionUpcharge = Math.round(vehicle2Upcharge / adminDrivingDays * extensionDays);
-                extensionPrice += vehicle2ExtensionUpcharge;
+            var vehicle2Upcharge = bstVehicleUpgradeFromOption($tile.find('#vehicle2').find('option:selected'));
+            if (vehicle2Upcharge > 0) {
+                extensionPrice += Math.round(vehicle2Upcharge / adminDrivingDays * extensionDays);
             }
         }
         
@@ -3842,7 +3856,9 @@ jQuery(document).ready(function($) {
                                 tour_id: tourId,
                                 package_id: packageId,
                                 currency: window.bstBookingData?.tour_currency || 'EUR',
-                                vehicle_label_context: 'admin'
+                                booking_id: parseInt(String((window.bstBookingData && window.bstBookingData.id) || ''), 10) || 0,
+                                vehicle_labels_for: 'staff',
+                                show_archived: 1
                             },
                             success: function(vehicleResponse) {
                                 var currentVehicleChoices = 0;

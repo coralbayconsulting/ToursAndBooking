@@ -92,7 +92,6 @@ class BST_Plugin {
         add_action('wp_ajax_bst_release_data_cleanup', array($this, 'handle_release_data_cleanup'));
         add_action('wp_ajax_bst_sync_limited_vehicles_create', array($this, 'handle_sync_limited_vehicles_create'));
         add_action('wp_ajax_bst_sync_limited_vehicles_sold', array($this, 'handle_sync_limited_vehicles_sold'));
-        
         // Daily availability sync automation
         add_action('wp_loaded', array($this, 'schedule_daily_availability_sync'));
         add_action('bst_daily_availability_sync', array($this, 'run_daily_availability_sync'));
@@ -2386,7 +2385,7 @@ class BST_Plugin {
         if ( ! $force_rerun && ! $repair_repeater && function_exists( 'bst_release_cleanup_is_complete_for_tasks' )
             && bst_release_cleanup_is_complete_for_tasks( $current_version, $cleanup_tasks ) ) {
             wp_send_json_error(
-                'Cleanup already completed for version ' . $current_version . ' for all current tasks. Check "Force reset vehicle migration" and/or "Re-link tour repeater from labels" to run again.'
+                'Cleanup already completed for version ' . $current_version . ' for all current tasks. Use the “Force reset vehicle migration” or “Re-link tour pricing from labels” button to run again.'
             );
             return;
         }

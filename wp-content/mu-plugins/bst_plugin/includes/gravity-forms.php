@@ -729,6 +729,8 @@ function bst_gf9_prepopulate_booking_form($form) {
                 'packagetext'    => 'tour_package_text',
                 'vehicle1text'   => 'vehicle1',
                 'vehicle2text'   => 'vehicle2',
+                'vehicle1_id'    => 'vehicle1_id',
+                'vehicle2_id'    => 'vehicle2_id',
                 'package_people' => 'package_people',
                 'package_rooms'  => 'package_rooms',
                 'package_vehicles'=> 'package_vehicles',
@@ -749,6 +751,9 @@ function bst_gf9_prepopulate_booking_form($form) {
                     $source_data[$db_field] = $tour_booking->$db_field;
                 }
             }
+            // Hidden GF fields 236/237 (vehicle CPT ids); always set so prepopulate works when DB values are null.
+            $source_data['vehicle1_id'] = (string) (int) ( $tour_booking->vehicle1_id ?? 0 );
+            $source_data['vehicle2_id'] = (string) (int) ( $tour_booking->vehicle2_id ?? 0 );
             
             // Add calculated fields
             $source_data['deposit_calculated'] = $deposit;
@@ -923,14 +928,8 @@ function bst_gf9_process_booking_logic($entry, $form) {
             $tour_date_text = rgar($entry, '141');
             $tour_package_id = rgar($entry, '151');
             $tour_package_text = rgar($entry, '138');
-            $vehicle1_id = absint( rgar( $entry, 'vehicle1id' ) );
-            $vehicle2_id = absint( rgar( $entry, 'vehicle2id' ) );
-            if ( $vehicle1_id <= 0 ) {
-                $vehicle1_id = absint( rgar( $entry, '140' ) );
-            }
-            if ( $vehicle2_id <= 0 ) {
-                $vehicle2_id = absint( rgar( $entry, '142' ) );
-            }
+            list( $vehicle1_id, $vehicle2_id ) = bst_gf9_entry_vehicle_ids_from_fields( $entry );
+            $vehicle_texts = bst_gf9_resolve_vehicle_ids_and_text( $entry, (int) $entry['form_id'], (int) $tour_id, $vehicle1_id, $vehicle2_id );
             $package_people = rgar($entry, '200');
             $package_rooms = rgar($entry, '201');
             $package_vehicles = rgar($entry, '212');
@@ -1079,6 +1078,8 @@ function bst_gf9_process_booking_logic($entry, $form) {
                 'tour_package_id' => $tour_package_id,
                 'vehicle1_id' => $vehicle1_id,
                 'vehicle2_id' => $vehicle2_id,
+                'vehicle1' => bst_truncate_field( sanitize_text_field( $vehicle_texts['vehicle1'] ?? '' ), 100 ),
+                'vehicle2' => bst_truncate_field( sanitize_text_field( $vehicle_texts['vehicle2'] ?? '' ), 100 ),
                 'package_people' => $package_people,
                 'package_rooms' => $package_rooms,
                 'package_vehicles' => $package_vehicles,
@@ -1228,6 +1229,118 @@ function bst_gf9_handle_payment_completed($entry, $action) {
     bst_gf9_process_booking_logic($entry, $form);
 }
 
+/**
+ * Gravity Forms field id for a field whose inputName matches (e.g. vehicle1text on form 9).
+ *
+ * @param int    $form_id    Form ID.
+ * @param string $input_name Field inputName (parameter name).
+ * @return string Field id as string, or empty if not found.
+ */
+function bst_gf_field_id_by_input_name( $form_id, $input_name ) {
+    static $cache = array();
+    $form_id = (int) $form_id;
+    $key     = $form_id . '|' . $input_name;
+    if ( isset( $cache[ $key ] ) ) {
+        return $cache[ $key ];
+    }
+    $cache[ $key ] = '';
+    if ( ! class_exists( 'GFAPI' ) || $input_name === '' ) {
+        return '';
+    }
+    $form = GFAPI::get_form( $form_id );
+    if ( ! $form || empty( $form['fields'] ) ) {
+        return '';
+    }
+    foreach ( $form['fields'] as $field ) {
+        if ( ! is_object( $field ) ) {
+            continue;
+        }
+        $iname = isset( $field->inputName ) ? (string) $field->inputName : '';
+        if ( $iname === $input_name ) {
+            $cache[ $key ] = (string) $field->id;
+            return $cache[ $key ];
+        }
+    }
+    return '';
+}
+
+/**
+ * Read vehicle CPT ids from a GF9 entry.
+ * Priority: fields 236/237 (parameter names vehicle1_id / vehicle2_id), then legacy vehicle1id/vehicle2id, then 140/142.
+ *
+ * @param array $entry GF entry.
+ * @return int[] Two ints: vehicle1_id, vehicle2_id.
+ */
+function bst_gf9_entry_vehicle_ids_from_fields( $entry ) {
+    $v1 = absint( rgar( $entry, '236' ) );
+    $v2 = absint( rgar( $entry, '237' ) );
+    if ( $v1 <= 0 ) {
+        $v1 = absint( rgar( $entry, 'vehicle1id' ) );
+    }
+    if ( $v1 <= 0 ) {
+        $v1 = absint( rgar( $entry, '140' ) );
+    }
+    if ( $v2 <= 0 ) {
+        $v2 = absint( rgar( $entry, 'vehicle2id' ) );
+    }
+    if ( $v2 <= 0 ) {
+        $v2 = absint( rgar( $entry, '142' ) );
+    }
+    return array( $v1, $v2 );
+}
+
+/**
+ * When GF vehicle id fields are still empty after {@see bst_gf9_entry_vehicle_ids_from_fields()}, resolve Vehicle CPT ids from
+ * vehicle1text/vehicle2text entry fields (legacy submissions). Saves display strings for DB vehicle1/vehicle2 columns.
+ *
+ * @param array $entry       GF entry.
+ * @param int   $form_id     Form ID.
+ * @param int   $tour_id     Tour post ID.
+ * @param int   $vehicle1_id In/out.
+ * @param int   $vehicle2_id In/out.
+ * @return array{ vehicle1: string, vehicle2: string } Truncation-ready label text from the form.
+ */
+function bst_gf9_resolve_vehicle_ids_and_text( $entry, $form_id, $tour_id, &$vehicle1_id, &$vehicle2_id ) {
+    $out = array(
+        'vehicle1' => '',
+        'vehicle2' => '',
+    );
+    $vehicle1_id = absint( $vehicle1_id );
+    $vehicle2_id = absint( $vehicle2_id );
+    $tour_id     = (int) $tour_id;
+    $form_id     = (int) $form_id;
+
+    $fid1 = bst_gf_field_id_by_input_name( $form_id, 'vehicle1text' );
+    $fid2 = bst_gf_field_id_by_input_name( $form_id, 'vehicle2text' );
+    if ( $fid1 !== '' ) {
+        $out['vehicle1'] = trim( (string) rgar( $entry, $fid1 ) );
+    }
+    if ( $fid2 !== '' ) {
+        $out['vehicle2'] = trim( (string) rgar( $entry, $fid2 ) );
+    }
+
+    if ( ! function_exists( 'bst_vehicle_label_resolution_maps' ) || ! function_exists( 'bst_vehicle_resolve_base_name_to_vehicle_id' ) ) {
+        return $out;
+    }
+    $maps              = bst_vehicle_label_resolution_maps();
+    $tour_linked_cache = array();
+
+    if ( $vehicle1_id <= 0 && $out['vehicle1'] !== '' ) {
+        $vid = bst_vehicle_resolve_base_name_to_vehicle_id( $out['vehicle1'], $maps['norm_to_id'], $maps['vehicles_by_id'] );
+        if ( $vid > 0 && function_exists( 'bst_vehicle_id_allowed_for_booking_tour' ) && bst_vehicle_id_allowed_for_booking_tour( $vid, $tour_id, $tour_linked_cache ) ) {
+            $vehicle1_id = $vid;
+        }
+    }
+    if ( $vehicle2_id <= 0 && $out['vehicle2'] !== '' ) {
+        $vid = bst_vehicle_resolve_base_name_to_vehicle_id( $out['vehicle2'], $maps['norm_to_id'], $maps['vehicles_by_id'] );
+        if ( $vid > 0 && function_exists( 'bst_vehicle_id_allowed_for_booking_tour' ) && bst_vehicle_id_allowed_for_booking_tour( $vid, $tour_id, $tour_linked_cache ) ) {
+            $vehicle2_id = $vid;
+        }
+    }
+
+    return $out;
+}
+
 // --- Booking Creation Logic ---
 function bst_gf9_create_booking($entry, $form) {
     global $wpdb;
@@ -1258,15 +1371,9 @@ function bst_gf9_create_booking($entry, $form) {
     $tour_date_text = rgar($entry, '141'); 
     $tour_package_id = rgar($entry, '151');
     $tour_package_text = rgar($entry, '138'); 
-    $vehicle1_id = absint( rgar( $entry, 'vehicle1id' ) );
-    $vehicle2_id = absint( rgar( $entry, 'vehicle2id' ) );
-    if ( $vehicle1_id <= 0 ) {
-        $vehicle1_id = absint( rgar( $entry, '140' ) );
-    }
-    if ( $vehicle2_id <= 0 ) {
-        $vehicle2_id = absint( rgar( $entry, '142' ) );
-    }
-    
+    list( $vehicle1_id, $vehicle2_id ) = bst_gf9_entry_vehicle_ids_from_fields( $entry );
+    $vehicle_texts = bst_gf9_resolve_vehicle_ids_and_text( $entry, (int) $entry['form_id'], (int) $tour_id, $vehicle1_id, $vehicle2_id );
+
     // Extension fields
     $tour_extension_added = rgar($entry, '224');
     if (!empty($tour_extension_added)) {
@@ -1454,6 +1561,8 @@ function bst_gf9_create_booking($entry, $form) {
         'vehicle_choices' => $vehicle_choices,
         'vehicle1_id' => $vehicle1_id,
         'vehicle2_id' => $vehicle2_id,
+        'vehicle1' => bst_truncate_field( sanitize_text_field( $vehicle_texts['vehicle1'] ?? '' ), 100 ),
+        'vehicle2' => bst_truncate_field( sanitize_text_field( $vehicle_texts['vehicle2'] ?? '' ), 100 ),
         'tour_extension_added' => $tour_extension_added,
         'tour_extension_text' => $tour_extension_text,
         'tour_extension_date_text' => $tour_extension_date_text,
@@ -2640,6 +2749,11 @@ function bst_gf_remove_all_errors(&$form) {
 }
 
 function bst_extract_booking_data($entry) {
+    $form_id = isset( $entry['form_id'] ) ? (int) $entry['form_id'] : 9;
+    $tour_id = (int) rgar( $entry, '149' );
+    list( $vehicle1_id, $vehicle2_id ) = bst_gf9_entry_vehicle_ids_from_fields( $entry );
+    bst_gf9_resolve_vehicle_ids_and_text( $entry, $form_id, $tour_id, $vehicle1_id, $vehicle2_id );
+
     return [
         'guest1_first_name' => rgar($entry, '31.3'),
         'guest1_last_name' => rgar($entry, '31.6'),
@@ -2651,8 +2765,8 @@ function bst_extract_booking_data($entry) {
         'tour_date_text' => rgar($entry, '141'),
         'tour_package_id' => rgar($entry, '151'),
         'tour_package_text' => rgar($entry, '138'),
-        'vehicle1_id' => ( absint( rgar($entry, 'vehicle1id') ) > 0 ? absint( rgar($entry, 'vehicle1id') ) : absint( rgar($entry, '140') ) ),
-        'vehicle2_id' => ( absint( rgar($entry, 'vehicle2id') ) > 0 ? absint( rgar($entry, 'vehicle2id') ) : absint( rgar($entry, '142') ) ),
+        'vehicle1_id' => $vehicle1_id,
+        'vehicle2_id' => $vehicle2_id,
         'package_people' => rgar($entry, '200'),
         'package_rooms' => rgar($entry, '201'),
         'package_vehicles' => rgar($entry, '212'),
@@ -3114,6 +3228,8 @@ function bst_map_csv_to_gf9_entry($data) {
         '138' => $data['Package'] ?? '',
         
         // Vehicle info
+        '236' => $data['Vehicle 1 ID'] ?? '',
+        '237' => $data['Vehicle 2 ID'] ?? '',
         '140' => $data['Vehicle 1'] ?? '',
         '142' => $data['Vehicle 2'] ?? '',
         

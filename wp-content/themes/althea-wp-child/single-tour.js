@@ -234,7 +234,8 @@ jQuery(document).ready(function ($) {
         package_id: packageId,
         currency: tourCurrencyCode,
         tour_date_id: String(selectedTourDateId).split("|")[0],
-        vehicle_label_context: "public",
+        vehicle_labels_for: "customer",
+        show_archived: 0,
       },
       success: function (response) {
         // Logic to show/hide vehicle dropdowns based on the number of vehicles and packageId
@@ -798,6 +799,8 @@ jQuery(document).ready(function ($) {
       'package_vehicles': packageVehicles,
       'vehicle1text': hasVehicleChoices ? vehicle1Text : '',
       'vehicle2text': hasVehicleChoices ? vehicle2Text : '', 
+      'vehicle1_id': vehicle1Id ? String(vehicle1Id) : '',
+      'vehicle2_id': vehicle2Id ? String(vehicle2Id) : '',
       'vehicle1id': vehicle1Id ? String(vehicle1Id) : '',
       'vehicle2id': vehicle2Id ? String(vehicle2Id) : '',
       'vehicle_choices': hasVehicleChoices ? (vehicle2Text ? '2' : '1') : '0',
