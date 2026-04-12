@@ -941,24 +941,39 @@ function bst_vehicle_id_allowed_for_booking_tour( $vehicle_id, $tour_id, array &
 
 /**
  * Map vehicle post ID => sorted list of booking IDs referencing that vehicle (vehicle1_id or vehicle2_id).
- * Omits bookings where the row still has an old vehicle*_id after the tour was switched (vehicle not on the current tour’s pricing).
- * One query per request (cached) for the Vehicles list screen.
  *
+ * When $only_when_linked_on_tour is true (default for any code that wants “current tour options” semantics):
+ * omits a booking→vehicle link if that vehicle id is not in the booking’s tour’s linked vehicle_pricing CPT ids
+ * (avoids listing a booking under a duplicate/old vehicle after the tour only offers another CPT).
+ *
+ * When false (Vehicles admin “Used on Booking” column): lists every booking row that still stores that
+ * vehicle*_id, so you can find mismatches (e.g. BMW 750GS vs F750GS) and fix or remap them.
+ *
+ * One query per request per mode (cached).
+ *
+ * @param bool $only_when_linked_on_tour If true, filter by {@see bst_vehicle_id_allowed_for_booking_tour()}.
  * @return array<int, int[]>
  */
-function bst_vehicle_bookings_by_vehicle_map() {
-    static $cache = null;
+function bst_vehicle_bookings_by_vehicle_map( $only_when_linked_on_tour = true ) {
+    static $cache_linked = null;
+    static $cache_all    = null;
+    $cache = $only_when_linked_on_tour ? $cache_linked : $cache_all;
     if ( null !== $cache ) {
         return $cache;
     }
 
     global $wpdb;
-    $cache            = array();
+    $cache             = array();
     $tour_linked_cache = array();
-    $table = $wpdb->prefix . 'bst_tour_booking';
+    $table             = $wpdb->prefix . 'bst_tour_booking';
     // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is prefixed, not user input.
     $rows = $wpdb->get_results( "SELECT id, tour_id, vehicle1_id, vehicle2_id FROM {$table} WHERE vehicle1_id > 0 OR vehicle2_id > 0", ARRAY_A );
     if ( empty( $rows ) || ! is_array( $rows ) ) {
+        if ( $only_when_linked_on_tour ) {
+            $cache_linked = $cache;
+        } else {
+            $cache_all = $cache;
+        }
         return $cache;
     }
 
@@ -970,13 +985,15 @@ function bst_vehicle_bookings_by_vehicle_map() {
         $tour_id = isset( $row['tour_id'] ) ? (int) $row['tour_id'] : 0;
         $v1      = isset( $row['vehicle1_id'] ) ? (int) $row['vehicle1_id'] : 0;
         $v2      = isset( $row['vehicle2_id'] ) ? (int) $row['vehicle2_id'] : 0;
-        if ( $v1 > 0 && bst_vehicle_id_allowed_for_booking_tour( $v1, $tour_id, $tour_linked_cache ) ) {
+        $allow1 = $v1 > 0 && ( ! $only_when_linked_on_tour || bst_vehicle_id_allowed_for_booking_tour( $v1, $tour_id, $tour_linked_cache ) );
+        $allow2 = $v2 > 0 && $v2 !== $v1 && ( ! $only_when_linked_on_tour || bst_vehicle_id_allowed_for_booking_tour( $v2, $tour_id, $tour_linked_cache ) );
+        if ( $allow1 ) {
             if ( empty( $cache[ $v1 ] ) ) {
                 $cache[ $v1 ] = array();
             }
             $cache[ $v1 ][ $bid ] = $bid;
         }
-        if ( $v2 > 0 && $v2 !== $v1 && bst_vehicle_id_allowed_for_booking_tour( $v2, $tour_id, $tour_linked_cache ) ) {
+        if ( $allow2 ) {
             if ( empty( $cache[ $v2 ] ) ) {
                 $cache[ $v2 ] = array();
             }
@@ -989,20 +1006,63 @@ function bst_vehicle_bookings_by_vehicle_map() {
         sort( $cache[ $vid ], SORT_NUMERIC );
     }
 
+    if ( $only_when_linked_on_tour ) {
+        $cache_linked = $cache;
+    } else {
+        $cache_all = $cache;
+    }
+
     return $cache;
 }
 
 /**
- * @param int $vehicle_id Vehicle CPT id.
+ * @param int  $vehicle_id Vehicle CPT id.
+ * @param bool $only_when_linked_on_tour Same as {@see bst_vehicle_bookings_by_vehicle_map()}; false = all DB references (admin cleanup).
  * @return int[]
  */
-function bst_vehicle_booking_ids_for_vehicle( $vehicle_id ) {
+function bst_vehicle_booking_ids_for_vehicle( $vehicle_id, $only_when_linked_on_tour = true ) {
     $vehicle_id = (int) $vehicle_id;
     if ( $vehicle_id <= 0 ) {
         return array();
     }
-    $map = bst_vehicle_bookings_by_vehicle_map();
+    $map = bst_vehicle_bookings_by_vehicle_map( $only_when_linked_on_tour );
     return isset( $map[ $vehicle_id ] ) ? $map[ $vehicle_id ] : array();
+}
+
+/**
+ * For a vehicle CPT and a list of booking IDs, flag rows where that vehicle is not on the booking tour’s
+ * linked vehicle_pricing (same rule as {@see bst_vehicle_id_allowed_for_booking_tour()}).
+ *
+ * @param int   $vehicle_id  Vehicle CPT id.
+ * @param int[] $booking_ids Booking post IDs.
+ * @return array<int, bool> booking_id => true if the link should show (*) in admin.
+ */
+function bst_vehicle_booking_not_on_tour_flags( $vehicle_id, array $booking_ids ) {
+    $vehicle_id = (int) $vehicle_id;
+    $booking_ids = array_values( array_unique( array_filter( array_map( 'intval', $booking_ids ) ) ) );
+    if ( $vehicle_id <= 0 || empty( $booking_ids ) ) {
+        return array();
+    }
+    global $wpdb;
+    $table   = $wpdb->prefix . 'bst_tour_booking';
+    $ids_sql = implode( ',', $booking_ids );
+    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name fixed; IDs are ints.
+    $rows = $wpdb->get_results( "SELECT id, tour_id FROM {$table} WHERE id IN ({$ids_sql})", ARRAY_A );
+    if ( empty( $rows ) || ! is_array( $rows ) ) {
+        return array();
+    }
+    $tour_by_booking = array();
+    foreach ( $rows as $row ) {
+        $tour_by_booking[ (int) $row['id'] ] = (int) $row['tour_id'];
+    }
+    $out               = array();
+    $tour_linked_cache = array();
+    foreach ( $booking_ids as $bid ) {
+        $tid = isset( $tour_by_booking[ $bid ] ) ? $tour_by_booking[ $bid ] : 0;
+        // Star when the vehicle would be hidden by the “on tour options” filter.
+        $out[ $bid ] = ! bst_vehicle_id_allowed_for_booking_tour( $vehicle_id, $tid, $tour_linked_cache );
+    }
+    return $out;
 }
 
 add_filter(
@@ -1044,18 +1104,24 @@ add_action(
         }
 
         if ( 'bst_vehicle_bookings' === $column ) {
-            $booking_ids = bst_vehicle_booking_ids_for_vehicle( (int) $post_id );
+            // Show every booking that still points at this CPT id (including “wrong” ids not on tour pricing).
+            $booking_ids = bst_vehicle_booking_ids_for_vehicle( (int) $post_id, false );
             if ( empty( $booking_ids ) ) {
                 echo '&mdash;';
                 return;
             }
             $max_show = 8;
             $slice    = array_slice( $booking_ids, 0, $max_show );
-            $parts    = array();
+            $markers = bst_vehicle_booking_not_on_tour_flags( (int) $post_id, $slice );
+            $parts   = array();
             foreach ( $slice as $bid ) {
-                $bid  = (int) $bid;
-                $url  = bst_vehicle_admin_booking_edit_url( $bid );
-                $parts[] = '<a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">#' . esc_html( (string) $bid ) . '</a>';
+                $bid = (int) $bid;
+                $url = bst_vehicle_admin_booking_edit_url( $bid );
+                $suffix = '';
+                if ( ! empty( $markers[ $bid ] ) ) {
+                    $suffix = ' <abbr title="' . esc_attr__( 'This vehicle is not linked on the booking’s tour pricing — add an archived vehicle row on the tour or remap the booking.', 'bst-plugin' ) . '">(*)</abbr>';
+                }
+                $parts[] = '<a href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">#' . esc_html( (string) $bid ) . '</a>' . $suffix;
             }
             $out = implode( ', ', $parts );
             if ( count( $booking_ids ) > $max_show ) {
@@ -1068,6 +1134,9 @@ add_action(
                         'href'   => array(),
                         'target' => array(),
                         'rel'    => array(),
+                    ),
+                    'abbr' => array(
+                        'title' => array(),
                     ),
                 )
             );

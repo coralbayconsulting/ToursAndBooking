@@ -644,12 +644,19 @@ class BST_Plugin {
         $tour_booking_table = $wpdb->prefix . "bst_tour_booking";
     
         $booking = null;
-        if (isset($_GET['id'])) {
-            $id = intval($_GET['id']);
-            // Try both id and booking_entry_id for backward compatibility
-            $booking = $wpdb->get_row($wpdb->prepare("SELECT * FROM $tour_booking_table WHERE id = %d OR booking_entry_id = %d", $id, $id), OBJECT);
+        // `id` / `booking_id` = bst_tour_booking primary key only (same as view_booking). Do not OR booking_entry_id:
+        // e.g. id=285 must open booking row 285, not row 281 with booking_entry_id 285 (GF entry id).
+        if ( isset( $_GET['id'] ) ) {
+            $id      = intval( $_GET['id'] );
+            $booking = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $tour_booking_table WHERE id = %d", $id ), OBJECT );
+        } elseif ( isset( $_GET['booking_id'] ) ) {
+            $id      = intval( $_GET['booking_id'] );
+            $booking = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $tour_booking_table WHERE id = %d", $id ), OBJECT );
+        } elseif ( isset( $_GET['booking_entry_id'] ) ) {
+            $entry_id = intval( $_GET['booking_entry_id'] );
+            $booking  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $tour_booking_table WHERE booking_entry_id = %d", $entry_id ), OBJECT );
         }
-    
+
         // Build filtered query for navigation (respecting filters from main page)
         $where_conditions = array();
         $query_params = array();
