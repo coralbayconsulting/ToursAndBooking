@@ -521,27 +521,74 @@ function bst_vehicle_display_title( $vehicle_id ) {
 }
 
 /**
- * Preferred display name for a booking vehicle selection.
- * Uses vehicle ID when present; falls back to legacy stored text.
+ * Display name for a booking vehicle from Vehicle CPT id only (vehicle1_id / vehicle2_id).
+ * No use of stored booking vehicle text columns — empty string if id missing or invalid.
  *
  * @param object $booking Booking row.
  * @param int    $slot    1 or 2.
  * @return string
  */
 function bst_booking_vehicle_display_text( $booking, $slot = 1 ) {
-    $slot = (int) $slot;
-    $id_field   = ( 2 === $slot ) ? 'vehicle2_id' : 'vehicle1_id';
-    $text_field = ( 2 === $slot ) ? 'vehicle2' : 'vehicle1';
+    $slot     = (int) $slot;
+    $id_field = ( 2 === $slot ) ? 'vehicle2_id' : 'vehicle1_id';
 
     $vid = isset( $booking->{$id_field} ) ? (int) $booking->{$id_field} : 0;
-    if ( $vid > 0 ) {
-        $p = get_post( $vid );
-        if ( $p && 'vehicle' === $p->post_type ) {
-            $label = bst_vehicle_display_title( $vid );
-            return '' !== $label ? $label : $p->post_title;
+    if ( $vid <= 0 ) {
+        return '';
+    }
+    $p = get_post( $vid );
+    if ( ! $p || 'vehicle' !== $p->post_type ) {
+        return '';
+    }
+    $label = bst_vehicle_display_title( $vid );
+    return '' !== $label ? $label : $p->post_title;
+}
+
+/**
+ * Vehicle upgrade amount from tour vehicle_pricing (class row vehicle_price_addition) for a linked Vehicle CPT.
+ *
+ * @param int $tour_id         Tour post ID.
+ * @param int $vehicle_post_id Vehicle CPT ID.
+ * @return float 0 if not linked on this tour or invalid.
+ */
+function bst_tour_vehicle_upgrade_amount( $tour_id, $vehicle_post_id ) {
+    $tour_id         = (int) $tour_id;
+    $vehicle_post_id = (int) $vehicle_post_id;
+    if ( $tour_id <= 0 || $vehicle_post_id <= 0 || ! function_exists( 'get_field' ) ) {
+        return 0.0;
+    }
+    $pricing = get_field( 'vehicle_pricing', $tour_id, false );
+    if ( empty( $pricing ) || ! is_array( $pricing ) ) {
+        return 0.0;
+    }
+    foreach ( $pricing as $row ) {
+        if ( ! is_array( $row ) ) {
+            continue;
+        }
+        $price_add = isset( $row['vehicle_price_addition'] ) ? floatval( $row['vehicle_price_addition'] ) : 0.0;
+        $nested    = array();
+        if ( function_exists( 'bst_vehicle_migration_get_nested_vehicle_rows' ) ) {
+            $nested = bst_vehicle_migration_get_nested_vehicle_rows( $row );
+        } elseif ( ! empty( $row['vehicles'] ) && is_array( $row['vehicles'] ) ) {
+            $nested = $row['vehicles'];
+        }
+        foreach ( $nested as $vrow ) {
+            if ( ! is_array( $vrow ) ) {
+                continue;
+            }
+            $linked_id = 0;
+            if ( function_exists( 'bst_vehicle_migration_row_linked_post_id' ) ) {
+                $linked_id = (int) bst_vehicle_migration_row_linked_post_id( $vrow );
+            } elseif ( isset( $vrow['vehicle_id'] ) ) {
+                $x = $vrow['vehicle_id'];
+                $linked_id = is_array( $x ) && isset( $x['ID'] ) ? (int) $x['ID'] : ( is_object( $x ) && isset( $x->ID ) ? (int) $x->ID : (int) $x );
+            }
+            if ( $linked_id === $vehicle_post_id ) {
+                return $price_add;
+            }
         }
     }
-    return isset( $booking->{$text_field} ) ? (string) $booking->{$text_field} : '';
+    return 0.0;
 }
 
 /**

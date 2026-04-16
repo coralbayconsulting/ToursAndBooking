@@ -425,8 +425,6 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
     $tour_date_text = '';
     $tour_package_text = '';
     $extension_added = '';
-    $extension_text = '';
-    $extension_date_text = '';
     $vehicle1 = '';
     $vehicle2 = '';
     $payment_method = '';
@@ -524,10 +522,6 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
     $tour_date_text = rgar($entry, '141');
     $tour_package_text = rgar($entry, '138');
     $extension_added = rgar($entry, '224');
-    $extension_text = rgar($entry, '225');
-    $extension_date_text = rgar($entry, '226');
-    $vehicle1 = rgar($entry, '140');
-    $vehicle2 = rgar($entry, '142');
     $tour_currency = rgar($entry, '223');
     
     // If tour fields are empty (GF10 uses different field numbers), get from booking
@@ -536,11 +530,15 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
         $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
         $tour_package_text = function_exists('bst_live_package_name') ? bst_live_package_name($booking->tour_package_id ?? 0) : '';
         $extension_added = !empty($booking->tour_extension_added) ? $booking->tour_extension_added : '';
-        $extension_text = !empty($booking->tour_extension_text) ? $booking->tour_extension_text : '';
-        $extension_date_text = !empty($booking->tour_extension_date_text) ? $booking->tour_extension_date_text : '';
-        $vehicle1 = !empty($booking->vehicle1) ? $booking->vehicle1 : '';
-        $vehicle2 = !empty($booking->vehicle2) ? $booking->vehicle2 : '';
         $tour_currency = $booking->tour_currency;
+    }
+
+    // Vehicles: only from booking Vehicle CPT ids (never GF snapshot text).
+    $vehicle1 = '';
+    $vehicle2 = '';
+    if ( $booking ) {
+        $vehicle1 = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 1 ) : '';
+        $vehicle2 = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 2 ) : '';
     }
     
     // Build guest name using helper
@@ -599,15 +597,24 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
     $html .= '<tr><td>Tour:</td>';
     $html .= '<td>' . esc_html($tour_display) . '</td></tr>';
     
-    // Extension (combined with dates)
-    if (!empty($extension_added) && !empty($extension_text)) {
-        // Strip price from extension text (remove anything in parentheses with € or $)
-        $extension_display = preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $extension_text);
-        if (!empty($extension_date_text)) {
-            $extension_display .= ' (' . $extension_date_text . ')';
+    // Extension: live tour ACF title + computed date range (not booking snapshot columns).
+    $extension_display_line = '';
+    if ( $booking && function_exists( 'bst_live_booking_extension_display_label' ) ) {
+        $extension_display_line = bst_live_booking_extension_display_label( $booking );
+    } elseif ( ! $booking && (int) rgar( $entry, 'form_id' ) === 9 && rgar( $entry, '224' ) ) {
+        $tid = (int) rgar( $entry, '149' );
+        if ( $tid > 0 && function_exists( 'bst_live_booking_extension_display_label' ) ) {
+            $stub = (object) array(
+                'tour_id'              => $tid,
+                'tour_date_id'         => rgar( $entry, '150' ),
+                'tour_extension_added' => 1,
+            );
+            $extension_display_line = bst_live_booking_extension_display_label( $stub );
         }
+    }
+    if ( ! empty( $extension_added ) && '' !== $extension_display_line ) {
         $html .= '<tr><td>Tour Extension:</td>';
-        $html .= '<td>' . esc_html($extension_display) . '</td></tr>';
+        $html .= '<td>' . esc_html( $extension_display_line ) . '</td></tr>';
     }
     
     // Package
@@ -2109,16 +2116,13 @@ function bst_booking_details_shortcode($atts) {
                         echo esc_html($tour_display); 
                     ?></td>
                 </tr>
-                <?php if ($has_extension && !empty($booking->tour_extension_text)): ?>
+                <?php
+                $bst_ext_lbl = function_exists( 'bst_live_booking_extension_display_label' ) ? bst_live_booking_extension_display_label( $booking ) : '';
+                ?>
+                <?php if ( $has_extension && $bst_ext_lbl !== '' ) : ?>
                 <tr>
                     <td class="label-col">Tour Extension:</td>
-                    <td class="value-col"><?php 
-                        $extension_display = preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->tour_extension_text);
-                        if (!empty($booking->tour_extension_date_text)) {
-                            $extension_display .= ' (' . $booking->tour_extension_date_text . ')';
-                        }
-                        echo esc_html($extension_display); 
-                    ?></td>
+                    <td class="value-col"><?php echo esc_html( $bst_ext_lbl ); ?></td>
                 </tr>
                 <?php endif; ?>
                 <tr>
@@ -2143,15 +2147,19 @@ function bst_booking_details_shortcode($atts) {
                     <td class="value-col"><?php echo esc_html($booking->bed_preference); ?></td>
                 </tr>
                 <?php endif; ?>
-                <?php if (!empty($booking->vehicle1)): ?>
+                <?php
+                $bst_v1_disp = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 1 ) : '';
+                $bst_v2_disp = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 2 ) : '';
+                ?>
+                <?php if ( $bst_v1_disp !== '' || $bst_v2_disp !== '' ) : ?>
                 <tr>
-                    <td class="label-col"><?php echo !empty($booking->vehicle2) ? 'Vehicles:' : 'Vehicle:'; ?></td>
-                    <td class="value-col"><?php 
-                        $vehicle_display = preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->vehicle1);
-                        if (!empty($booking->vehicle2)) {
-                            $vehicle_display .= ' / ' . preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->vehicle2);
+                    <td class="label-col"><?php echo $bst_v2_disp !== '' ? 'Vehicles:' : 'Vehicle:'; ?></td>
+                    <td class="value-col"><?php
+                        $vehicle_display = $bst_v1_disp;
+                        if ( $bst_v2_disp !== '' ) {
+                            $vehicle_display .= ( $vehicle_display !== '' ? ' / ' : '' ) . $bst_v2_disp;
                         }
-                        echo esc_html($vehicle_display);
+                        echo esc_html( $vehicle_display );
                     ?></td>
                 </tr>
                 <?php endif; ?>
@@ -2897,17 +2905,9 @@ function bst_booking_invoice_shortcode($atts) {
     $vehicle1_amount = floatval($booking->booking_vehicle_1_use_amount ?? 0);
     $vehicle2_amount = floatval($booking->booking_vehicle_2_use_amount ?? 0);
     
-    // Get vehicle names from booking record and strip prices
-    $vehicle1_name = !empty($booking->vehicle1) ? preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->vehicle1) : '';
-    $vehicle2_name = !empty($booking->vehicle2) ? preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->vehicle2) : '';
-    
-    // If vehicle has amount but no name, use default
-    if ($vehicle1_amount > 0 && empty($vehicle1_name)) {
-        $vehicle1_name = 'Mazda MX-5 manual';
-    }
-    if ($vehicle2_amount > 0 && empty($vehicle2_name)) {
-        $vehicle2_name = 'Mazda MX-5 manual';
-    }
+    // Vehicle names from Vehicle CPT ids only (no stored booking text, no placeholder defaults).
+    $vehicle1_name = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 1 ) : '';
+    $vehicle2_name = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 2 ) : '';
     
     // Use the pre-calculated tour package amount from booking (already accounts for payment discount)
     $tour_cost = floatval($booking->booking_tour_package_amount ?? 0);
@@ -4860,31 +4860,32 @@ function bst_generate_booking_status_html($booking, $encoded_id = '', $include_a
                         echo esc_html($tour_display); 
                     ?></td>
                 </tr>
-                <?php if ($has_extension && !empty($booking->tour_extension_text)): ?>
+                <?php
+                $bst_ext_lbl_b = function_exists( 'bst_live_booking_extension_display_label' ) ? bst_live_booking_extension_display_label( $booking ) : '';
+                ?>
+                <?php if ( $has_extension && $bst_ext_lbl_b !== '' ) : ?>
                 <tr>
                     <td>Tour Extension:</td>
-                    <td><?php 
-                        $extension_display = preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->tour_extension_text);
-                        if (!empty($booking->tour_extension_date_text)) {
-                            $extension_display .= ' (' . $booking->tour_extension_date_text . ')';
-                        }
-                        echo esc_html($extension_display); 
-                    ?></td>
+                    <td><?php echo esc_html( $bst_ext_lbl_b ); ?></td>
                 </tr>
                 <?php endif; ?>
                 <tr>
                     <td>Package:</td>
                     <td><?php echo esc_html(function_exists('bst_live_package_name') ? bst_live_package_name($booking->tour_package_id ?? 0) : ''); ?></td>
                 </tr>
-                <?php if (!empty($booking->vehicle1)): ?>
+                <?php
+                $bst_v1b = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 1 ) : '';
+                $bst_v2b = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 2 ) : '';
+                ?>
+                <?php if ( $bst_v1b !== '' || $bst_v2b !== '' ) : ?>
                 <tr>
-                    <td><?php echo !empty($booking->vehicle2) ? 'Vehicles:' : 'Vehicle:'; ?></td>
-                    <td><?php 
-                        $vehicle_display = preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->vehicle1);
-                        if (!empty($booking->vehicle2)) {
-                            $vehicle_display .= ' / ' . preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->vehicle2);
+                    <td><?php echo $bst_v2b !== '' ? 'Vehicles:' : 'Vehicle:'; ?></td>
+                    <td><?php
+                        $vehicle_display = $bst_v1b;
+                        if ( $bst_v2b !== '' ) {
+                            $vehicle_display .= ( $vehicle_display !== '' ? ' / ' : '' ) . $bst_v2b;
                         }
-                        echo esc_html($vehicle_display);
+                        echo esc_html( $vehicle_display );
                     ?></td>
                 </tr>
                 <?php endif; ?>
@@ -5288,40 +5289,45 @@ function bst_generate_entry_summary_table($entry_id, $include_admin_links = fals
         $html .= '<td>' . esc_html($tour_display) . '</td></tr>';
     }
     
-    // Get extension and vehicle information
-    // For form 10, get from original form 9 entry
+    // Extension from tour ACF + tour-date; vehicles from booking CPT ids.
+    $vehicle1 = '';
+    $vehicle2 = '';
+    $extension_display = '';
     if ($form_id == 10 && $booking) {
-        $original_entry = GFAPI::get_entry($booking->booking_entry_id);
-        if ($original_entry && is_array($original_entry)) {
-            $extension_added = rgar($original_entry, '224');
-            $extension_text = rgar($original_entry, '225');
-            $extension_date_text = rgar($original_entry, '226');
-            $vehicle1 = rgar($original_entry, '140');
-            $vehicle2 = rgar($original_entry, '142');
-        } else {
-            $extension_added = '';
-            $extension_text = '';
-            $extension_date_text = '';
-            $vehicle1 = '';
-            $vehicle2 = '';
+        $vehicle1 = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 1 ) : '';
+        $vehicle2 = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 2 ) : '';
+        if ( function_exists( 'bst_live_booking_extension_display_label' ) ) {
+            $extension_display = bst_live_booking_extension_display_label( $booking );
         }
     } else {
-        $extension_added = rgar($entry, '224');
-        $extension_text = rgar($entry, '225');
-        $extension_date_text = rgar($entry, '226');
-        $vehicle1 = rgar($entry, '140');
-        $vehicle2 = rgar($entry, '142');
-    }
-    
-    // Tour Extension (if added) - show right after tour
-    if (!empty($extension_added) && !empty($extension_text)) {
-        // Strip prices from extension text but keep dates
-        $extension_display = preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $extension_text);
-        if (!empty($extension_date_text)) {
-            $extension_display .= ' (' . $extension_date_text . ')';
+        $booking_for_veh = null;
+        if ( (int) $form_id === 9 ) {
+            $booking_for_veh = $wpdb->get_row(
+                $wpdb->prepare(
+                    "SELECT * FROM {$wpdb->prefix}bst_tour_booking WHERE booking_entry_id = %d LIMIT 1",
+                    intval( $entry_id )
+                )
+            );
         }
+        if ( $booking_for_veh ) {
+            $vehicle1 = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking_for_veh, 1 ) : '';
+            $vehicle2 = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking_for_veh, 2 ) : '';
+            if ( function_exists( 'bst_live_booking_extension_display_label' ) ) {
+                $extension_display = bst_live_booking_extension_display_label( $booking_for_veh );
+            }
+        } elseif ( (int) $form_id === 9 && rgar( $entry, '224' ) && (int) rgar( $entry, '149' ) > 0 && function_exists( 'bst_live_booking_extension_display_label' ) ) {
+            $stub = (object) array(
+                'tour_id'              => (int) rgar( $entry, '149' ),
+                'tour_date_id'         => rgar( $entry, '150' ),
+                'tour_extension_added' => 1,
+            );
+            $extension_display = bst_live_booking_extension_display_label( $stub );
+        }
+    }
+
+    if ( '' !== $extension_display ) {
         $html .= '<tr><td>Tour Extension:</td>';
-        $html .= '<td>' . esc_html($extension_display) . '</td></tr>';
+        $html .= '<td>' . esc_html( $extension_display ) . '</td></tr>';
     }
     
     // Package (only if available)

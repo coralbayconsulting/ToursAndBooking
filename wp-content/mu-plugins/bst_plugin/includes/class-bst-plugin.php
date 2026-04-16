@@ -123,6 +123,9 @@ class BST_Plugin {
         add_action('wp_ajax_nopriv_bst_create_waiting_list_booking', 'bst_create_waiting_list_booking');
         add_action('wp_ajax_bst_delete_booking', 'bst_delete_booking');
         add_action('wp_ajax_bst_recalculate_invoice_data', 'bst_recalculate_invoice_data');
+        add_action('wp_ajax_bst_extension_addon_amount', 'bst_ajax_extension_addon_amount');
+        add_action('wp_ajax_nopriv_bst_extension_addon_amount', 'bst_ajax_extension_addon_amount');
+        add_action('wp_ajax_bst_booking_extension_addon_amount', 'bst_ajax_extension_addon_amount');
         add_action('wp_ajax_bst_get_tour_dates', array($this, 'bst_get_tour_dates'));
         add_action('wp_ajax_bst_get_tour_packages', array($this, 'bst_get_tour_packages')); 
         add_action('wp_ajax_bst_get_package_config', array($this, 'bst_get_package_config')); 
@@ -749,6 +752,10 @@ class BST_Plugin {
         // Set page title for admin header
         global $title;
         $title = $booking ? 'Edit Booking #' . $booking->id : 'Add Booking';
+
+        if ($booking && function_exists('bst_booking_extension_addon_amount')) {
+            $booking->bst_extension_addon_amount = bst_booking_extension_addon_amount($booking);
+        }
         
         include BST_PLUGIN_DIR . 'templates/tour-bookings-edit.php';
     }

@@ -1071,8 +1071,11 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 			$results[] = 'No nested vehicle rows found under vehicle_pricing (unexpected). Check ACF field names/sync.';
 		}
 
-		$table    = $wpdb->prefix . 'bst_tour_booking';
-		$bookings = $wpdb->get_results( "SELECT id, tour_id, vehicle1, vehicle2, vehicle1_id, vehicle2_id FROM {$table}", ARRAY_A );
+		// Booking vehicle ids: whenever legacy label text is non-empty, resolve find-or-create from that string
+		// (canonical key + Vehicle CPT). Re-runs replace wrong non-zero ids so migration does not depend on a
+		// separate remap pass for bookings that already had stale ids. Empty label + force_reset clears id.
+		$table     = $wpdb->prefix . 'bst_tour_booking';
+		$bookings  = $wpdb->get_results( "SELECT id, tour_id, vehicle1, vehicle2, vehicle1_id, vehicle2_id FROM {$table}", ARRAY_A );
 		$b_updated = 0;
 
 		foreach ( $bookings as $b ) {
@@ -1086,7 +1089,7 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 			$old1 = isset( $b['vehicle1_id'] ) ? (int) $b['vehicle1_id'] : 0;
 			$old2 = isset( $b['vehicle2_id'] ) ? (int) $b['vehicle2_id'] : 0;
 
-			$fill1 = $force_reset || ( $v1 !== '' && ( ! isset( $b['vehicle1_id'] ) || (int) $b['vehicle1_id'] === 0 ) );
+			$fill1 = $force_reset || ( $v1 !== '' );
 			if ( $fill1 ) {
 				if ( $v1 !== '' ) {
 					$base = function_exists( 'bst_vehicle_exact_text_key' ) ? bst_vehicle_exact_text_key( $v1 ) : trim( (string) $v1 );
@@ -1094,18 +1097,16 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 					if ( $vid <= 0 && $base !== '' ) {
 						$vid = bst_vehicle_migration_create_vehicle( $base, $tour_id > 0 ? $tour_id : 0, $norm_to_id, $vehicles_by_id );
 					}
-					if ( $force_reset || $vid > 0 ) {
-						$new1 = $vid > 0 ? $vid : 0;
-						if ( $new1 !== $old1 ) {
-							$u['vehicle1_id'] = $new1;
-						}
+					$new1 = $vid > 0 ? $vid : 0;
+					if ( $new1 !== $old1 ) {
+						$u['vehicle1_id'] = $new1;
 					}
 				} elseif ( $force_reset && $old1 !== 0 ) {
 					$u['vehicle1_id'] = 0;
 				}
 			}
 
-			$fill2 = $force_reset || ( $v2 !== '' && ( ! isset( $b['vehicle2_id'] ) || (int) $b['vehicle2_id'] === 0 ) );
+			$fill2 = $force_reset || ( $v2 !== '' );
 			if ( $fill2 ) {
 				if ( $v2 !== '' ) {
 					$base = function_exists( 'bst_vehicle_exact_text_key' ) ? bst_vehicle_exact_text_key( $v2 ) : trim( (string) $v2 );
@@ -1113,11 +1114,9 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 					if ( $vid <= 0 && $base !== '' ) {
 						$vid = bst_vehicle_migration_create_vehicle( $base, $tour_id > 0 ? $tour_id : 0, $norm_to_id, $vehicles_by_id );
 					}
-					if ( $force_reset || $vid > 0 ) {
-						$new2 = $vid > 0 ? $vid : 0;
-						if ( $new2 !== $old2 ) {
-							$u['vehicle2_id'] = $new2;
-						}
+					$new2 = $vid > 0 ? $vid : 0;
+					if ( $new2 !== $old2 ) {
+						$u['vehicle2_id'] = $new2;
 					}
 				} elseif ( $force_reset && $old2 !== 0 ) {
 					$u['vehicle2_id'] = 0;

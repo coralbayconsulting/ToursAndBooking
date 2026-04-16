@@ -1502,13 +1502,13 @@ jQuery(document).ready(function($) {
                             
                             // Update the tour price field in the current form to reflect the new price
                             var currency = window.bstBookingData?.tour_currency || 'EUR';
-                            var currencySymbol = currency === 'USD' ? '$' : '€';
-                            $tile.find('#tour_price').val(currencySymbol + currentTourPrice.toFixed(2));
+                            var formatted = bstFormatMoneyTourPriceDisplay(currentTourPrice, currency);
+                            $tile.find('#tour_price').val(formatted);
                             
                             // Update financials tile display if visible
                             updateFinancialsDisplayAfterPriceChange(currentTourPrice);
                             
-                            showMessage('Tour price updated to ' + currencySymbol + currentTourPrice.toFixed(2), 'success', true);
+                            showMessage('Tour price updated to ' + formatted, 'success', true);
                         }
                         // Proceed with save regardless of price update result
                         callback();
@@ -2813,6 +2813,10 @@ jQuery(document).ready(function($) {
                 }
                 
                 var value = $field.val();
+
+                if (name === 'tour_package_id' && value) {
+                    value = bstPackageOptionNumericId(value);
+                }
                 
                 // Special handling for checkboxes
                 if ($field.attr('type') === 'checkbox') {
@@ -2920,6 +2924,16 @@ jQuery(document).ready(function($) {
         
         return data;
     }
+
+    /** Package <option> value may be "id|numericPrice" for admin pricing; server expects numeric id only. */
+    function bstPackageOptionNumericId(val) {
+        if (val === undefined || val === null || val === '') {
+            return '';
+        }
+        var s = String(val);
+        var i = s.indexOf('|');
+        return i >= 0 ? s.substring(0, i) : s;
+    }
     
     function generateSystemEditForm() {
         var booking = window.bstBookingData || {};
@@ -3003,6 +3017,19 @@ jQuery(document).ready(function($) {
         
         return optionsHtml;
     }
+
+    /** Display string for #tour_price (symbol + grouped decimals); keeps collectFormData parsing working. */
+    function bstFormatMoneyTourPriceDisplay(amount, currencyCode) {
+        if (amount === undefined || amount === null || amount === '' || amount === 'TBD') {
+            return 'TBD';
+        }
+        var n = typeof amount === 'number' ? amount : parseFloat(String(amount).replace(/[^0-9.\-]/g, ''));
+        if (isNaN(n) || n === 0) {
+            return 'TBD';
+        }
+        var sym = (currencyCode === 'USD') ? '$' : '€';
+        return sym + ' ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
     
     function generateTourPackageEditForm() {
         var booking = window.bstBookingData || {};
@@ -3010,7 +3037,7 @@ jQuery(document).ready(function($) {
         
         var tourPriceField = '<div class="edit-form-field">' +
                 '<label for="tour_price">Tour Price</label>' +
-                '<input type="text" id="tour_price" name="tour_price" value="' + (booking.tour_price || 'TBD') + '" readonly style="text-align: right; background: #f5f5f5;">' +
+                '<input type="text" id="tour_price" name="tour_price" value="' + bstFormatMoneyTourPriceDisplay(booking.tour_price, currency) + '" readonly style="text-align: right; background: #f5f5f5;">' +
             '</div>';
         
         var formHtml = '<div class="edit-form-section">' +
@@ -3080,17 +3107,10 @@ jQuery(document).ready(function($) {
                 showExtension = true;
             }
             
-            // Calculate extension price - use saved price if available (includes vehicle upcharge)
-            if (booking.tour_extension_text) {
-                // Parse price from saved extension text (format: "Title (+€price)" or "Title (+$price)")
-                var priceMatch = booking.tour_extension_text.match(/\+[€$]\s?(\d+[,.]?\d*)/);
-                if (priceMatch) {
-                    extensionPrice = parseFloat(priceMatch[1].replace(/,/g, '')) || 0;
-                }
-            }
-            
-            // If no saved price, calculate from package pricing
-            if (!extensionPrice && window.tourExtensionSettings.pricing && booking.tour_package_id) {
+            // Server-computed add-on (tour ACF + vehicle CPT ids); fallback to package row only if missing.
+            if (booking.bst_extension_addon_amount !== undefined && booking.bst_extension_addon_amount !== null) {
+                extensionPrice = parseFloat(booking.bst_extension_addon_amount) || 0;
+            } else if (window.tourExtensionSettings.pricing && booking.tour_package_id) {
                 var packageKey = 'package_' + booking.tour_package_id;
                 extensionPrice = parseFloat(window.tourExtensionSettings.pricing[packageKey]) || 0;
             }
@@ -3130,15 +3150,11 @@ jQuery(document).ready(function($) {
             
             // Format label with dates and price in parentheses
             extensionLabel = 'Add ' + extensionTitle;
-            var extensionTextValue = extensionTitle + ' (+' + formattedPrice + ')'; // Title with price for tour_extension_text
-            var extensionDateTextValue = ''; // Dates with year only for tour_extension_date_text
             if (dateText) {
                 var extYear = extEndDate.getFullYear();
                 extensionLabel += ' (' + dateText + ' ' + extYear + ' - ' + formattedPrice + ')';
-                extensionDateTextValue = dateText + ' ' + extYear;
             } else {
                 extensionLabel += ' (' + formattedPrice + ')';
-                extensionDateTextValue = '';
             }
         }
         
@@ -3152,8 +3168,6 @@ jQuery(document).ready(function($) {
                             '<input type="checkbox" id="tour_extension_added" name="tour_extension_added" value="1" data-price="' + extensionPrice + '"' + extensionChecked + '> ' +
                             extensionLabel +
                         '</label>' +
-                        '<input type="hidden" id="tour_extension_text" name="tour_extension_text" value="' + (extensionTextValue || 'Extension') + '">' +
-                        '<input type="hidden" id="tour_extension_date_text" name="tour_extension_date_text" value="' + (extensionDateTextValue || '') + '">' +
                     '</div>' +
                 '</div>' +
             '</div>';
@@ -3389,8 +3403,10 @@ jQuery(document).ready(function($) {
                     response.data.packages.forEach(function(pkg) {
                         var selected = booking.tour_package_id == pkg['data.id'] ? ' selected' : '';
                         var packageText = pkg.text;
+                        var rawPrice = (pkg.value !== undefined && pkg.value !== null) ? String(pkg.value) : '';
+                        var optVal = pkg['data.id'] + '|' + rawPrice;
                         
-                        options += '<option value="' + pkg['data.id'] + '"' + selected + '>' + packageText + '</option>';
+                        options += '<option value="' + optVal + '"' + selected + '>' + packageText + '</option>';
                     });
                     $packageSelect.html(options);
                     
@@ -3543,29 +3559,23 @@ jQuery(document).ready(function($) {
                         // Add change handlers for vehicle selection
                         $vehicle1Select.off('change.vehiclePrice').on('change.vehiclePrice', function() {
                             updateVehicleLimitedNotes($tile);
-                            // First update the extension price/label with new motorcycle upcharge
-                            updateExtensionPriceAndLabel($tile);
-                            // Then recalculate complete tour price from scratch
-                            calculateCompleteTourPrice($tile);
+                            updateExtensionPriceAndLabel($tile, function() {
+                                calculateCompleteTourPrice($tile);
+                            });
                         });
                         
                         $vehicle2Select.off('change.vehiclePrice').on('change.vehiclePrice', function() {
                             updateVehicleLimitedNotes($tile);
-                            // First update the extension price/label with new motorcycle upcharge
-                            updateExtensionPriceAndLabel($tile);
-                            // Then recalculate complete tour price from scratch
-                            calculateCompleteTourPrice($tile);
+                            updateExtensionPriceAndLabel($tile, function() {
+                                calculateCompleteTourPrice($tile);
+                            });
                         });
                         
                         updateVehicleLimitedNotes($tile);
                         
-                        updateExtensionPriceAndLabel($tile);
-                        // After programmatic .val(), defer so :selected + data-price apply before totaling.
-                        if ($vehicle1Select.val() || (vehicleChoices >= 2 && $vehicle2Select.val())) {
-                            setTimeout(function() {
-                                calculateCompleteTourPrice($tile);
-                            }, 0);
-                        }
+                        updateExtensionPriceAndLabel($tile, function() {
+                            calculateCompleteTourPrice($tile);
+                        });
                     }
                 } else {
                     clearVehicles($tile);
@@ -3592,18 +3602,18 @@ jQuery(document).ready(function($) {
         
         // Don't modify visibility - respect the initial HTML state
         
-        // Recalculate tour price without vehicle costs (same display rules as updateTourPrice)
-        var baseTourPrice = parseFloat(window.bstBookingData?.tour_price) || 0;
-        if (baseTourPrice > 0) {
-            var currency = window.bstBookingData?.tour_currency || 'EUR';
-            var currencySymbol = currency === 'USD' ? '$' : '€';
-            $tile.find('#tour_price').val(currencySymbol + ' ' + baseTourPrice.toFixed(2));
+        // Use full calculator (base + extension from data-price) to avoid base-only flash before async refresh.
+        calculateCompleteTourPrice($tile);
+        var $ext = $tile.find('#tour_extension_added');
+        if ($ext.length && $ext.is(':checked')) {
+            updateExtensionPriceAndLabel($tile, function() {
+                calculateCompleteTourPrice($tile);
+            });
         }
     }
     
     function updateTourPrice($tile, $selectedPackageOption) {
         var $tourPriceField = $tile.find('#tour_price');
-        var currency = window.bstBookingData?.tour_currency || 'EUR';
         
         if (!$selectedPackageOption || !$selectedPackageOption.val()) {
             $tourPriceField.val('TBD');
@@ -3634,18 +3644,14 @@ jQuery(document).ready(function($) {
         }
         
         if (price && !isNaN(price)) {
-            // Get the booking currency or default to EUR
-            var currencySymbol = currency === 'USD' ? '$' : '€';
-            
             // Store base tour price in global booking data (package only; vehicle/extension layered in calculateCompleteTourPrice)
             if (window.bstBookingData) {
                 window.bstBookingData.tour_price = price.toFixed(2);
             }
             
-            // Show base price; vehicle/extension totals are applied in calculateCompleteTourPrice when
-            // loadVehicles finishes (async). Do not setTimeout here — a fixed delay often fires AFTER
-            // loadVehicles and overwrites the correct price with base-only.
-            $tourPriceField.val(currencySymbol + ' ' + price.toFixed(2));
+            // Show base + current vehicle upgrades + extension (from checkbox data-price) in one step.
+            // Writing package-only here caused a visible flicker: saved total → base-only → full after async.
+            calculateCompleteTourPrice($tile);
         } else {
             $tourPriceField.val('TBD');
         }
@@ -3656,7 +3662,6 @@ jQuery(document).ready(function($) {
     // Central function to calculate complete tour price from scratch
     function calculateCompleteTourPrice($tile) {
         var currency = window.bstBookingData?.tour_currency || 'EUR';
-        var currencySymbol = currency === 'USD' ? '$' : '€';
         var $tourPriceField = $tile.find('#tour_price');
         
         // Get base tour price from booking data (package price only)
@@ -3683,8 +3688,8 @@ jQuery(document).ready(function($) {
             totalPrice += extensionPrice;
         }
         
-        // Update display
-        $tourPriceField.val(currencySymbol + ' ' + totalPrice.toFixed(2));
+        // Update display (same formatting as initial load / bstFormatMoneyTourPriceDisplay)
+        $tourPriceField.val(bstFormatMoneyTourPriceDisplay(totalPrice, currency));
         
         // Update global booking data
         if (window.bstBookingData) {
@@ -3710,118 +3715,116 @@ jQuery(document).ready(function($) {
         return isNaN(n) ? 0 : n;
     }
     
-    function updateExtensionPriceAndLabel($tile) {
+    function updateExtensionPriceAndLabel($tile, onDone) {
+        onDone = typeof onDone === 'function' ? onDone : function() {};
         var $extensionCheckbox = $tile.find('#tour_extension_added');
-        
-        // Only proceed if extension checkbox exists
         if ($extensionCheckbox.length === 0) {
+            onDone();
             return;
         }
-        
-        // Get extension settings
         if (!window.tourExtensionSettings || !window.tourExtensionSettings.pricing) {
+            onDone();
             return;
         }
-        
         var booking = window.bstBookingData || {};
-        
-        // Get the selected package ID
-        var packageId = booking.tour_package_id || $tile.find('#tour_package_id').val();
-        if (!packageId) {
+        // Prefer current form selection — booking.* is stale until the tile is saved.
+        var packageId = bstPackageOptionNumericId($tile.find('#tour_package_id').val() || booking.tour_package_id);
+        var tourId = $tile.find('#tour_id').val() || booking.tour_id;
+        if (!packageId || !tourId) {
+            onDone();
             return;
         }
-        
-        // Get base extension price for this package
-        var packageKey = 'package_' + packageId;
-        var extensionPrice = parseFloat(window.tourExtensionSettings.pricing[packageKey]) || 0;
-        
-        // Calculate vehicle upcharge for extension
-        var extensionDays = parseInt(window.tourExtensionSettings.extensionDays) || 0;
-        var adminDrivingDays = parseFloat(window.tourExtensionSettings.adminVehicleDrivingDays) || 0;
-        
-        if (adminDrivingDays > 0 && extensionDays > 0) {
-            var vehicle1Upcharge = bstVehicleUpgradeFromOption($tile.find('#vehicle1').find('option:selected'));
-            if (vehicle1Upcharge > 0) {
-                extensionPrice += Math.round(vehicle1Upcharge / adminDrivingDays * extensionDays);
+        var v1 = parseInt(String($tile.find('#vehicle1').val() || '0'), 10) || 0;
+        var v2 = parseInt(String($tile.find('#vehicle2').val() || '0'), 10) || 0;
+
+        function applyExtensionLabel(extensionPrice) {
+            extensionPrice = Math.round(parseFloat(extensionPrice) || 0);
+            $extensionCheckbox.data('price', extensionPrice);
+            $extensionCheckbox.attr('data-price', extensionPrice);
+            var extensionDays = parseInt(window.tourExtensionSettings.extensionDays) || 0;
+            var tourCurrencyCode = booking.tour_currency || 'EUR';
+            var symbol = (tourCurrencyCode === 'USD') ? '$' : '€';
+            var extensionTitle = window.tourExtensionSettings.title || 'Extension';
+            var formattedPrice = symbol + extensionPrice.toFixed(0);
+            var dateText = '';
+            var tourDateEndDate = window.tourExtensionSettings.tourDateEndDate;
+            var extEndDate = null;
+            if (tourDateEndDate && extensionDays > 0) {
+                var tourEndDateStr = String(tourDateEndDate);
+                var tourEndYear = parseInt(tourEndDateStr.substring(0, 4));
+                var tourEndMonth = parseInt(tourEndDateStr.substring(4, 6));
+                var tourEndDay = parseInt(tourEndDateStr.substring(6, 8));
+                var extStartDate = new Date(tourEndYear, tourEndMonth - 1, tourEndDay);
+                extEndDate = new Date(extStartDate);
+                extEndDate.setDate(extEndDate.getDate() + extensionDays);
+                var startMonth = extStartDate.toLocaleDateString('en-US', { month: 'short' });
+                var endMonth = extEndDate.toLocaleDateString('en-US', { month: 'short' });
+                var startDay = extStartDate.getDate();
+                var endDay = extEndDate.getDate();
+                if (startMonth === endMonth) {
+                    dateText = startDay + '-' + endDay + ' ' + endMonth;
+                } else {
+                    dateText = startDay + ' ' + startMonth + ' - ' + endDay + ' ' + endMonth;
+                }
             }
-            var vehicle2Upcharge = bstVehicleUpgradeFromOption($tile.find('#vehicle2').find('option:selected'));
-            if (vehicle2Upcharge > 0) {
-                extensionPrice += Math.round(vehicle2Upcharge / adminDrivingDays * extensionDays);
-            }
-        }
-        
-        // Round to nearest integer
-        extensionPrice = Math.round(extensionPrice);
-        
-        // Update the data-price attribute
-        $extensionCheckbox.data('price', extensionPrice);
-        $extensionCheckbox.attr('data-price', extensionPrice);
-        
-        // Format the label text with dates and price like single-tour
-        var tourCurrencyCode = booking.tour_currency || 'EUR';
-        var symbol = (tourCurrencyCode === 'USD') ? '$' : '€';
-        var extensionTitle = window.tourExtensionSettings.title || 'Extension';
-        var formattedPrice = symbol + extensionPrice.toFixed(0);
-        
-        // Calculate extension dates if available
-        var dateText = '';
-        var tourDateEndDate = window.tourExtensionSettings.tourDateEndDate;
-        
-        if (tourDateEndDate && extensionDays > 0) {
-            var tourEndDateStr = String(tourDateEndDate);
-            var tourEndYear = parseInt(tourEndDateStr.substring(0, 4));
-            var tourEndMonth = parseInt(tourEndDateStr.substring(4, 6));
-            var tourEndDay = parseInt(tourEndDateStr.substring(6, 8));
-            
-            var extStartDate = new Date(tourEndYear, tourEndMonth - 1, tourEndDay);
-            var extEndDate = new Date(extStartDate);
-            extEndDate.setDate(extEndDate.getDate() + extensionDays);
-            
-            var startMonth = extStartDate.toLocaleDateString('en-US', { month: 'short' });
-            var endMonth = extEndDate.toLocaleDateString('en-US', { month: 'short' });
-            var startDay = extStartDate.getDate();
-            var endDay = extEndDate.getDate();
-            
-            if (startMonth === endMonth) {
-                dateText = startDay + '-' + endDay + ' ' + endMonth;
+            var newLabelText = 'Add ' + extensionTitle;
+            if (dateText && extEndDate) {
+                var extYear = extEndDate.getFullYear();
+                newLabelText += ' (' + dateText + ' ' + extYear + ' - ' + formattedPrice + ')';
             } else {
-                dateText = startDay + ' ' + startMonth + ' - ' + endDay + ' ' + endMonth;
+                newLabelText += ' (' + formattedPrice + ')';
+            }
+            var $label = $extensionCheckbox.closest('label');
+            if ($label.length > 0) {
+                $label.contents().filter(function() {
+                    return this.nodeType === 3;
+                }).remove();
+                $label.append(' ' + newLabelText);
             }
         }
-        
-        // Format label with dates and price in parentheses
-        var newLabelText = 'Add ' + extensionTitle;
-        var extensionTextValue = extensionTitle + ' (+' + formattedPrice + ')'; // Title with price for tour_extension_text
-        var extensionDateTextValue = ''; // Dates with year only for tour_extension_date_text
-        if (dateText) {
-            var extYear = extEndDate.getFullYear();
-            newLabelText += ' (' + dateText + ' ' + extYear + ' - ' + formattedPrice + ')';
-            extensionDateTextValue = dateText + ' ' + extYear;
-        } else {
-            newLabelText += ' (' + formattedPrice + ')';
-            extensionDateTextValue = '';
+
+        function fallbackClientExtensionAmount() {
+            var packageKey = 'package_' + packageId;
+            var extensionPrice = parseFloat(window.tourExtensionSettings.pricing[packageKey]) || 0;
+            var extensionDays = parseInt(window.tourExtensionSettings.extensionDays) || 0;
+            var adminDrivingDays = parseFloat(window.tourExtensionSettings.adminVehicleDrivingDays) || 0;
+            if (adminDrivingDays > 0 && extensionDays > 0) {
+                var vehicle1Upcharge = bstVehicleUpgradeFromOption($tile.find('#vehicle1').find('option:selected'));
+                if (vehicle1Upcharge > 0) {
+                    extensionPrice += Math.round(vehicle1Upcharge / adminDrivingDays * extensionDays);
+                }
+                var vehicle2Upcharge = bstVehicleUpgradeFromOption($tile.find('#vehicle2').find('option:selected'));
+                if (vehicle2Upcharge > 0) {
+                    extensionPrice += Math.round(vehicle2Upcharge / adminDrivingDays * extensionDays);
+                }
+            }
+            return Math.round(extensionPrice);
         }
-        
-        // Update the hidden fields with the formatted values
-        $tile.find('#tour_extension_text').val(extensionTextValue);
-        $tile.find('#tour_extension_date_text').val(extensionDateTextValue);
-        
-        // Find the label element and update only the text node (preserve the checkbox and its event handlers)
-        var $label = $extensionCheckbox.closest('label');
-        if ($label.length > 0) {
-            // Get all text nodes and replace them with the new label
-            // This preserves the checkbox element and its event handlers
-            $label.contents().filter(function() {
-                return this.nodeType === 3; // Text node
-            }).remove();
-            
-            // Add the new label text after the checkbox
-            $label.append(' ' + newLabelText);
-        }
+
+        jQuery.ajax({
+            url: window.ajaxurl,
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'bst_extension_addon_amount',
+                nonce: window.bstTourBookingsNonce,
+                tour_id: tourId,
+                tour_package_id: packageId,
+                vehicle1_id: v1,
+                vehicle2_id: v2
+            }
+        }).done(function(res) {
+            var amt = (res && res.success && res.data && res.data.amount !== undefined) ? parseFloat(res.data.amount) : fallbackClientExtensionAmount();
+            applyExtensionLabel(amt);
+        }).fail(function() {
+            applyExtensionLabel(fallbackClientExtensionAmount());
+        }).always(function() {
+            onDone();
+        });
     }
     
     function updatePackageDetails($tile, $selectedPackageOption) {
-        var packageId = $selectedPackageOption.val();
+        var packageId = bstPackageOptionNumericId($selectedPackageOption.val());
         
         // Fetch package details from WordPress options via AJAX
         $.ajax({
@@ -3952,6 +3955,11 @@ jQuery(document).ready(function($) {
         // Re-populate vehicles after showing/hiding fields
         if (vehicleChoices > 0 && tourId && packageId) {
             loadVehicles($tile, tourId, packageId);
+        } else if (tourId && packageId) {
+            // No vehicle UI: extension amount still depends on package (and tour); refresh label/data-price and total.
+            updateExtensionPriceAndLabel($tile, function() {
+                calculateCompleteTourPrice($tile);
+            });
         }
     }
     

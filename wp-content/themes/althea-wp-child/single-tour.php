@@ -720,6 +720,13 @@ if (is_singular('tour')) {
                     extensionDays: <?php echo json_encode($extension_days); ?>,
                     adminVehicleDrivingDays: <?php echo json_encode($admin_vehicle_driving_days); ?>
                 };
+
+                // Canonical extension add-on (same PHP as admin booking edit; no booking row required)
+                window.bstExtensionAddonAjax = {
+                    url: <?php echo json_encode( admin_url( 'admin-ajax.php' ) ); ?>,
+                    nonce: <?php echo json_encode( wp_create_nonce( 'bst_extension_addon' ) ); ?>,
+                    tourId: <?php echo (int) $tourid; ?>
+                };
                 
                 // Pass tour dates with extension info to JavaScript
                 window.tourDatesData = <?php echo json_encode($all_dates); ?>;

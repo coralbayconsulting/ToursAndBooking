@@ -372,8 +372,8 @@ function bst_export_bookings_excel_handler() {
             $live_tour_date_text,
             $booking->tour_package_id,
             $live_package_text,
-            $booking->vehicle1,
-            $booking->vehicle2,
+            function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 1 ) : '',
+            function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 2 ) : '',
             $booking->participant_sex ?? '',
             $booking->sharing_preference ?? '',
             $booking->bed_preference ?? '',
@@ -521,10 +521,12 @@ function bst_write_commission_booking_row($output, $booking, $usd_rate) {
         $package_label = bst_export_live_package_name( $booking->tour_package_id );
         $tour = $tour_label . ($paren ? ' (' . $paren . ')' : '') . ' - ' . $package_label;
         
-        // Build Vehicles field with + delimiter
-        $vehicles = trim($booking->vehicle1 ?? '');
-        if (!empty($booking->vehicle2)) {
-            $vehicles .= ($vehicles ? ' + ' : '') . trim($booking->vehicle2);
+        // Build Vehicles field from Vehicle CPT ids only.
+        $v1e = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 1 ) ) : '';
+        $v2e = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 2 ) ) : '';
+        $vehicles = $v1e;
+        if ( $v2e !== '' ) {
+            $vehicles .= ( $vehicles !== '' ? ' + ' : '' ) . $v2e;
         }
         
         // Build How Heard field with : delimiter when other is present
@@ -1829,11 +1831,8 @@ function bst_export_vehicle_list_csv($output, $bookings, $tour_date_id) {
         $row[] = bst_export_live_package_name( $booking->tour_package_id );
         $row[] = !empty($booking->package_vehicles) ? $booking->package_vehicles : '';
         
-        // Strip pricing from vehicle names (remove last set of parentheses)
-        $vehicle1 = !empty($booking->vehicle1) ? preg_replace('/\s*\([^)]*\)\s*$/', '', $booking->vehicle1) : '';
-        $vehicle2 = !empty($booking->vehicle2) ? preg_replace('/\s*\([^)]*\)\s*$/', '', $booking->vehicle2) : '';
-        $vehicle1 = trim($vehicle1);
-        $vehicle2 = trim($vehicle2);
+        $vehicle1 = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 1 ) ) : '';
+        $vehicle2 = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 2 ) ) : '';
         
         $row[] = $vehicle1;
         $row[] = $vehicle2;

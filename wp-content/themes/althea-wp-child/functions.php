@@ -45,7 +45,7 @@ add_action('send_headers', 'add_permissions_policy_header');
 // Enqueue and localize the script
 function enqueue_single_tour_script() {
     if (is_singular('tour')) {
-        wp_enqueue_script('single-tour-script', get_stylesheet_directory_uri() . '/single-tour.js', array('jquery'), '1.1.18', true);
+        wp_enqueue_script('single-tour-script', get_stylesheet_directory_uri() . '/single-tour.js', array('jquery'), '1.1.19', true);
         wp_localize_script('single-tour-script', 'ajax_object', array(
             'ajaxurl' => admin_url('admin-ajax.php'),
             'auto_refresh_interval' => get_option('bst_auto_refresh_interval', 15)

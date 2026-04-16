@@ -197,6 +197,151 @@ function bst_live_booking_tour_display( $booking ) {
     return $out;
 }
 
+/**
+ * Tour extension title from Tour ACF (`extension_title`) when extension is offered — not booking snapshot text.
+ *
+ * @param int $tour_id Tour post ID.
+ * @return string
+ */
+function bst_live_extension_title_for_tour( $tour_id ) {
+	$tour_id = (int) $tour_id;
+	if ( $tour_id <= 0 || ! function_exists( 'get_field' ) ) {
+		return '';
+	}
+	$p = get_post( $tour_id );
+	if ( ! $p || 'tour' !== $p->post_type ) {
+		return '';
+	}
+	if ( ! get_field( 'extension_offered', $tour_id ) ) {
+		return '';
+	}
+	$title = get_field( 'extension_title', $tour_id );
+	return is_string( $title ) ? trim( $title ) : '';
+}
+
+/**
+ * Extension date range from tour ACF + tour-date end date (same basis as rooming-list export), not booking columns.
+ *
+ * @param object $booking Row or stub with tour_id, tour_date_id (may be "id|suffix").
+ * @return string e.g. "9 Dec 2025 - 13 Dec 2025", or empty.
+ */
+function bst_live_extension_date_range_for_booking( $booking ) {
+	$tour_id = (int) ( $booking->tour_id ?? 0 );
+	if ( $tour_id <= 0 || ! function_exists( 'get_field' ) ) {
+		return '';
+	}
+	if ( ! get_field( 'extension_offered', $tour_id ) ) {
+		return '';
+	}
+	$td_raw = isset( $booking->tour_date_id ) ? (string) $booking->tour_date_id : '';
+	$parts  = explode( '|', $td_raw );
+	$tour_date_id = (int) trim( $parts[0] );
+	if ( $tour_date_id <= 0 ) {
+		return '';
+	}
+	$extension_days = (int) get_field( 'extension_driving_days', $tour_id );
+	$tour_end_date  = get_field( 'end_date', $tour_date_id );
+	if ( $extension_days <= 0 || empty( $tour_end_date ) ) {
+		return '';
+	}
+	$end_ts = strtotime( (string) $tour_end_date );
+	if ( ! $end_ts ) {
+		return '';
+	}
+	$ext_end_ts = strtotime( (string) $tour_end_date . ' +' . $extension_days . ' days' );
+	if ( ! $ext_end_ts ) {
+		return '';
+	}
+	return date( 'j M Y', $end_ts ) . ' - ' . date( 'j M Y', $ext_end_ts );
+}
+
+/**
+ * One-line extension label for UI/email: live title + live date range when the booking has extension selected.
+ *
+ * @param object $booking Booking row or object with tour_id, tour_date_id, tour_extension_added.
+ * @return string Empty if extension not selected or tour offers no displayable extension data.
+ */
+function bst_live_booking_extension_display_label( $booking ) {
+	if ( ! is_object( $booking ) ) {
+		return '';
+	}
+	if ( empty( $booking->tour_extension_added ) || (int) $booking->tour_extension_added !== 1 ) {
+		return '';
+	}
+	$title = function_exists( 'bst_live_extension_title_for_tour' ) ? bst_live_extension_title_for_tour( (int) ( $booking->tour_id ?? 0 ) ) : '';
+	$dates = function_exists( 'bst_live_extension_date_range_for_booking' ) ? bst_live_extension_date_range_for_booking( $booking ) : '';
+	if ( '' === $title && '' === $dates ) {
+		return '';
+	}
+	if ( '' !== $dates ) {
+		return '' !== $title ? $title . ' (' . $dates . ')' : $dates;
+	}
+	return $title;
+}
+
+/**
+ * Extension add-on amount: package extension row + prorated vehicle upgrade for extension days.
+ * Works with any object that has tour_id, tour_package_id, vehicle1_id, vehicle2_id (e.g. booking row, or stub for single-tour before a booking exists).
+ *
+ * @param object $booking Object with tour_id, tour_package_id, vehicle1_id, vehicle2_id (other keys ignored).
+ * @return float Non-negative amount in tour currency units (rounded like legacy JS).
+ */
+function bst_booking_extension_addon_amount( $booking ) {
+	if ( ! is_object( $booking ) ) {
+		return 0.0;
+	}
+	$tour_id    = (int) ( $booking->tour_id ?? 0 );
+	$package_id = (int) ( $booking->tour_package_id ?? 0 );
+	if ( $tour_id <= 0 || $package_id <= 0 || ! function_exists( 'get_field' ) ) {
+		return 0.0;
+	}
+	$pricing = get_field( 'extension_pricing', $tour_id );
+	if ( ! is_array( $pricing ) ) {
+		return 0.0;
+	}
+	$key = 'package_' . $package_id;
+	$base = isset( $pricing[ $key ] ) ? floatval( $pricing[ $key ] ) : 0.0;
+
+	$extension_days = (int) get_field( 'extension_driving_days', $tour_id );
+	$admin_days     = floatval( get_field( 'admin_vehicle_driving_days', $tour_id ) );
+	if ( $admin_days <= 0.0 || $extension_days <= 0 || ! function_exists( 'bst_tour_vehicle_upgrade_amount' ) ) {
+		return round( $base );
+	}
+
+	$v1 = (int) ( $booking->vehicle1_id ?? 0 );
+	$v2 = (int) ( $booking->vehicle2_id ?? 0 );
+	$total = $base;
+
+	if ( $v1 > 0 ) {
+		$up = bst_tour_vehicle_upgrade_amount( $tour_id, $v1 );
+		if ( $up > 0.0 ) {
+			$total += round( $up / $admin_days * $extension_days );
+		}
+	}
+	if ( $v2 > 0 ) {
+		$up = bst_tour_vehicle_upgrade_amount( $tour_id, $v2 );
+		if ( $up > 0.0 ) {
+			$total += round( $up / $admin_days * $extension_days );
+		}
+	}
+
+	return (float) round( $total );
+}
+
+/**
+ * Vehicle label for GF prepopulate: always from Vehicle CPT via {@see bst_vehicle_display_title()}, never from stored booking text.
+ *
+ * @param int $vehicle_post_id Vehicle CPT post ID.
+ * @return string Empty if id invalid or helper missing.
+ */
+function bst_vehicle_label_for_gf_from_id( $vehicle_post_id ) {
+	$vehicle_post_id = (int) $vehicle_post_id;
+	if ( $vehicle_post_id <= 0 || ! function_exists( 'bst_vehicle_display_title' ) ) {
+		return '';
+	}
+	return trim( (string) bst_vehicle_display_title( $vehicle_post_id ) );
+}
+
 // Enqueue custom admin CSS for specific admin pages
 function bst_enqueue_custom_admin_css($hook) {
     global $typenow;
@@ -449,9 +594,9 @@ function bst_export_invoices_handler() {
         $vehicle_vat    = round($other_services * ($eu_percent / 100) * ($vat_rate / 100), 2);
         $total          = $tour_packages + $other_services + $vehicle_vat;
 
-        // Vehicle names (strip price suffixes like " (€500)")
-        $vehicle1_name = !empty($booking->vehicle1) ? preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->vehicle1) : '';
-        $vehicle2_name = !empty($booking->vehicle2) ? preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->vehicle2) : '';
+        // Vehicle names from Vehicle CPT ids only (no stored booking vehicle text).
+        $vehicle1_name = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 1 ) : '';
+        $vehicle2_name = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 2 ) : '';
 
         // Deposit method + type
         $deposit_method = $booking->deposit_payment_method ?? '';

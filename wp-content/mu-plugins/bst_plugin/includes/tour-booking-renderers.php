@@ -934,9 +934,9 @@ function bst_render_tour_package_tile_content($booking) {
     }
     $html .= '</div>';
     
-    // Vehicles (prefer normalized IDs; keep legacy text as fallback)
-    $v1 = function_exists('bst_booking_vehicle_display_text') ? bst_booking_vehicle_display_text($booking, 1) : ($booking->vehicle1 ?? '');
-    $v2 = function_exists('bst_booking_vehicle_display_text') ? bst_booking_vehicle_display_text($booking, 2) : ($booking->vehicle2 ?? '');
+    // Vehicles: Vehicle CPT ids only (see bst_booking_vehicle_display_text).
+    $v1 = bst_booking_vehicle_display_text( $booking, 1 );
+    $v2 = bst_booking_vehicle_display_text( $booking, 2 );
     if ( ! empty( $v1 ) || ! empty( $v2 ) ) {
         if ( ! empty( $v1 ) ) {
             $html .= '<div class="view-item"><strong>Vehicle 1:</strong> ' . esc_html($v1) . '</div>';
@@ -946,20 +946,13 @@ function bst_render_tour_package_tile_content($booking) {
         }
     }
     
-    // Extension information
-    if (!empty($booking->tour_extension_added) && $booking->tour_extension_added == 1) {
-        // tour_extension_text contains "Title (+€price)" e.g. "Dolomites Trip (+€3567)"
-        // tour_extension_date_text contains "9-13 Dec 2025"
-        // Display format should be: "Title (dates - price)" e.g. "Dolomites Trip (9-13 Dec 2025 - €3567)"
-        
-        $extensionText = trim($booking->tour_extension_text ?? '');
-        $extensionDates = trim($booking->tour_extension_date_text ?? '');
-        
-        // Simple replacement: insert dates after opening parenthesis with " - " separator
-        // "Dolomites Trip (+€3567)" becomes "Dolomites Trip (9-13 Dec 2025 - €3567)"
-        $displayText = str_replace('(+', '(' . $extensionDates . ' - ', $extensionText);
-        
-        $html .= '<div class="view-item"><strong>Extension:</strong> ' . esc_html($displayText) . '</div>';
+    // Extension: tour ACF extension_title + computed date range (not booking snapshot columns).
+    if ( ! empty( $booking->tour_extension_added ) && (int) $booking->tour_extension_added === 1
+        && function_exists( 'bst_live_booking_extension_display_label' ) ) {
+        $ext_lbl = bst_live_booking_extension_display_label( $booking );
+        if ( '' !== $ext_lbl ) {
+            $html .= '<div class="view-item"><strong>Extension:</strong> ' . esc_html( $ext_lbl ) . '</div>';
+        }
     }
     
     // Additional preferences
@@ -1317,11 +1310,12 @@ function bst_render_invoicing_tile_content($booking) {
     $tour_title = function_exists( 'bst_live_tour_title' ) ? bst_live_tour_title( $booking->tour_id ?? 0 ) : '';
     $tour_date_text = function_exists( 'bst_live_tour_date_text' ) ? bst_live_tour_date_text( $booking->tour_date_id ?? 0 ) : '';
     $tour_display = $tour_title . ' (' . $tour_date_text . ')';
-    if ($booking->tour_extension_added ?? false) {
-        if (!empty($booking->tour_extension_text) && !empty($booking->tour_extension_date_text)) {
-            // Remove price from extension text (anything in parentheses with € or $)
-            $extension_text_clean = preg_replace('/\s*\([^)]*[€$][^)]*\)/', '', $booking->tour_extension_text);
-            $tour_display = '<span class="address-block">' . $tour_display . '<br>+ ' . $extension_text_clean . ' (' . $booking->tour_extension_date_text . ')</span>';
+    if ( $booking->tour_extension_added ?? false ) {
+        if ( function_exists( 'bst_live_booking_extension_display_label' ) ) {
+            $ext_lbl_inv = bst_live_booking_extension_display_label( $booking );
+            if ( '' !== $ext_lbl_inv ) {
+                $tour_display = '<span class="address-block">' . $tour_display . '<br>+ ' . esc_html( $ext_lbl_inv ) . '</span>';
+            }
         }
     }
     $html .= '<div class="view-item"><strong>Tour:</strong>' . ($booking->tour_extension_added ? $tour_display : ' ' . $tour_display) . '</div>';

@@ -352,12 +352,11 @@ function bst_get_commission_booking_row_data_xlsx($booking, $exchange_rate) {
     // Extract data similar to CSV export but return raw numbers for Excel formatting
     $guest_name = trim(($booking->guest1_first_name ?? '') . ' ' . ($booking->guest1_last_name ?? ''));
     
-    $vehicle_text = '';
-    if (!empty($booking->vehicle1)) {
-        $vehicle_text = $booking->vehicle1;
-        if (!empty($booking->vehicle2) && $booking->vehicle2 !== $booking->vehicle1) {
-            $vehicle_text .= ', ' . $booking->vehicle2;
-        }
+    $v1x = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 1 ) ) : '';
+    $v2x = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 2 ) ) : '';
+    $vehicle_text = $v1x;
+    if ( $v2x !== '' && $v2x !== $v1x ) {
+        $vehicle_text .= ( $vehicle_text !== '' ? ', ' : '' ) . $v2x;
     }
     
     // Use actual booking currency (not always EUR)
