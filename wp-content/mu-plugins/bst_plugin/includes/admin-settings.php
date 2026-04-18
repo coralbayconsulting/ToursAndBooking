@@ -1261,8 +1261,16 @@ function bst_release_data_cleanup_callback() {
     $already_run = isset($cleanup_status[$current_version]);
     
     if ($already_run) {
+        $completed_raw = $cleanup_status[ $current_version ] ?? 0;
+        if (is_array($completed_raw) || is_object($completed_raw)) {
+            $completed_raw = 0;
+        }
+        $completed_ts = is_numeric($completed_raw) ? (int) $completed_raw : 0;
+        $completed_when = $completed_ts > 0
+            ? date('Y-m-d H:i:s', $completed_ts)
+            : '(completion time unavailable — stored value was invalid)';
         echo '<div style="margin: 15px 0; padding: 10px; background: #d4edda; border-left: 4px solid #28a745; color: #155724;">';
-        echo '<p><strong>✓ Cleanup already completed</strong> for version ' . esc_html($current_version) . ' on ' . date('Y-m-d H:i:s', $cleanup_status[$current_version]) . '</p>';
+        echo '<p><strong>✓ Cleanup already completed</strong> for version ' . esc_html($current_version) . ' on ' . esc_html($completed_when) . '</p>';
         echo '</div>';
         echo '<div style="margin: 15px 0;">';
         echo '<label><input type="checkbox" id="force-rerun-cleanup" value="1"> Force rerun (will re-process all entries and show detailed logging)</label>';

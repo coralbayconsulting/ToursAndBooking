@@ -1199,8 +1199,134 @@ function bst_calculate_monthly_commissions($bookings, $year) {
 
         bst_allocate_commission_by_month($booking, $commission_data, $year, $total_tour_cost, $commission_percent, $usd_rate);
     }
-    
+
+    bst_apply_finalization_due_remaining( $commission_data, $year, $usd_rate );
+
     return $commission_data;
+}
+
+/**
+ * Calendar month column (1–12) for Remaining forecast when the due date falls in $export_year.
+ *
+ * For exports of the **current** calendar year, if the due date is **before today** and the due
+ * date’s month is **before** the current month, the amount is bucketed in the **current month**
+ * (same as the CSV roll-forward: overdue prior-month forecast shows with this month’s pile).
+ *
+ * @param int|false $due_ts      Unix timestamp of due date (site-local date via strtotime).
+ * @param int       $export_year Year selected for the report (e.g. 2026).
+ * @return int Month 1–12.
+ */
+function bst_commission_remaining_forecast_month( $due_ts, $export_year ) {
+    if ( ! $due_ts ) {
+        return 1;
+    }
+    $export_year = (int) $export_year;
+    $due_year    = (int) date( 'Y', $due_ts );
+    $m           = (int) date( 'n', $due_ts );
+    if ( $due_year !== $export_year ) {
+        return $m;
+    }
+    if ( $export_year !== (int) current_time( 'Y' ) ) {
+        return $m;
+    }
+    $due_ymd = date( 'Y-m-d', $due_ts );
+    $today   = current_time( 'Y-m-d' );
+    if ( $due_ymd >= $today ) {
+        return $m;
+    }
+    $cur_m = (int) current_time( 'n' );
+    if ( $m < $cur_m ) {
+        return $cur_m;
+    }
+    return $m;
+}
+
+/**
+ * Project balance commission into Remaining (uninvoiced) by finalization due month.
+ *
+ * Unpaid balance lines are often Pending, so bst_commission_uninvoiced_inflow_amounts() yields no
+ * balance net and bst_allocate_commission_by_month never allocates them. The dashboard/booking UI
+ * uses bst_calculate_balance_due_date() (60 days or N months before tour per registration terms).
+ *
+ * Skips bookings that already have balance commission in the main allocation (paid/processing nets).
+ *
+ * @param array $commission_data Commission buckets (mutated).
+ * @param int   $year            Selected export year.
+ * @param float $usd_rate        USD→EUR rate (same as main commission loop).
+ */
+function bst_apply_finalization_due_remaining( &$commission_data, $year, $usd_rate ) {
+    if ( ! function_exists( 'bst_calculate_balance_due_date' ) || ! function_exists( 'bst_commission_uninvoiced_inflow_amounts' ) ) {
+        return;
+    }
+
+    global $wpdb;
+    $table = $wpdb->prefix . 'bst_tour_booking';
+
+    $rows = $wpdb->get_results(
+        "
+        SELECT *
+        FROM {$table}
+        WHERE booking_status IN ('Booked', 'Pending')
+        AND (finalization_entry_id IS NULL OR finalization_entry_id = 0 OR finalization_entry_id = '')
+        AND balance_due > 0
+        AND booking_entry_id IS NOT NULL AND booking_entry_id != 0
+        "
+    );
+
+    if ( empty( $rows ) ) {
+        return;
+    }
+
+    $usd_rate = floatval( $usd_rate );
+    if ( $usd_rate <= 0 ) {
+        $usd_rate = floatval( get_option( 'bst_usd_exchange_rate', 0.86 ) );
+    }
+
+    foreach ( $rows as $booking ) {
+        if ( ! empty( $booking->balance_commission_invoice ) ) {
+            continue;
+        }
+
+        $nets = bst_commission_uninvoiced_inflow_amounts( $booking );
+        if ( floatval( $nets['balance'] ?? 0 ) > 0 ) {
+            continue;
+        }
+
+        $due = bst_calculate_balance_due_date( $booking );
+        if ( empty( $due ) ) {
+            continue;
+        }
+
+        $due_ts = strtotime( $due );
+        if ( ! $due_ts ) {
+            continue;
+        }
+
+        if ( (int) date( 'Y', $due_ts ) !== (int) $year ) {
+            continue;
+        }
+
+        $month = bst_commission_remaining_forecast_month( $due_ts, (int) $year );
+        if ( $month < 1 || $month > 12 ) {
+            continue;
+        }
+
+        $commission_percent = floatval( $booking->booking_commission_percent ?? 0 );
+        $fx                 = ( strtoupper( trim( $booking->tour_currency ?? 'EUR' ) ) === 'USD' ) ? $usd_rate : 1.0;
+        $basis              = floatval( $booking->balance_due ?? 0 );
+        if ( $basis <= 0 || $commission_percent <= 0 ) {
+            continue;
+        }
+
+        $commission = round( $basis * $fx * $commission_percent, 2 );
+        if ( $commission <= 0 ) {
+            continue;
+        }
+
+        if ( isset( $commission_data['Balance']['months'][ $month ]['uninvoiced'] ) ) {
+            $commission_data['Balance']['months'][ $month ]['uninvoiced'] += $commission;
+        }
+    }
 }
 
 /**
@@ -1237,8 +1363,14 @@ function bst_allocate_commission_by_month($booking, &$commission_data, $year, $t
             if ( $yr < $year ) {
                 $m = 1;
             }
-            if ( 'ready' === $bucket && ! empty( $date ) && date( 'Y-m-d', strtotime( $date ) ) > date( 'Y-m-d' ) ) {
+            if ( 'ready' === $bucket && ! empty( $date ) && date( 'Y-m-d', strtotime( $date ) ) > current_time( 'Y-m-d' ) ) {
                 $bucket = 'uninvoiced';
+            }
+        }
+        if ( 'uninvoiced' === $bucket && function_exists( 'bst_commission_remaining_forecast_month' ) && ! empty( $date ) ) {
+            $ts = strtotime( $date );
+            if ( $ts && (int) date( 'Y', $ts ) === (int) $year ) {
+                $m = bst_commission_remaining_forecast_month( $ts, (int) $year );
             }
         }
         $commission_data[ $group ]['months'][ $m ][ $bucket ] += $amount;
@@ -1392,35 +1524,33 @@ function bst_write_annual_commission_csv($output, $commission_data, $year) {
     fputcsv($output, array());
     fputcsv($output, $headers);
     
-    // For the current year: uninvoiced amounts in past months get rolled forward into the
-    // current month, because invoices go out on the 1st covering the prior month's activity.
-    // Any uninvoiced item from a past month will be picked up on the next invoice (1st of next month).
-    $current_year  = intval(date('Y'));
-    $current_month = intval(date('n'));
+    // For the current year: (1) Ready — roll all non-current months into the current month (next CBC invoice).
+    // (2) Remaining (uninvoiced) — anything still in a month *before* the current month is overdue
+    // (forecast or future payment date not yet realized); move it to the current month.
+    $current_year  = intval( current_time( 'Y' ) );
+    $current_month = intval( current_time( 'n' ) );
     
-    if (intval($year) === $current_year) {
-        foreach ($commission_data as $group_key => &$group_data) {
-            // Roll ALL ready amounts from every month (past and future) into the current month.
-            // "Ready to invoice" means it goes on the next invoice regardless of payment date.
-            // Uninvoiced (projected) amounts stay in their projected month.
-            for ($month = 1; $month <= 12; $month++) {
-                if ($month === $current_month) continue;
-                $ready = $group_data['months'][$month]['ready'];
-                if ($ready != 0) {
-                    $group_data['months'][$current_month]['ready'] += $ready;
-                    $group_data['months'][$month]['ready'] = 0;
+    if ( intval( $year ) === $current_year ) {
+        foreach ( $commission_data as $group_key => &$group_data ) {
+            for ( $month = 1; $month <= 12; $month++ ) {
+                if ( $month === $current_month ) {
+                    continue;
                 }
-                // Past-due uninvoiced amounts (due date already passed, still unpaid) roll forward too.
-                if ($month < $current_month) {
-                    $uninvoiced = $group_data['months'][$month]['uninvoiced'];
-                    if ($uninvoiced != 0) {
-                        $group_data['months'][$current_month]['uninvoiced'] += $uninvoiced;
-                        $group_data['months'][$month]['uninvoiced'] = 0;
+                $ready = $group_data['months'][ $month ]['ready'];
+                if ( $ready != 0 ) {
+                    $group_data['months'][ $current_month ]['ready'] += $ready;
+                    $group_data['months'][ $month ]['ready'] = 0;
+                }
+                if ( $month < $current_month ) {
+                    $uninvoiced = $group_data['months'][ $month ]['uninvoiced'];
+                    if ( $uninvoiced != 0 ) {
+                        $group_data['months'][ $current_month ]['uninvoiced'] += $uninvoiced;
+                        $group_data['months'][ $month ]['uninvoiced'] = 0;
                     }
                 }
             }
         }
-        unset($group_data);
+        unset( $group_data );
     }
     
     $grand_totals    = array_fill(1, 12, 0);
@@ -1479,12 +1609,17 @@ function bst_write_annual_commission_csv($output, $commission_data, $year) {
     $invoiced_row[] = $grand_invoiced_total > 0 ? '€ ' . number_format($grand_invoiced_total, 2) : '';
     fputcsv($output, $invoiced_row);
     
-    // Ready to Invoice row — only meaningful for the current month of the current year
-    // (all past ready amounts are already rolled forward into current month by the roll-forward logic above)
+    // Ready to Invoice: received funds not yet invoiced. For the live calendar year, roll-forward puts
+    // everything in the current month only (operational "next invoice" pile). For other years, show each month.
     $ready_row = array('Ready to Invoice');
     for ($month = 1; $month <= 12; $month++) {
-        $show = (intval($year) === $current_year && $month === $current_month);
-        $ready_row[] = ($show && $grand_ready[$month] > 0) ? '€ ' . number_format($grand_ready[$month], 2) : '';
+        $val = $grand_ready[ $month ];
+        if ( intval( $year ) === $current_year ) {
+            $show        = ( $month === $current_month );
+            $ready_row[] = ( $show && $val > 0 ) ? '€ ' . number_format( $val, 2 ) : '';
+        } else {
+            $ready_row[] = $val > 0 ? '€ ' . number_format( $val, 2 ) : '';
+        }
     }
     $ready_row[] = $grand_ready_total > 0 ? '€ ' . number_format($grand_ready_total, 2) : '';
     fputcsv($output, $ready_row);
