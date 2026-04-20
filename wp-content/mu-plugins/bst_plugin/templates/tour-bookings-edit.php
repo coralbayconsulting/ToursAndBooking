@@ -1481,7 +1481,7 @@ jQuery(document).ready(function($) {
         
         // Get saved tour price from preserved original booking data (NOT from the current booking data which may have been updated)
         var savedTourPrice = parseFloat(window.originalTourPrice) || 0;
-        
+
         // Check if prices differ significantly (more than 0.01 difference)
         if (Math.abs(currentTourPrice - savedTourPrice) > 0.01 && currentTourPrice > 0) {
             var currency = window.bstBookingData?.tour_currency || 'EUR';
@@ -1587,6 +1587,10 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if (response.success) {
+                    // Keep baseline in sync with DB so the next save does not compare against the pre-update value.
+                    if (response.data && response.data.new_price !== undefined && response.data.new_price !== null) {
+                        window.originalTourPrice = parseFloat(response.data.new_price);
+                    }
                     // Update tile content with fresh HTML from server
                     if (response.data.tour_package_html) {
                         var $tourPackageTile = $('[data-tile="tour_package"]');
@@ -1729,9 +1733,17 @@ jQuery(document).ready(function($) {
                     if (response.data && response.data.updated_booking) {
                         // Use the updated booking from the database (has proper nulls, not empty strings)
                         Object.assign(window.bstBookingData, response.data.updated_booking);
+                        var ub = response.data.updated_booking;
+                        if (ub.tour_price !== undefined && ub.tour_price !== null && ub.tour_price !== '') {
+                            window.originalTourPrice = parseFloat(ub.tour_price);
+                        }
                     } else if (response.data && response.data.form_data) {
                         // Fallback to form data if updated_booking not available (for backwards compatibility)
                         Object.assign(window.bstBookingData, response.data.form_data);
+                        var fd = response.data.form_data;
+                        if (fd.tour_price !== undefined && fd.tour_price !== null && fd.tour_price !== '') {
+                            window.originalTourPrice = parseFloat(fd.tour_price);
+                        }
                     }
                     
                     // Update view content with server-rendered HTML (if available)

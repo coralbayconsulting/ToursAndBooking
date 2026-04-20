@@ -118,7 +118,7 @@
             "choices": {
                 "manual": "Manual",
                 "automatic": "Automatic",
-                "na": "N/A"
+                "na": "N\/A"
             },
             "default_value": false,
             "return_format": "value",
@@ -237,5 +237,5 @@
     "description": "",
     "show_in_rest": 0,
     "display_title": "",
-    "modified": 1775289600
+    "modified": 1776710226
 }

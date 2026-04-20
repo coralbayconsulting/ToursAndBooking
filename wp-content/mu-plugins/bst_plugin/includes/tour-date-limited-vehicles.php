@@ -667,84 +667,6 @@ function bst_limited_vehicles_sanitize_rows_for_save( array $rows ) {
 }
 
 /**
- * ACF update_field() / acf_update_value() may return null on success; treat only false as failure.
- *
- * @param mixed $result Value returned by ACF.
- * @return bool
- */
-function bst_acf_save_returned_ok( $result ) {
-	return false !== $result;
-}
-
-/**
- * Same data as bst_limited_vehicles_sanitize_rows_for_save() but with subfield names (some ACF paths expect this).
- *
- * @param array<int, array<string, int>> $normalized Keyed subfields.
- * @return array<int, array<string, int>>
- */
-function bst_limited_vehicles_normalized_to_named_rows( array $normalized ) {
-	$named = array();
-	foreach ( $normalized as $r ) {
-		$named[] = array(
-			'limited_vehicle'      => (int) $r['field_696e8b1a0a002'],
-			'limited_vehicle_max'  => (int) $r['field_696e8b1a0a003'],
-			'limited_vehicle_sold' => (int) $r['field_696e8b1a0a004'],
-		);
-	}
-	return $named;
-}
-
-/**
- * Replace repeater by clearing then add_row() each line (fallback when update_field bulk save fails).
- *
- * @param int   $post_id    Tour-date post ID.
- * @param array $normalized From bst_limited_vehicles_sanitize_rows_for_save().
- * @return bool
- */
-function bst_limited_vehicles_save_repeater_via_add_row( $post_id, array $normalized ) {
-	$post_id = (int) $post_id;
-	if ( $post_id <= 0 || ! function_exists( 'update_field' ) || ! function_exists( 'add_row' ) || ! function_exists( 'get_field' ) ) {
-		return false;
-	}
-
-	$backup = get_field( 'limited_vehicles', $post_id, false );
-	if ( ! is_array( $backup ) ) {
-		$backup = array();
-	}
-
-	update_field( 'field_696e8b1a0a001', array(), $post_id );
-	update_field( 'limited_vehicles', array(), $post_id );
-
-	foreach ( $normalized as $r ) {
-		$row = array(
-			'field_696e8b1a0a002' => (int) $r['field_696e8b1a0a002'],
-			'field_696e8b1a0a003' => (int) $r['field_696e8b1a0a003'],
-			'field_696e8b1a0a004' => (int) $r['field_696e8b1a0a004'],
-		);
-		$ar  = add_row( 'field_696e8b1a0a001', $row, $post_id );
-		if ( false === $ar ) {
-			$ar = add_row(
-				'field_696e8b1a0a001',
-				array(
-					'limited_vehicle'      => $row['field_696e8b1a0a002'],
-					'limited_vehicle_max'  => $row['field_696e8b1a0a003'],
-					'limited_vehicle_sold' => $row['field_696e8b1a0a004'],
-				),
-				$post_id
-			);
-		}
-		if ( false === $ar ) {
-			if ( ! empty( $backup ) ) {
-				update_field( 'field_696e8b1a0a001', $backup, $post_id );
-			}
-			return false;
-		}
-	}
-
-	return true;
-}
-
-/**
  * Save limited_vehicles repeater from PHP without UI validation blocking updates.
  *
  * @param int   $post_id Tour-date post ID.
@@ -762,66 +684,14 @@ function bst_limited_vehicles_update_field_programmatic( $post_id, array $rows )
 	remove_filter( 'acf/validate_value/key=field_696e8b1a0a001', 'bst_validate_limited_vehicles_no_duplicate_vehicle', 10 );
 	remove_filter( 'acf/validate_value/key=field_696e8b1a0a002', 'bst_validate_limited_vehicle_immutable_when_persisted', 10 );
 
-	$ok = false;
 	try {
-		if ( function_exists( 'acf_get_field_groups' ) ) {
-			acf_get_field_groups( array( 'post_id' => $post_id ) );
-		}
-
-		if ( empty( $normalized ) ) {
-			if ( function_exists( 'update_field' ) ) {
-				$r = update_field( 'field_696e8b1a0a001', array(), $post_id );
-				if ( ! bst_acf_save_returned_ok( $r ) ) {
-					$r = update_field( 'limited_vehicles', array(), $post_id );
-				}
-				$ok = bst_acf_save_returned_ok( $r );
-			}
-		} else {
-			$named = bst_limited_vehicles_normalized_to_named_rows( $normalized );
-
-			if ( function_exists( 'update_field' ) ) {
-				$r = update_field( 'field_696e8b1a0a001', $normalized, $post_id );
-				$ok = bst_acf_save_returned_ok( $r );
-				if ( ! $ok ) {
-					$r = update_field( 'field_696e8b1a0a001', $normalized, 'post_' . $post_id );
-					$ok = bst_acf_save_returned_ok( $r );
-				}
-				if ( ! $ok ) {
-					$r = update_field( 'limited_vehicles', $normalized, $post_id );
-					$ok = bst_acf_save_returned_ok( $r );
-				}
-				if ( ! $ok ) {
-					$r = update_field( 'field_696e8b1a0a001', $named, $post_id );
-					$ok = bst_acf_save_returned_ok( $r );
-				}
-				if ( ! $ok ) {
-					$r = update_field( 'limited_vehicles', $named, $post_id );
-					$ok = bst_acf_save_returned_ok( $r );
-				}
-			}
-
-			if ( ! $ok && function_exists( 'acf_get_field' ) && function_exists( 'acf_update_value' ) ) {
-				$field = acf_get_field( 'field_696e8b1a0a001' );
-				if ( is_array( $field ) ) {
-					$r = acf_update_value( $normalized, $post_id, $field );
-					$ok = bst_acf_save_returned_ok( $r );
-					if ( ! $ok ) {
-						$r = acf_update_value( $named, $post_id, $field );
-						$ok = bst_acf_save_returned_ok( $r );
-					}
-				}
-			}
-
-			if ( ! $ok && 'tour-date' === get_post_type( $post_id ) ) {
-				$ok = bst_limited_vehicles_save_repeater_via_add_row( $post_id, $normalized );
-			}
-		}
+		update_field( 'field_696e8b1a0a001', $normalized, $post_id );
 	} finally {
 		add_filter( 'acf/validate_value/key=field_696e8b1a0a001', 'bst_validate_limited_vehicles_no_duplicate_vehicle', 10, 4 );
 		add_filter( 'acf/validate_value/key=field_696e8b1a0a002', 'bst_validate_limited_vehicle_immutable_when_persisted', 10, 4 );
 	}
 
-	return $ok;
+	return true;
 }
 
 /**

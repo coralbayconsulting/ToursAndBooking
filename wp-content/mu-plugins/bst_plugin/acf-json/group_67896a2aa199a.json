@@ -309,10 +309,10 @@
                 {
                     "key": "field_696e8b1a0a005",
                     "label": "Avail.",
-                    "name": "limited_vehicle_avail_display",
+                    "name": "",
                     "aria-label": "",
                     "type": "message",
-                    "instructions": "Max minus Sold (read-only).",
+                    "instructions": "",
                     "required": 0,
                     "conditional_logic": 0,
                     "wrapper": {
@@ -391,5 +391,5 @@
     "description": "",
     "show_in_rest": 0,
     "display_title": "",
-    "modified": 1744221600
+    "modified": 1776710165
 }
