@@ -190,24 +190,33 @@ add_action('bst_fetch_exchange_rates_event', 'bst_fetch_exchange_rates');
 
 // Schedule the cron event to run daily after midnight
 function bst_schedule_exchange_rates_cron() {
-    // Only schedule if not already scheduled
-    if (!wp_next_scheduled('bst_fetch_exchange_rates_event')) {
-        // Rate-limit scheduling attempts to once per 10 minutes to avoid log flooding
-        if (get_transient('bst_cron_schedule_attempted')) {
-            return;
-        }
-        set_transient('bst_cron_schedule_attempted', 1, 10 * MINUTE_IN_SECONDS);
+    // If the event is scheduled, nothing to do
+    if (wp_next_scheduled('bst_fetch_exchange_rates_event')) {
+        return;
+    }
 
-        $timestamp = strtotime('tomorrow 00:30:00 UTC'); // give enough time for the rates to update
-        $scheduled = wp_schedule_event($timestamp, 'twicedaily', 'bst_fetch_exchange_rates_event');
+    // wp_next_scheduled is unreliable during cron execution and on multi-instance hosting.
+    // Check whether rates were updated in the last 13 hours as a reliable proxy.
+    $last_updated = get_option('bst_exchange_rate_last_updated');
+    if ($last_updated && (time() - strtotime($last_updated)) < 13 * HOUR_IN_SECONDS) {
+        return;
+    }
 
-        if ($scheduled === true || $scheduled === null) {
-            error_log('BST: Exchange rates cron job scheduled for daily execution at 00:30 UTC.');
-        } elseif (is_wp_error($scheduled)) {
-            error_log('BST: Failed to schedule exchange rates cron job. Error: ' . $scheduled->get_error_message());
-        } else {
-            error_log('BST: Failed to schedule exchange rates cron job. wp_schedule_event returned: ' . var_export($scheduled, true));
-        }
+    // Rate-limit scheduling attempts to once per day to avoid log noise
+    if (get_transient('bst_cron_schedule_attempted')) {
+        return;
+    }
+    set_transient('bst_cron_schedule_attempted', 1, DAY_IN_SECONDS);
+
+    $timestamp = strtotime('tomorrow 00:30:00 UTC');
+    $scheduled = wp_schedule_event($timestamp, 'twicedaily', 'bst_fetch_exchange_rates_event');
+
+    if ($scheduled === true || $scheduled === null) {
+        error_log('BST: Exchange rates cron job scheduled for daily execution at 00:30 UTC.');
+    } elseif (is_wp_error($scheduled)) {
+        error_log('BST: Failed to schedule exchange rates cron job. Error: ' . $scheduled->get_error_message());
+    } else {
+        error_log('BST: Failed to schedule exchange rates cron job. wp_schedule_event returned: ' . var_export($scheduled, true));
     }
 }
 // Check only once per day if the cron job exists
