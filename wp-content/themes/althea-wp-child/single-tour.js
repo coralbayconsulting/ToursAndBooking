@@ -28,6 +28,14 @@ jQuery(document).ready(function ($) {
     return s;
   }
 
+  /** Remove trailing " - €1,234.56" (or $, £ with optional negative) from package label text. */
+  function bstStripPackagePriceSuffix(text) {
+    if (!text || typeof text !== "string") {
+      return "";
+    }
+    return text.replace(/\s*-\s*[€$£]\s*-?[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*$/, "").trim();
+  }
+
   // Initial state
   tourpackagedropdown.prop("disabled", true);
   vehicleDropdown1Container.hide();
@@ -713,8 +721,10 @@ jQuery(document).ready(function ($) {
     }
 
     // Get package name from global settings
-    var packageName = bstStripLeadingPlusMinusParen(
-      tourpackagedropdown.find("option:selected").text()
+    var packageName = bstStripPackagePriceSuffix(
+      bstStripLeadingPlusMinusParen(
+        tourpackagedropdown.find("option:selected").text()
+      )
     );
 
     // Get package people and rooms from global settings

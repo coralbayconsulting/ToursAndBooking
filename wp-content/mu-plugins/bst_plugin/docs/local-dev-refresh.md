@@ -36,11 +36,25 @@ After ACF is synced:
 - **Tools → BST** — use **Re-link tour pricing from labels** if tour rows have correct vehicle text but CPT links need rewriting.
 - If something still won’t save, open a tour in the editor and **Update** once; that uses the normal ACF save path and often persists `vehicle_pricing` correctly.
 
-## 5. Routine WordPress checks
+## 5. Stripe webhooks after import (required if Stripe is enabled)
+
+When you import production/staging DB into another environment, Stripe webhook signing secrets are often copied from the source site and become invalid for the target endpoint.
+
+1. In Stripe Dashboard, choose the correct mode (**Test** or **Live**) for the environment.
+2. Go to **Developers → Webhooks** and open the endpoint for that environment URL.
+3. Copy the endpoint **Signing secret** (`whsec_...`).
+4. In WordPress go to **Forms → Settings → Stripe** and update:
+   - **Test Signing Secret** for test mode
+   - **Live Signing Secret** for live mode
+5. Save and resend a recent webhook event from Stripe to confirm 2xx.
+
+If this is skipped, Stripe deliveries can fail with 400 errors such as: `Invalid request. Webhook could not be processed.`
+
+## 6. Routine WordPress checks
 
 - **Settings → Permalinks** — Save once (flushes rewrite rules).
 - Clear object cache if you use Redis/Memcached in dev.
 
-## 6. Reference: canonical vehicle matching
+## 7. Reference: canonical vehicle matching
 
 Vehicle labels are matched to Vehicle CPT `post_title` using `bst_vehicle_exact_text_key()` (strip tags, remove `(...)`, trim, collapse spaces). See `includes/vehicle-helpers.php` and `includes/vehicle-migration.php`.
