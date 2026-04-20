@@ -702,76 +702,27 @@ if (is_singular('tour')) {
                 <script>
                 // Pass deposit settings to JavaScript
                 window.tourDepositSettings = {
-                    type: <?php echo json_encode($deposit_type); ?>,
-                    percent: <?php echo json_encode($deposit_percent); ?>,
-                    fixedSingle: <?php echo json_encode($deposit_fixed_single); ?>,
-                    fixedDouble: <?php echo json_encode($deposit_fixed_double); ?>
+                    type: <?php echo json_encode($deposit_type, JSON_HEX_TAG); ?>,
+                    percent: <?php echo json_encode($deposit_percent, JSON_HEX_TAG); ?>,
+                    fixedSingle: <?php echo json_encode($deposit_fixed_single, JSON_HEX_TAG); ?>,
+                    fixedDouble: <?php echo json_encode($deposit_fixed_double, JSON_HEX_TAG); ?>
                 };
-                
+
                 // Pass bank wire discount to JavaScript
-                window.bstBankWireDiscount = <?php echo json_encode(get_option('bst_bank_wire_discount', 2.5)); ?>;
-                
+                window.bstBankWireDiscount = <?php echo json_encode(get_option('bst_bank_wire_discount', 2.5), JSON_HEX_TAG); ?>;
+
                 // Pass extension settings to JavaScript
                 window.tourExtensionSettings = {
-                    offered: <?php echo json_encode($extension_offered); ?>,
-                    title: <?php echo json_encode($extension_title); ?>,
-                    pricing: <?php echo json_encode($extension_pricing); ?>,
-                    extensionDays: <?php echo json_encode($extension_days); ?>,
-                    adminVehicleDrivingDays: <?php echo json_encode($admin_vehicle_driving_days); ?>
+                    offered: <?php echo json_encode($extension_offered, JSON_HEX_TAG); ?>,
+                    title: <?php echo json_encode($extension_title, JSON_HEX_TAG); ?>,
+                    pricing: <?php echo json_encode($extension_pricing, JSON_HEX_TAG); ?>,
+                    extensionDays: <?php echo json_encode($extension_days, JSON_HEX_TAG); ?>,
+                    adminVehicleDrivingDays: <?php echo json_encode($admin_vehicle_driving_days, JSON_HEX_TAG); ?>
                 };
-                
+
                 // Pass tour dates with extension info to JavaScript
-                window.tourDatesData = <?php echo json_encode($all_dates); ?>;
+                window.tourDatesData = <?php echo json_encode($all_dates, JSON_HEX_TAG); ?>;
                 
-                // Share functionality for single tour pages
-                function bstCopyTourLink(event) {
-                    const url = window.location.href;
-                    const btn = event.currentTarget;
-                    
-                    // Try modern clipboard API first (requires HTTPS)
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(url).then(() => {
-                            bstShowCopySuccess(btn);
-                        }).catch(err => {
-                            // Fallback to older method
-                            bstCopyFallback(url, btn);
-                        });
-                    } else {
-                        // Use fallback for older browsers or non-HTTPS
-                        bstCopyFallback(url, btn);
-                    }
-                }
-                
-                function bstCopyFallback(text, btn) {
-                    const textArea = document.createElement('textarea');
-                    textArea.value = text;
-                    textArea.style.position = 'fixed';
-                    textArea.style.left = '-999999px';
-                    textArea.style.top = '-999999px';
-                    document.body.appendChild(textArea);
-                    textArea.focus();
-                    textArea.select();
-                    
-                    try {
-                        document.execCommand('copy');
-                        bstShowCopySuccess(btn);
-                    } catch (err) {
-                        console.error('Failed to copy:', err);
-                        alert('Failed to copy link. Please copy manually: ' + text);
-                    }
-                    
-                    document.body.removeChild(textArea);
-                }
-                
-                function bstShowCopySuccess(btn) {
-                    btn.classList.add('copied');
-                    btn.setAttribute('title', 'Copied!');
-                    
-                    setTimeout(() => {
-                        btn.classList.remove('copied');
-                        btn.setAttribute('title', 'Copy link to clipboard');
-                    }, 2000);
-                }
                 </script>
                 
             <!--end custom content -->

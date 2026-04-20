@@ -1364,7 +1364,7 @@ function bst_create_booking() {
         if ($tour_date_post) {
             // Use the standardized tour date title directly - it's already in format "Tour Name (Date Range)"
             // Extract just the date range part from within the parentheses
-            if (preg_match('/\((.*)\)$/', $tour_date_post->post_title, $matches)) {
+            if (preg_match('/\(([^)]+)\)$/', $tour_date_post->post_title, $matches)) {
                 $booking_data['tour_date_text'] = $matches[1];
             } else {
                 // Fallback to full title if format doesn't match expected pattern
@@ -1372,7 +1372,7 @@ function bst_create_booking() {
             }
         }
     }
-    
+
     // Get package text if package selected and not already provided
     if ($booking_data['tour_package_id'] > 0 && empty($booking_data['tour_package_text'])) {
         $packages = get_field('packages', $booking_data['tour_id']);
@@ -1550,9 +1550,6 @@ function bst_delete_booking() {
  * AJAX handler for creating a waiting list booking from customer-facing form
  */
 function bst_create_waiting_list_booking() {
-    // Add debug logging
-    error_log('BST: Waiting list AJAX called with data: ' . print_r($_POST, true));
-    
     // Basic honeypot check to prevent spam (optional)
     if (!empty($_POST['website'])) {
         error_log('BST: Honeypot triggered in waiting list request');
@@ -1673,7 +1670,7 @@ function bst_create_waiting_list_booking() {
     if ($tour_date_post) {
         // Use the standardized tour date title directly - it's already in format "Tour Name (Date Range)"
         // Extract just the date range part from within the parentheses
-        if (preg_match('/\((.*)\)$/', $tour_date_post->post_title, $matches)) {
+        if (preg_match('/\(([^)]+)\)$/', $tour_date_post->post_title, $matches)) {
             $booking_data['tour_date_text'] = $matches[1];
         } else {
             // Fallback to full title if format doesn't match expected pattern

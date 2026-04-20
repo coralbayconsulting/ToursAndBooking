@@ -146,6 +146,13 @@ function enqueue_custom_tooltip_script() {
     if (is_tax('tour-type-code') || is_post_type_archive('tour-type') || is_singular('tour')) {
         wp_enqueue_script('custom-tooltip', get_stylesheet_directory_uri() . '/custom-tooltip.js', array('jquery'), '1.0.1', true);
         wp_enqueue_script('rating-help', get_stylesheet_directory_uri() . '/js/rating-help.js', array('jquery'), '1.0.1', true);
+        wp_enqueue_script('bst-tour-share', get_stylesheet_directory_uri() . '/js/bst-tour-share.js', array(), '1.0.0', true);
+    }
+    if (is_tax('tour-type-code') || is_post_type_archive('tour-type')) {
+        wp_enqueue_script('bst-auto-refresh', get_stylesheet_directory_uri() . '/js/bst-auto-refresh.js', array('jquery'), '1.0.0', true);
+        wp_localize_script('bst-auto-refresh', 'bstAutoRefresh', array(
+            'interval' => intval(get_option('bst_auto_refresh_interval', 15)),
+        ));
     }
 }
 add_action('wp_enqueue_scripts', 'enqueue_custom_tooltip_script');

@@ -253,6 +253,7 @@ function get_package_pricing() {
         'people' => 'people',
         'rooms' => 'rooms',
         'vehicles' => 'vehicles',
+        default => 'vehicles',
     };
 
     // Create the data array
