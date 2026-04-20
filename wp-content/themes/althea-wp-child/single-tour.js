@@ -527,6 +527,9 @@ jQuery(document).ready(function ($) {
 
   function finishExtensionUi(extensionPrice, selectedDate) {
     extensionPrice = Math.round(extensionPrice);
+    var tourCurrencyCode = (typeof tourCurrency !== 'undefined' && tourCurrency.currency) ? tourCurrency.currency : 'EUR';
+    var symbol = (tourCurrencyCode === 'USD') ? '$' : '€';
+    var formattedPrice = symbol + extensionPrice.toLocaleString();
     var extensionDays = (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.extensionDays)
       ? parseInt(tourExtensionSettings.extensionDays, 10)
       : 0;
@@ -550,13 +553,16 @@ jQuery(document).ready(function ($) {
         dateText = startDay + ' ' + startMonth + ' - ' + endDay + ' ' + endMonth;
       }
     }
-    // Label: title + optional dates only — price is in tourprice / server; do not embed in text sent to GF.
+    // Label should show extension amount for user selection clarity.
+    // Submitted extensiontext remains title-only in formData.
     var labelText = tourExtensionSettings.title;
     var extensionDatesWithYear = '';
     if (dateText && extEndDate) {
       var extYear = extEndDate.getFullYear();
       extensionDatesWithYear = dateText + ' ' + extYear;
-      labelText += ' (' + dateText + ' ' + extYear + ')';
+      labelText += ' (' + dateText + ' ' + extYear + ' - ' + formattedPrice + ')';
+    } else {
+      labelText += ' (' + formattedPrice + ')';
     }
     extensionLabel.text(labelText);
     extensionCheckbox.data('price', extensionPrice);
@@ -707,7 +713,9 @@ jQuery(document).ready(function ($) {
     }
 
     // Get package name from global settings
-    var packageName = tourpackagedropdown.find("option:selected").text().split(' ')[0]; // Use the first word in the text from the package dropdown
+    var packageName = bstStripLeadingPlusMinusParen(
+      tourpackagedropdown.find("option:selected").text()
+    );
 
     // Get package people and rooms from global settings
     var packagePeople = packageSettings[tourPackage].people;
@@ -779,10 +787,7 @@ jQuery(document).ready(function ($) {
     balanceAmount = tourPrice - depositAmount;
 
     // Get extension information if selected
-    console.log('Extension checkbox:', extensionCheckbox);
-    console.log('Extension checkbox length:', extensionCheckbox.length);
     var extensionAdded = extensionCheckbox.is(':checked');
-    console.log('Extension checkbox is checked:', extensionAdded);
     var extensionText = '';
     var extensionDatesText = '';
     
@@ -791,7 +796,6 @@ jQuery(document).ready(function ($) {
       var extensionTitle = (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.title) ? tourExtensionSettings.title : '';
       extensionText = extensionTitle;
       extensionDatesText = extensionCheckbox.data('extension-dates') || '';
-      console.log('Extension dates from data attribute:', extensionDatesText);
     }
 
     // Add hidden input fields for each Gravity Forms field
