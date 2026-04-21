@@ -213,7 +213,7 @@
             "name": "limited_vehicles",
             "aria-label": "",
             "type": "repeater",
-            "instructions": "Only vehicles linked on the parent tour (vehicle pricing) can be chosen. Vehicles not listed are unlimited. Per-vehicle caps are not enforced on bookings yet.",
+            "instructions": "",
             "required": 0,
             "conditional_logic": 0,
             "wrapper": {

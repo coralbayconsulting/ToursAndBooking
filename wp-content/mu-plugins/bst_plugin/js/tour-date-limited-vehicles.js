@@ -298,7 +298,8 @@
 
 	function applyVehicleLocks($wrap) {
 		$wrap.find('.acf-field[data-name="limited_vehicle"]').each(function () {
-			var $f = $(this);
+			var $f   = $(this);
+			var $row = $f.closest('.acf-row');
 			var $sel = $f.find('select');
 			if ($f.hasClass('bst-lv-vehicle-locked')) {
 				if ($sel.length) {
@@ -307,8 +308,12 @@
 						$sel.trigger('change.select2');
 					}
 				}
-			} else if ($sel.length) {
-				$sel.prop('disabled', false);
+				$row.find('.acf-row-handle.remove').hide();
+			} else {
+				if ($sel.length) {
+					$sel.prop('disabled', false);
+				}
+				$row.find('.acf-row-handle.remove').show();
 			}
 		});
 	}

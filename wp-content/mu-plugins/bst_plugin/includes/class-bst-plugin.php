@@ -1754,7 +1754,7 @@ class BST_Plugin {
         if ($post && $post->post_type === 'tour-date') {
             $field['readonly'] = 1;
             $field['wrapper']['class'] .= ' readonly-field';
-            $field['instructions'] = 'Calculated automatically from booking records (vehicle selections for this tour date). Updates when bookings are saved, during availability sync, and on the daily sync.';
+            $field['instructions'] = '';
         }
         return $field;
     }
