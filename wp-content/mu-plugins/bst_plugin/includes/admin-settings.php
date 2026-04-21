@@ -275,8 +275,60 @@ function bst_register_settings() {
         'bst_tools_page',
         'bst_admin_operations_section'
     );
+
+    add_settings_field(
+        'bst_tour_vehicle_names_export',
+        'Tour vehicle names export',
+        'bst_tour_vehicle_names_export_callback',
+        'bst_tools_page',
+        'bst_admin_operations_section'
+    );
+
+    add_settings_field(
+        'bst_booking_vehicle_remap',
+        'Remap booking vehicles from legacy text',
+        'bst_booking_vehicle_remap_callback',
+        'bst_tools_page',
+        'bst_admin_operations_section'
+    );
+
+    add_settings_field(
+        'bst_limited_vehicles_create_tour_dates',
+        'Add limited vehicle rows to tour dates',
+        'bst_limited_vehicles_create_tour_dates_callback',
+        'bst_tools_page',
+        'bst_admin_operations_section'
+    );
+
+    add_settings_field(
+        'bst_limited_vehicles_sync_sold_tour_dates',
+        'Recalculate limited vehicle sold from bookings',
+        'bst_limited_vehicles_sync_sold_tour_dates_callback',
+        'bst_tools_page',
+        'bst_admin_operations_section'
+    );
+
 }
 add_action('admin_init', 'bst_register_settings');
+
+add_action(
+    'admin_notices',
+    function () {
+        if ( empty( $_GET['page'] ) || 'bst_tools_page' !== $_GET['page'] ) {
+            return;
+        }
+        if ( ! current_user_can( 'manage_options' ) ) {
+            return;
+        }
+        $k = 'bst_tools_notice_' . get_current_user_id();
+        $msg = get_transient( $k );
+        if ( ! is_string( $msg ) || '' === $msg ) {
+            return;
+        }
+        delete_transient( $k );
+        echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $msg ) . '</p></div>';
+    }
+);
 
 function bst_settings_section_callback() {
     echo '<p>Set your global settings below:</p>';
@@ -1233,6 +1285,102 @@ function bst_send_twilio_whatsapp($to, $message, $account_sid = null, $auth_toke
     }
 }
 
+/**
+ * Stable key for storing per-task cleanup completion under a release version.
+ *
+ * @param string $task_name Task name from bst_get_release_cleanup_tasks().
+ * @return string
+ */
+function bst_release_cleanup_task_slug( $task_name ) {
+    return sanitize_title( (string) $task_name );
+}
+
+/**
+ * Normalized cleanup bucket for one plugin version (stored under bst_release_cleanup_status[ $version ]).
+ *
+ * Legacy format was a single Unix timestamp (any completed task marked the version done). That hid
+ * new tasks (e.g. vehicle migration after PayPal). Legacy scalars are treated as incomplete for the
+ * current task list until each task has been recorded under bucket['tasks'].
+ *
+ * @param string $version Plugin version key, e.g. 1.0.0.
+ * @return array{ tasks: array<string,int>, _legacy_release_cleanup_at?: int }
+ */
+function bst_release_cleanup_get_version_bucket( $version ) {
+    $cleanup_status = get_option( 'bst_release_cleanup_status', array() );
+    if ( ! isset( $cleanup_status[ $version ] ) ) {
+        return array( 'tasks' => array() );
+    }
+    $bucket = $cleanup_status[ $version ];
+    if ( is_int( $bucket ) || is_float( $bucket ) ) {
+        return array(
+            '_legacy_release_cleanup_at' => (int) $bucket,
+            'tasks'                       => array(),
+        );
+    }
+    if ( is_string( $bucket ) && is_numeric( $bucket ) ) {
+        return array(
+            '_legacy_release_cleanup_at' => (int) $bucket,
+            'tasks'                       => array(),
+        );
+    }
+    if ( ! is_array( $bucket ) ) {
+        return array( 'tasks' => array() );
+    }
+    if ( ! isset( $bucket['tasks'] ) || ! is_array( $bucket['tasks'] ) ) {
+        $bucket['tasks'] = array();
+    }
+    return $bucket;
+}
+
+/**
+ * Whether every task defined for this version has a completion timestamp.
+ *
+ * @param string $version       Plugin version.
+ * @param array  $cleanup_tasks From bst_get_release_cleanup_tasks().
+ * @return bool
+ */
+function bst_release_cleanup_is_complete_for_tasks( $version, array $cleanup_tasks ) {
+    if ( empty( $cleanup_tasks ) ) {
+        return false;
+    }
+    $bucket = bst_release_cleanup_get_version_bucket( $version );
+    foreach ( $cleanup_tasks as $task ) {
+        if ( empty( $task['name'] ) ) {
+            continue;
+        }
+        $slug = bst_release_cleanup_task_slug( $task['name'] );
+        if ( empty( $bucket['tasks'][ $slug ] ) ) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Latest completion time among tasks for this version (for admin display).
+ *
+ * @param string $version       Plugin version.
+ * @param array  $cleanup_tasks From bst_get_release_cleanup_tasks().
+ * @return int|null Unix timestamp or null if not all complete.
+ */
+function bst_release_cleanup_version_display_time( $version, array $cleanup_tasks ) {
+    if ( ! bst_release_cleanup_is_complete_for_tasks( $version, $cleanup_tasks ) ) {
+        return null;
+    }
+    $bucket = bst_release_cleanup_get_version_bucket( $version );
+    $times  = array();
+    foreach ( $cleanup_tasks as $task ) {
+        if ( empty( $task['name'] ) ) {
+            continue;
+        }
+        $slug = bst_release_cleanup_task_slug( $task['name'] );
+        if ( ! empty( $bucket['tasks'][ $slug ] ) ) {
+            $times[] = (int) $bucket['tasks'][ $slug ];
+        }
+    }
+    return empty( $times ) ? null : max( $times );
+}
+
 function bst_release_data_cleanup_callback() {
     // Check if there are any cleanup tasks defined for the current release
     $cleanup_tasks = bst_get_release_cleanup_tasks();
@@ -1255,107 +1403,366 @@ function bst_release_data_cleanup_callback() {
     }
     echo '</ul>';
     
-    // Check if cleanup has already been run
-    $cleanup_status = get_option('bst_release_cleanup_status', array());
     $current_version = get_option('bst_plugin_version', '1.0.0');
-    $already_run = isset($cleanup_status[$current_version]);
-    
-    if ($already_run) {
-        $completed_raw = $cleanup_status[ $current_version ] ?? 0;
-        if (is_array($completed_raw) || is_object($completed_raw)) {
-            $completed_raw = 0;
-        }
-        $completed_ts = is_numeric($completed_raw) ? (int) $completed_raw : 0;
-        $completed_when = $completed_ts > 0
-            ? date('Y-m-d H:i:s', $completed_ts)
-            : '(completion time unavailable — stored value was invalid)';
+    $already_run     = bst_release_cleanup_is_complete_for_tasks($current_version, $cleanup_tasks);
+    $bucket          = bst_release_cleanup_get_version_bucket($current_version);
+    $completed_at    = bst_release_cleanup_version_display_time($current_version, $cleanup_tasks);
+
+    if ($already_run && $completed_at) {
         echo '<div style="margin: 15px 0; padding: 10px; background: #d4edda; border-left: 4px solid #28a745; color: #155724;">';
-        echo '<p><strong>✓ Cleanup already completed</strong> for version ' . esc_html($current_version) . ' on ' . esc_html($completed_when) . '</p>';
+        echo '<p><strong>✓ Cleanup already completed</strong> for version ' . esc_html($current_version) . ' on ' . esc_html( date( 'Y-m-d H:i:s', $completed_at ) ) . '</p>';
         echo '</div>';
-        echo '<div style="margin: 15px 0;">';
-        echo '<label><input type="checkbox" id="force-rerun-cleanup" value="1"> Force rerun (will re-process all entries and show detailed logging)</label>';
+    } elseif ( ! empty( $bucket['_legacy_release_cleanup_at'] ) && ! $already_run ) {
+        echo '<div style="margin: 15px 0; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; color: #856404;">';
+        echo '<p><strong>Note:</strong> An older release cleanup was recorded on ' . esc_html( date( 'Y-m-d H:i:s', (int) $bucket['_legacy_release_cleanup_at'] ) ) . ' (before per-task tracking). The tasks listed above for this version have <strong>not</strong> been marked complete yet — use <strong>Run standard release cleanup</strong> below for a first pass (no vehicle deletion).</p>';
         echo '</div>';
     }
-    
-    echo '<button type="button" id="cleanup-release-data" class="button button-primary" style="margin-top: 15px;" title="Run release-specific data cleanup tasks">';
-    echo '<span class="dashicons dashicons-admin-tools" style="margin-right: 5px;"></span>';
-    echo $already_run ? 'Rerun Release Data Cleanup' : 'Run Release Data Cleanup';
+    // HTML comment: if missing in View Source on a host, that server is not running this file revision (deploy/sync).
+    echo "<!-- BST release cleanup UI v3 (separate buttons; no checkboxes) -->\n";
+
+    $tools_url = admin_url( 'admin.php?page=bst_tools_page' );
+    echo '<p class="description" style="max-width:960px;">' . esc_html__( 'After each run, lines are written to PHP error_log — open Tools → Error Log to view:', 'bst-plugin' ) . ' ';
+    echo '<a href="' . esc_url( $tools_url ) . '">' . esc_html__( 'BST Plugin → Tools → Error Log', 'bst-plugin' ) . '</a>.</p>';
+
+    echo '<div class="bst-release-cleanup-actions" style="margin: 20px 0; max-width: 960px;">';
+    echo '<p><strong>' . esc_html__( 'Run cleanup (each button sends a fixed mode — no checkboxes):', 'bst-plugin' ) . '</strong></p>';
+
+    if ( ! $already_run ) {
+        echo '<div style="margin: 16px 0; padding: 12px 14px; background: #f6f7f7; border: 1px solid #c3c4c7; border-radius: 4px;">';
+        echo '<p style="margin: 0 0 10px;"><strong>' . esc_html__( 'Step 1 — Standard release cleanup', 'bst-plugin' ) . '</strong></p>';
+        echo '<p class="description" style="margin: 0 0 10px;">' . esc_html__( 'Runs all tasks for this version with normal vehicle migration: no mass deletion of Vehicle CPTs, no “re-link from labels only” pass. Use this for the first run on a new version.', 'bst-plugin' ) . '</p>';
+        echo '<button type="button" id="bst-release-cleanup-standard" class="button button-primary">';
+        echo '<span class="dashicons dashicons-admin-tools" style="margin-right: 4px; vertical-align: text-top;"></span>';
+        echo esc_html__( 'Run standard release cleanup', 'bst-plugin' );
+        echo '</button>';
+        echo '</div>';
+    }
+
+    echo '<div style="margin: 16px 0; padding: 12px 14px; background: #fcf9e8; border: 1px solid #dba617; border-radius: 4px;">';
+    echo '<p style="margin: 0 0 10px;"><strong>' . ( $already_run
+        ? esc_html__( 'Step 1 — Force reset vehicle migration', 'bst-plugin' )
+        : esc_html__( 'Step 2 — Force reset vehicle migration', 'bst-plugin' )
+    ) . '</strong></p>';
+    echo '<p class="description" style="margin: 0 0 10px;">' . esc_html__( 'Permanently deletes all Vehicle CPT posts, recreates them from tour repeater text (inventory scan) and booking vehicle text, and rewrites booking vehicle1_id / vehicle2_id. Does not save Tour → vehicle_pricing CPT links — use the Re-link step below afterward if tours need CPT ids written from labels.', 'bst-plugin' ) . '</p>';
+    echo '<button type="button" id="bst-release-cleanup-force" class="button button-secondary">';
+    echo '<span class="dashicons dashicons-warning" style="margin-right: 4px; vertical-align: text-top;"></span>';
+    echo esc_html__( 'Force reset vehicle migration', 'bst-plugin' );
     echo '</button>';
-    echo '<span id="cleanup-release-spinner" class="spinner" style="margin-left: 10px; display: none;"></span>';
-    echo '<div id="cleanup-release-result" style="margin-top: 10px;"></div>';
-    
+    echo '</div>';
+
+    echo '<div style="margin: 16px 0; padding: 12px 14px; background: #f0f6fc; border: 1px solid #72aee6; border-radius: 4px;">';
+    echo '<p style="margin: 0 0 10px;"><strong>' . ( $already_run
+        ? esc_html__( 'Step 2 — Re-link tour pricing from labels', 'bst-plugin' )
+        : esc_html__( 'Step 3 — Re-link tour pricing from labels', 'bst-plugin' )
+    ) . '</strong></p>';
+    echo '<p class="description" style="margin: 0 0 10px;">' . esc_html__( 'Sets each vehicle_pricing row’s Vehicle (CPT) id from that row’s text label (same matching as migration). Does not delete Vehicle posts. Use when labels are correct but saved CPT links are wrong.', 'bst-plugin' ) . '</p>';
+    echo '<p class="description" style="margin: 0 0 10px;">' . esc_html__( 'ACF: If the Tour field group (or Vehicle) shows “Sync available” under Local JSON, sync it before re-link. Until the DB field definitions match the JSON in this project, reading repeater data can work while programmatic saves (update_field) may still fail.', 'bst-plugin' ) . '</p>';
+    echo '<button type="button" id="bst-release-cleanup-relink" class="button button-secondary">';
+    echo '<span class="dashicons dashicons-admin-links" style="margin-right: 4px; vertical-align: text-top;"></span>';
+    echo esc_html__( 'Re-link tour pricing from labels', 'bst-plugin' );
+    echo '</button>';
+    echo '</div>';
+
+    echo '<span id="cleanup-release-spinner" class="spinner" style="float: none; margin: 8px 0 0 8px; vertical-align: middle; display: none;"></span>';
+    echo '<div id="cleanup-release-result" style="margin-top: 16px;"></div>';
+    echo '</div>';
 
     echo '</div>';
+
+    $bst_release_cleanup_task_list = '';
+    foreach ( $cleanup_tasks as $task ) {
+        if ( ! empty( $task['name'] ) ) {
+            $bst_release_cleanup_task_list .= '• ' . $task['name'] . "\n";
+        }
+    }
     
     // Add JavaScript
     ?>
     <script type="text/javascript">
     jQuery(document).ready(function($) {
-        $('#cleanup-release-data').on('click', function() {
-            var $button = $(this);
-            var $spinner = $('#cleanup-release-spinner');
-            var $result = $('#cleanup-release-result');
-            var $forceCheckbox = $('#force-rerun-cleanup');
-            var forceRerun = $forceCheckbox.is(':checked');
-            var alreadyRun = <?php echo $already_run ? 'true' : 'false'; ?>;
-            
-            // Require force rerun checkbox if already run
-            if (alreadyRun && !forceRerun) {
-                alert('Please check the "Force rerun" checkbox to re-execute the cleanup tasks.');
+        var alreadyRun = <?php echo $already_run ? 'true' : 'false'; ?>;
+        var $spinner = $('#cleanup-release-spinner');
+        var $result = $('#cleanup-release-result');
+        var $actionButtons = $('#bst-release-cleanup-standard, #bst-release-cleanup-force, #bst-release-cleanup-relink');
+        var taskList = <?php echo wp_json_encode( $bst_release_cleanup_task_list ); ?>;
+
+        function bstReleaseCleanupConfirm(force, repair) {
+            var rerunNote = '';
+            if (force) {
+                rerunNote += '\n\n⚠️ FORCE RESET: Every Vehicle CPT post will be PERMANENTLY DELETED, then recreated. Tour and booking vehicle IDs will be reassigned. Backup your database first.';
+            }
+            if (repair) {
+                rerunNote += '\n\nRe-link from labels: saved Vehicle (CPT) ids on tour pricing rows will be replaced using each row’s text label (Vehicle posts are not deleted).';
+            }
+            if (!force && !repair) {
+                rerunNote += '\n\nStandard mode: normal migration for this release (no mass Vehicle deletion, no label-only re-link pass).';
+            }
+            return window.confirm('Run release data cleanup? This will modify existing data.\n\nTasks:\n' + taskList + rerunNote + '\n\nRecommended: backup your database first.');
+        }
+
+        function bstRunReleaseCleanup(force, repair) {
+            if (alreadyRun && !force && !repair) {
+                window.alert(<?php echo wp_json_encode( __( 'Cleanup already completed for this version. Use “Force reset” or “Re-link from labels” to run vehicle migration again.', 'bst-plugin' ) ); ?>);
                 return;
             }
-            
-            // Confirmation dialog
-            var taskList = '';
-            <?php foreach ($cleanup_tasks as $task): ?>
-            taskList += '• <?php echo esc_js($task['name']); ?>\n';
-            <?php endforeach; ?>
-            
-            var rerunNote = forceRerun ? '\n\n⚠️ FORCE RERUN: Will re-process all entries with detailed logging.' : '';
-            
-            if (!confirm('Are you sure you want to run the release data cleanup? This will modify existing data.\n\nTasks to be performed:\n' + taskList + rerunNote + '\n\nRecommended: Backup your database first.')) {
+            if (!bstReleaseCleanupConfirm(force, repair)) {
                 return;
             }
-            
-            $button.prop('disabled', true);
-            $spinner.show();
+            $actionButtons.prop('disabled', true);
+            $spinner.addClass('is-active').css('display', 'inline-block');
             $result.html('');
-            
+
             $.ajax({
                 url: ajaxurl,
                 type: 'POST',
                 data: {
                     action: 'bst_release_data_cleanup',
-                    nonce: '<?php echo wp_create_nonce("bst_release_cleanup_nonce"); ?>',
-                    force: forceRerun ? 'true' : 'false'
+                    nonce: '<?php echo wp_create_nonce( 'bst_release_cleanup_nonce' ); ?>',
+                    force: force ? 'true' : 'false',
+                    repair: repair ? 'true' : 'false'
                 },
                 success: function(response) {
-                    $spinner.hide();
-                    
+                    $spinner.removeClass('is-active').hide();
+                    $actionButtons.prop('disabled', false);
+
                     if (response.success) {
-                        $result.html('<div class="notice notice-success"><p>' + response.data + '</p></div>');
-                        if (!alreadyRun) {
-                            $button.text('Rerun Release Data Cleanup');
+                        var data = response.data;
+                        var msg = '';
+                        var toolsUrl = '';
+                        if (typeof data === 'object' && data !== null && data.message) {
+                            msg = data.message;
+                            toolsUrl = data.tools_url || '';
+                        } else if (typeof data === 'string') {
+                            msg = data;
+                            toolsUrl = <?php echo wp_json_encode( admin_url( 'admin.php?page=bst_tools_page' ) ); ?>;
+                        } else {
+                            msg = 'Cleanup finished.';
+                            toolsUrl = <?php echo wp_json_encode( admin_url( 'admin.php?page=bst_tools_page' ) ); ?>;
                         }
-                        // Reload page to show updated status
-                        setTimeout(function() {
-                            location.reload();
-                        }, 3000);
+                        var $box = $('<div class="notice notice-success" style="max-width:960px;"></div>');
+                        $box.append($('<p></p>').append($('<strong>').text('Cleanup finished. ')).append(document.createTextNode(msg)));
+                        if (toolsUrl) {
+                            $box.append($('<p style="margin-top:10px;"></p>').append(
+                                $('<a class="button button-primary"></a>').attr('href', toolsUrl).text('Open Tools — Error Log')
+                            ));
+                        }
+                        $result.empty().append($box);
                     } else {
-                        $result.html('<div class="notice notice-error"><p>' + response.data + '</p></div>');
-                        $button.prop('disabled', false);
+                        var errText = (typeof response.data === 'string') ? response.data : (response.data && response.data.message) ? response.data.message : 'Unknown error';
+                        var $errTa = $('<textarea readonly="readonly" rows="12" style="width:100%;max-width:100%;font-family:Consolas,Monaco,monospace;font-size:12px;box-sizing:border-box;margin-top:8px;" />').val(errText);
+                        $result.html('<div class="notice notice-error"><p><strong>Cleanup failed or was blocked.</strong></p></div>').append($errTa);
                     }
                 },
                 error: function() {
-                    $spinner.hide();
-                    $button.prop('disabled', false);
+                    $spinner.removeClass('is-active').hide();
+                    $actionButtons.prop('disabled', false);
                     $result.html('<div class="notice notice-error"><p>AJAX request failed.</p></div>');
                 }
+            });
+        }
+
+        $('#bst-release-cleanup-standard').on('click', function() {
+            bstRunReleaseCleanup(false, false);
+        });
+        $('#bst-release-cleanup-force').on('click', function() {
+            bstRunReleaseCleanup(true, false);
+        });
+        $('#bst-release-cleanup-relink').on('click', function() {
+            bstRunReleaseCleanup(false, true);
+        });
+    });
+    </script>
+    <?php
+}
+
+/**
+ * Tools → Admin Operations: CSV export of distinct vehicle strings on tours.
+ */
+function bst_tour_vehicle_names_export_callback() {
+    if ( ! function_exists( 'bst_aggregate_tour_vehicle_repeater_texts' ) ) {
+        echo '<p class="description">' . esc_html__( 'Export module not loaded.' ) . '</p>';
+        return;
+    }
+
+    $url = admin_url( 'admin-post.php' );
+    echo '<div class="bst-tour-vehicle-names-export" style="max-width: 720px;">';
+    echo '<p>' . esc_html__( 'Download a CSV of every distinct text stored in the tour Vehicle Pricing → Vehicles repeater (exact string as saved), which tours it appears on, linked Vehicle CPT post IDs and titles, and helper columns (normalized / compact keys, base name after stripping parenthetical segments) to spot spelling variants. Migration matches the canonical name (same as bst_vehicle_exact_text_key), not the raw cell text.' ) . '</p>';
+    echo '<form method="post" action="' . esc_url( $url ) . '" style="margin-top: 8px;">';
+    echo '<input type="hidden" name="action" value="bst_export_tour_vehicle_names" />';
+    wp_nonce_field( 'bst_export_tour_vehicle_names' );
+    submit_button( __( 'Download CSV' ), 'secondary', 'submit', false );
+    echo '</form>';
+    echo '</div>';
+}
+
+/**
+ * Tools → remap booking vehicle IDs from vehicle1/vehicle2 legacy strings (find only).
+ */
+function bst_booking_vehicle_remap_callback() {
+    if ( ! function_exists( 'bst_remap_booking_vehicle_ids_from_legacy_text' ) ) {
+        echo '<p class="description">' . esc_html__( 'Remap module not loaded.' ) . '</p>';
+        return;
+    }
+    $url = admin_url( 'admin-post.php' );
+    echo '<div class="bst-booking-vehicle-remap" style="max-width: 720px;">';
+    echo '<p>' . esc_html__( 'After merging duplicate Vehicle CPT posts (same model, different spelling), run this to set vehicle1_id and vehicle2_id on every booking by re-resolving legacy vehicle text against existing Vehicle titles only (no new posts). Uses the same normalized and compact-key matching as the vehicle migration (no “similar string” guessing).' ) . '</p>';
+    echo '<form method="post" action="' . esc_url( $url ) . '" style="margin-top: 8px;" onsubmit="return confirm(' . wp_json_encode( __( 'Update booking vehicle IDs from legacy text for all bookings?' ) ) . ');">';
+    echo '<input type="hidden" name="action" value="bst_remap_booking_vehicle_ids" />';
+    wp_nonce_field( 'bst_remap_booking_vehicle_ids' );
+    submit_button( __( 'Remap booking vehicle IDs' ), 'secondary', 'submit', false );
+    echo '</form>';
+    echo '</div>';
+}
+
+/**
+ * Tools → add limited-vehicle rows (vehicle + max) from tours; does not set Sold from bookings.
+ */
+function bst_limited_vehicles_create_tour_dates_callback() {
+    if ( ! function_exists( 'bst_migrate_limited_vehicles_create_only_batch' ) ) {
+        echo '<p class="description">' . esc_html__( 'Limited vehicles tools are not loaded.', 'bst-plugin' ) . '</p>';
+        return;
+    }
+
+    echo '<div class="bst-limited-vehicles-create" style="max-width: 720px;">';
+    echo '<p class="description" style="margin-bottom: 12px;"><strong>' . esc_html__( 'Before you run this:', 'bst-plugin' ) . '</strong> ';
+    echo esc_html__( 'Mark each vehicle as “Limited by default” on its Vehicle edit screen and link it on that tour’s Vehicle Pricing. This step only creates/updates rows and Max (BST Vehicle Count, minimum 1). Use “Recalculate limited vehicle sold from bookings” to fill Sold.', 'bst-plugin' );
+    echo '</p>';
+    echo '<p>' . esc_html__( 'For every tour that has at least one such vehicle, adds or updates matching Limited vehicles rows on each tour date. Existing Sold values are left unchanged on updated rows; new rows get Sold 0.', 'bst-plugin' ) . '</p>';
+    echo '<p style="margin-top: 12px;">';
+    echo '<button type="button" id="bst-lv-create-rows" class="button button-secondary">';
+    echo esc_html__( 'Add / update limited vehicle rows', 'bst-plugin' );
+    echo '</button>';
+    echo '<span id="bst-lv-create-spinner" class="spinner" style="float: none; margin: 0 0 0 10px;"></span>';
+    echo '</p>';
+    echo '<div id="bst-lv-create-result" style="margin-top: 12px;"></div>';
+    ?>
+    <script type="text/javascript">
+    jQuery(function($) {
+        var $btn = $('#bst-lv-create-rows');
+        var $spin = $('#bst-lv-create-spinner');
+        var $out = $('#bst-lv-create-result');
+        if (!$btn.length) {
+            return;
+        }
+        $btn.on('click', function() {
+            if (!confirm(<?php echo wp_json_encode( __( 'Add or update limited-vehicle rows on all matching tour dates? Backup recommended.', 'bst-plugin' ) ); ?>)) {
+                return;
+            }
+            $btn.prop('disabled', true);
+            $spin.addClass('is-active');
+            $out.empty();
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'bst_sync_limited_vehicles_create',
+                    nonce: <?php echo wp_json_encode( wp_create_nonce( 'bst_sync_limited_vehicles_create_nonce' ) ); ?>
+                }
+            }).done(function(res) {
+                if (res && res.success && res.data) {
+                    var d = res.data;
+                    var msg = (typeof d === 'string') ? d : (d.message || '');
+                    var hasErr = (typeof d === 'object' && d.has_errors);
+                    var cls = hasErr ? 'notice-warning' : 'notice-success';
+                    $out.html('<div class="notice ' + cls + ' inline"><p>' + $('<div/>').text(msg).html() + '</p></div>');
+                } else {
+                    var msg = (res && res.data) ? res.data : <?php echo wp_json_encode( __( 'Request failed.', 'bst-plugin' ) ); ?>;
+                    if (typeof msg === 'object' && msg.message) {
+                        msg = msg.message;
+                    }
+                    $out.html('<div class="notice notice-error inline"><p>' + $('<div/>').text(String(msg)).html() + '</p></div>');
+                }
+            }).fail(function() {
+                $out.html('<div class="notice notice-error inline"><p><?php echo esc_js( __( 'AJAX request failed.', 'bst-plugin' ) ); ?></p></div>');
+            }).always(function() {
+                $btn.prop('disabled', false);
+                $spin.removeClass('is-active');
             });
         });
     });
     </script>
     <?php
+    echo '</div>';
+}
+
+/**
+ * Tools → set Sold on limited-vehicle rows from bookings; report oversold (sold &gt; max).
+ */
+function bst_limited_vehicles_sync_sold_tour_dates_callback() {
+    if ( ! function_exists( 'bst_migrate_limited_vehicles_sync_sold_batch' ) ) {
+        echo '<p class="description">' . esc_html__( 'Limited vehicles tools are not loaded.', 'bst-plugin' ) . '</p>';
+        return;
+    }
+
+    echo '<div class="bst-limited-vehicles-sync-sold" style="max-width: 720px;">';
+    echo '<p>' . esc_html__( 'Scans every tour date that has Limited vehicles rows. Sets each row’s Sold from bookings (active statuses: pending through completed and reserved; excludes Cancelled and Waiting List). Rows where the new Sold differs from the stored value are counted as updated. Lists any vehicle/date where sold exceeds max.', 'bst-plugin' ) . '</p>';
+    echo '<p style="margin-top: 12px;">';
+    echo '<button type="button" id="bst-lv-sync-sold" class="button button-secondary">';
+    echo esc_html__( 'Recalculate sold from bookings', 'bst-plugin' );
+    echo '</button>';
+    echo '<span id="bst-lv-sold-spinner" class="spinner" style="float: none; margin: 0 0 0 10px;"></span>';
+    echo '</p>';
+    echo '<div id="bst-lv-sold-result" style="margin-top: 12px;"></div>';
+    ?>
+    <script type="text/javascript">
+    jQuery(function($) {
+        var $btn = $('#bst-lv-sync-sold');
+        var $spin = $('#bst-lv-sold-spinner');
+        var $out = $('#bst-lv-sold-result');
+        if (!$btn.length) {
+            return;
+        }
+        $btn.on('click', function() {
+            if (!confirm(<?php echo wp_json_encode( __( 'Recalculate Sold on all limited-vehicle rows from bookings? Backup recommended.', 'bst-plugin' ) ); ?>)) {
+                return;
+            }
+            $btn.prop('disabled', true);
+            $spin.addClass('is-active');
+            $out.empty();
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                dataType: 'json',
+                data: {
+                    action: 'bst_sync_limited_vehicles_sold',
+                    nonce: <?php echo wp_json_encode( wp_create_nonce( 'bst_sync_limited_vehicles_sold_nonce' ) ); ?>
+                }
+            }).done(function(res) {
+                if (res && res.success && res.data) {
+                    var d = res.data;
+                    var msg = (typeof d === 'string') ? d : (d.message || '');
+                    var hasErr = (typeof d === 'object' && d.has_errors);
+                    var oversold = (typeof d === 'object' && d.oversold) ? d.oversold : [];
+                    var cls = hasErr ? 'notice-warning' : 'notice-success';
+                    var html = '<div class="notice ' + cls + ' inline"><p>' + $('<div/>').text(msg).html() + '</p>';
+                    if (oversold.length) {
+                        html += '<p><strong><?php echo esc_js( __( 'Oversold (sold greater than max):', 'bst-plugin' ) ); ?></strong></p><ul class="bst-lv-oversold-list" style="margin-left:1.25em; list-style: disc;">';
+                        oversold.forEach(function(line) {
+                            html += '<li>' + $('<div/>').text(line).html() + '</li>';
+                        });
+                        html += '</ul>';
+                    }
+                    html += '</div>';
+                    $out.html(html);
+                } else {
+                    var msg = (res && res.data) ? res.data : <?php echo wp_json_encode( __( 'Request failed.', 'bst-plugin' ) ); ?>;
+                    if (typeof msg === 'object' && msg.message) {
+                        msg = msg.message;
+                    }
+                    $out.html('<div class="notice notice-error inline"><p>' + $('<div/>').text(String(msg)).html() + '</p></div>');
+                }
+            }).fail(function() {
+                $out.html('<div class="notice notice-error inline"><p><?php echo esc_js( __( 'AJAX request failed.', 'bst-plugin' ) ); ?></p></div>');
+            }).always(function() {
+                $btn.prop('disabled', false);
+                $spin.removeClass('is-active');
+            });
+        });
+    });
+    </script>
+    <?php
+    echo '</div>';
 }
 
 /**
@@ -1369,8 +1776,8 @@ function bst_get_release_cleanup_tasks() {
     $version_cleanups = array(
         '1.0.0' => array(
             array(
-                'name' => 'Migrate PayPal Card Type Data',
-                'description' => 'Preserve card type data from legacy PayPal fields (forms 4, 9 & 10) into wp_bst_paypal_payments table before production deployment'
+                'name' => 'Migrate vehicle CPT links',
+                'description' => 'Link tour vehicle_pricing rows and booking vehicle text to Vehicle CPT posts (canonical name match: strip HTML/parentheticals, collapse spaces; same as bst_vehicle_exact_text_key). Sets vehicle type from tour Type Code. Sync ACF field groups (Tour + Vehicle) from Local JSON before running; use Force reset only to wipe and rebuild Vehicle posts.'
             )
         ),
         // Example for future releases:
@@ -1390,228 +1797,52 @@ function bst_get_release_cleanup_tasks() {
 }
 
 /**
+ * Write release cleanup / vehicle migration result lines to PHP’s error_log only (Tools → Error Log).
+ *
+ * @param string[] $lines Result strings from cleanup tasks / migrations.
+ */
+function bst_log_release_cleanup_results( array $lines ) {
+	if ( empty( $lines ) ) {
+		return;
+	}
+
+	error_log( '[BST] release cleanup: logging ' . count( $lines ) . ' result line(s) to PHP error_log.' );
+
+	$prefix = '[BST release cleanup] ';
+	foreach ( $lines as $line ) {
+		if ( ! is_string( $line ) ) {
+			$line = wp_json_encode( $line );
+		}
+		$line = preg_replace( '/\s+/', ' ', trim( $line ) );
+		if ( '' === $line ) {
+			continue;
+		}
+		$tag = 'INFO';
+		if ( preg_match( '/\b(Warning|failed|error|Error)\b/i', $line ) ) {
+			$tag = 'WARNING';
+		}
+		error_log( $prefix . '[' . $tag . '] ' . $line );
+	}
+}
+
+/**
  * Execute cleanup tasks for the current release
  */
-function bst_execute_release_cleanup_tasks($tasks, $version) {
+function bst_execute_release_cleanup_tasks($tasks, $version, $force_rerun = false, $repair_repeater_links_from_text = false) {
     global $wpdb;
     $results = array();
-    
+    $force_rerun = (bool) $force_rerun;
+    $repair_repeater_links_from_text = (bool) $repair_repeater_links_from_text;
+
     // Execute each cleanup task
     foreach ($tasks as $task) {
         switch ($task['name']) {
-            case 'Migrate PayPal Card Type Data':
-                // Create the table if it doesn't exist
-                $table_name = $wpdb->prefix . 'bst_paypal_payments';
-                
-                $sql = "CREATE TABLE IF NOT EXISTS $table_name (
-                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-                    entry_id BIGINT(20) UNSIGNED NOT NULL,
-                    form_id INT(10) UNSIGNED NOT NULL,
-                    card_type VARCHAR(50) DEFAULT NULL,
-                    payment_date DATETIME DEFAULT NULL,
-                    payment_amount DECIMAL(10, 2) DEFAULT NULL,
-                    created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (id),
-                    UNIQUE KEY entry_id (entry_id),
-                    KEY form_id (form_id)
-                ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;";
-                
-                require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-                dbDelta($sql);
-                
-                // Migrate Form 4 entries (old booking form)
-                $form_4_count = 0;
-                $form_4_skipped = 0;
-                $form_4_no_data = 0;
-                $form_4_entries = GFAPI::get_entries(4);
-                $form_4_total = count($form_4_entries);
-                
-                foreach ($form_4_entries as $entry) {
-                    $entry_id = $entry['id'];
-                    
-                    // Check if already migrated
-                    $exists = $wpdb->get_var($wpdb->prepare(
-                        "SELECT id FROM $table_name WHERE entry_id = %d",
-                        $entry_id
-                    ));
-                    
-                    if ($exists) {
-                        $form_4_skipped++;
-                        continue;
-                    }
-                    
-                    // For PayPal payments, try various field locations
-                    $card_type = null;
-                    
-                    // PayPal field 76 - try subfields first (standard PayPal field structure)
-                    $card_type = rgar($entry, '76.5'); // Card type subfield
-                    if (empty($card_type)) {
-                        $card_type = rgar($entry, '76.4'); // Alternative card type subfield
-                    }
-                    if (empty($card_type)) {
-                        $card_type = rgar($entry, '76'); // Base field
-                    }
-                    
-                    // Only insert if we have card type data
-                    if (!empty($card_type)) {
-                        $wpdb->insert(
-                            $table_name,
-                            array(
-                                'entry_id' => $entry_id,
-                                'form_id' => 4,
-                                'card_type' => $card_type,
-                                'payment_date' => rgar($entry, 'payment_date'),
-                                'payment_amount' => rgar($entry, 'payment_amount'),
-                            ),
-                            array('%d', '%d', '%s', '%s', '%f')
-                        );
-                        
-                        if ($wpdb->insert_id) {
-                            $form_4_count++;
-                        }
-                    } else {
-                        $form_4_no_data++;
-                    }
+            case 'Migrate vehicle CPT links':
+                if ( function_exists( 'bst_migrate_vehicle_cpt_links' ) ) {
+                    $results = array_merge( $results, bst_migrate_vehicle_cpt_links( $force_rerun, $repair_repeater_links_from_text ) );
+                } else {
+                    $results[] = 'Vehicle migration function not loaded.';
                 }
-                
-                // Migrate Form 9 entries
-                $form_9_count = 0;
-                $form_9_skipped = 0;
-                $form_9_no_data = 0;
-                $form_9_entries = GFAPI::get_entries(9);
-                $form_9_total = count($form_9_entries);
-                $form_9_debug = array(); // Debug info for first 3 entries
-                
-                foreach ($form_9_entries as $entry) {
-                    $entry_id = $entry['id'];
-                    
-                    // Check if already migrated
-                    $exists = $wpdb->get_var($wpdb->prepare(
-                        "SELECT id FROM $table_name WHERE entry_id = %d",
-                        $entry_id
-                    ));
-                    
-                    if ($exists) {
-                        $form_9_skipped++;
-                        continue;
-                    }
-                    
-                    // For PayPal payments, try various field locations
-                    $card_type = null;
-                    $debug_info = array();
-                    
-                    // PayPal field 76 - try subfields first (standard PayPal field structure)
-                    $card_type = rgar($entry, '76.5'); // Card type subfield
-                    $debug_info['76.5'] = $card_type ?: 'empty';
-                    if (empty($card_type)) {
-                        $card_type = rgar($entry, '76.4'); // Alternative card type subfield
-                        $debug_info['76.4'] = $card_type ?: 'empty';
-                    }
-                    if (empty($card_type)) {
-                        $card_type = rgar($entry, '76'); // Base field
-                        $debug_info['76'] = $card_type ?: 'empty';
-                    }
-                    
-                    // Store debug info for first 3 entries
-                    if (count($form_9_debug) < 3) {
-                        $form_9_debug[] = "Entry $entry_id: " . json_encode($debug_info) . " => Final: " . ($card_type ?: 'NONE');
-                    }
-                    
-                    // Only insert if we have card type data
-                    if (!empty($card_type)) {
-                        $wpdb->insert(
-                            $table_name,
-                            array(
-                                'entry_id' => $entry_id,
-                                'form_id' => 9,
-                                'card_type' => $card_type,
-                                'payment_date' => rgar($entry, 'payment_date'),
-                                'payment_amount' => rgar($entry, 'payment_amount'),
-                            ),
-                            array('%d', '%d', '%s', '%s', '%f')
-                        );
-                        
-                        if ($wpdb->insert_id) {
-                            $form_9_count++;
-                        }
-                    } else {
-                        $form_9_no_data++;
-                    }
-                }
-                
-                // Migrate Form 10 entries
-                $form_10_count = 0;
-                $form_10_skipped = 0;
-                $form_10_no_data = 0;
-                $form_10_entries = GFAPI::get_entries(10);
-                $form_10_total = count($form_10_entries);
-                
-                foreach ($form_10_entries as $entry) {
-                    $entry_id = $entry['id'];
-                    
-                    // Check if already migrated
-                    $exists = $wpdb->get_var($wpdb->prepare(
-                        "SELECT id FROM $table_name WHERE entry_id = %d",
-                        $entry_id
-                    ));
-                    
-                    if ($exists) {
-                        $form_10_skipped++;
-                        continue;
-                    }
-                    
-                    // For PayPal payments, try various field locations
-                    $card_type = null;
-                    
-                    // PayPal field 76 or 280 - try subfields first (standard PayPal field structure)
-                    $card_type = rgar($entry, '76.5'); // Card type subfield (if form 10 used field 76)
-                    if (empty($card_type)) {
-                        $card_type = rgar($entry, '76.4'); // Alternative card type subfield
-                    }
-                    if (empty($card_type)) {
-                        $card_type = rgar($entry, '280.5'); // Card type subfield (if form 10 used field 280)
-                    }
-                    if (empty($card_type)) {
-                        $card_type = rgar($entry, '280.4'); // Alternative card type subfield
-                    }
-                    if (empty($card_type)) {
-                        $card_type = rgar($entry, '76'); // Base field
-                    }
-                    if (empty($card_type)) {
-                        $card_type = rgar($entry, '280'); // Alternative base field
-                    }
-                    
-                    // Only insert if we have card type data
-                    if (!empty($card_type)) {
-                        $wpdb->insert(
-                            $table_name,
-                            array(
-                                'entry_id' => $entry_id,
-                                'form_id' => 10,
-                                'card_type' => $card_type,
-                                'payment_date' => rgar($entry, 'payment_date'),
-                                'payment_amount' => rgar($entry, 'payment_amount'),
-                            ),
-                            array('%d', '%d', '%s', '%s', '%f')
-                        );
-                        
-                        if ($wpdb->insert_id) {
-                            $form_10_count++;
-                        }
-                    } else {
-                        $form_10_no_data++;
-                    }
-                }
-                
-                $total_records = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
-                $results[] = "Table created/verified: $table_name";
-                $results[] = "Form 4: Total=$form_4_total, Migrated=$form_4_count, Skipped=$form_4_skipped, NoCardData=$form_4_no_data";
-                $results[] = "Form 9: Total=$form_9_total, Migrated=$form_9_count, Skipped=$form_9_skipped, NoCardData=$form_9_no_data";
-                if (!empty($form_9_debug)) {
-                    $results[] = "Form 9 Debug (first 3): " . implode(' | ', $form_9_debug);
-                }
-                $results[] = "Form 10: Total=$form_10_total, Migrated=$form_10_count, Skipped=$form_10_skipped, NoCardData=$form_10_no_data";
-                $results[] = "Total records in table: $total_records";
                 break;
             
             case 'Update Booking Status Format':

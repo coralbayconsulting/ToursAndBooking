@@ -52,6 +52,17 @@ After deployment, check browser developer tools to confirm new timestamps in ass
 - Old: `bst-admin-styles.css?ver=1737123456`
 - New: `bst-admin-styles.css?ver=1737123789`
 
+### Advanced Custom Fields (first deploy or new environment)
+
+After code deploys, the **field group definitions in the database** may still differ from the **Local JSON** shipped in this repo (`acf-json/` under the plugin and theme). Until they match, wp-admin can show **Sync available** on one or more groups, and programmatic `update_field()` calls may fail even when the site otherwise looks fine.
+
+1. Log in to **wp-admin** on the deployed environment.
+2. Go to **Custom Fields → Field Groups**.
+3. For any group that shows **Sync available**—commonly **Tour** and **Vehicle**—open the group and click **Sync** so the database matches the JSON in the repo.
+4. Confirm **Local JSON** shows **Saved** (not “Sync available”) for those groups.
+
+Repeat this after a first deploy to a new slot or server, or whenever you pull fresh code that changes ACF JSON. For a fuller checklist (DB import, permalinks, optional BST Tools), see `docs/local-dev-refresh.md`.
+
 ## Troubleshooting
 
 ### If Styles Don't Update

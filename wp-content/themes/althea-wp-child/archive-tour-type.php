@@ -78,40 +78,17 @@
                                 $term = get_term($term_id, 'tour-type-code');
                                 if ($term && !is_wp_error($term)) {
                                     $taxonomy_url = get_term_link($term);
-                                    
-                                    // Check if this tour type has any public tours
-                                    $public_tours_query = new WP_Query(array(
-                                        'post_type' => 'tour',
-                                        'posts_per_page' => 1,
-                                        'fields' => 'ids',
-                                        'tax_query' => array(
-                                            array(
-                                                'taxonomy' => 'tour-type-code',
-                                                'field'    => 'term_id',
-                                                'terms'    => $term_id,
-                                            )
-                                        ),
-                                        'meta_query' => array(
-                                            array(
-                                                'key' => 'private',
-                                                'value' => 1,
-                                                'compare' => '!=',
-                                                'type' => 'NUMERIC'
-                                            )
-                                        )
-                                    ));
-                                    
-                                    // Skip this tour type if it has no public tours
-                                    if (!$public_tours_query->have_posts()) {
-                                        wp_reset_postdata();
-                                        continue;
-                                    }
-                                    wp_reset_postdata();
                                 }
                             } else {
                                 error_log('No type_code ACF field found for post ID: ' . $id);
                             }
 
+                            $tours_by_year = $type_code_field
+                                ? bst_get_tours_by_year_for_tour_type( $type_code_field->term_id )
+                                : array();
+                            if ( empty( $tours_by_year ) ) {
+                                continue;
+                            }
                             ?>
                             <div class="tour-type-box">
                                 <h2>
@@ -125,28 +102,22 @@
                                 <p><?php echo $description; ?></p>
                                 <div class="date-container">
                                     <?php
-                                    $tours_by_year = bst_get_tours_by_year_for_tour_type($type_code_field->term_id);
-
-                                    if (!empty($tours_by_year)) {
-                                        foreach ($tours_by_year as $year => $tours) {
-                                            echo '<div class="date-list">';
-                                            echo '<h3>' . esc_html($year) . ' Tour Dates</h3>';
-                                            echo '<ul class="date-list date-list--smallblue">';
-                                            foreach ($tours as $tour) {
-                                                echo '<li>';
-                                                echo '<span class="date-content">' . esc_html($tour['date_text']) . ': <a href="' . esc_url($tour['permalink']) . '">' . esc_html($tour['title']) . '</a></span>';
-                                                if (!empty($tour['badge_class'])) {
-                                                    echo '<span class="badge ' . esc_attr($tour['badge_class']) . '">' . esc_html($tour['badge_text']) . '</span>';
-                                                } elseif (!empty($tour['status_badge_text'])) {
-                                                    echo '<span class="badge ' . esc_attr($tour['status_badge_class']) . '">' . esc_html($tour['status_badge_text']) . '</span>';
-                                                }
-                                                echo '</li>';
+                                    foreach ($tours_by_year as $year => $tours) {
+                                        echo '<div class="date-list">';
+                                        echo '<h3>' . esc_html($year) . ' Tour Dates</h3>';
+                                        echo '<ul class="date-list date-list--smallblue">';
+                                        foreach ($tours as $tour) {
+                                            echo '<li>';
+                                            echo '<span class="date-content">' . esc_html($tour['date_text']) . ': <a href="' . esc_url($tour['permalink']) . '">' . esc_html($tour['title']) . '</a></span>';
+                                            if (!empty($tour['badge_class'])) {
+                                                echo '<span class="badge ' . esc_attr($tour['badge_class']) . '">' . esc_html($tour['badge_text']) . '</span>';
+                                            } elseif (!empty($tour['status_badge_text'])) {
+                                                echo '<span class="badge ' . esc_attr($tour['status_badge_class']) . '">' . esc_html($tour['status_badge_text']) . '</span>';
                                             }
-                                            echo '</ul>';
-                                            echo '</div>';
+                                            echo '</li>';
                                         }
-                                    } else {
-                                        echo '<p>No tours found for the specified tour type.</p>';
+                                        echo '</ul>';
+                                        echo '</div>';
                                     }
                                     ?>
                                 </div>

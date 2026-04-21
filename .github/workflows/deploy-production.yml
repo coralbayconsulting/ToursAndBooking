@@ -1,5 +1,5 @@
 # PRODUCTION — deploys to the App Service DEFAULT slot (live site).
-# Does NOT run automatically on every push to main (use staging workflow for that).
+# Does NOT run automatically on every push to main (testing workflow deploys the testing slot on push).
 #
 # Run manually: Actions → "Deploy to Azure — bluestradatours (PRODUCTION)" → Run workflow.
 #

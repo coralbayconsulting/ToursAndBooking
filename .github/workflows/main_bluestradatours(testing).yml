@@ -1,5 +1,6 @@
-# TESTING — deploys to App Service slot "testing".
-# Runs automatically on push to main.
+# TESTING — deploys to App Service slot "testing" on every push to main.
+# Staging slot uses main_bluestradatours(staging).yml (manual only).
+# Production uses deploy-production.yml (default slot, manual only).
 #
 # Docs: https://github.com/Azure/webapps-deploy
 # Azure Actions: https://github.com/Azure/actions
@@ -32,6 +33,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
+    # GitHub Environment — add matching federated credential in Azure if OIDC is environment-scoped:
+    # repo:<org>/<repo>:environment:testing
     environment: testing
     permissions:
       id-token: write
@@ -55,7 +58,7 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_80D0218D465E49219EBC687AF0098B6B }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_BEF30C7BEE314963B77018828D554DC4 }}
 
-      - name: Deploy to Azure Web App (testing)
+      - name: Deploy to Azure Web App (testing slot)
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:

@@ -708,18 +708,7 @@ jQuery(document).ready(function($) {
         var tourPrice = parseFloat(formData.tour_price) || 0;
         var depositAmount = parseFloat(formData.deposit_payment_amount) || 0;
         
-        // 1. tour_package_text - from selected package option
-        if (formData.tour_package_id) {
-            var $selectedPackageOption = $('#tour_package_id option:selected');
-            var packageText = $selectedPackageOption.text();
-            if (packageText && packageText !== 'Select a Package') {
-                // Remove price information from package text
-                packageText = packageText.replace(/\s*-\s*[€$]\s?[0-9,]+\.?\d*/g, '').trim();
-                formData.tour_package_text = packageText;
-            }
-        }
-        
-        // 2. vehicle_choices - based on actual vehicle pricing grid rows available
+        // 1. vehicle_choices - based on actual vehicle pricing grid rows available
         // Need to check if there are any vehicle pricing options for this tour/package
         // If no vehicle pricing rows exist, vehicle_choices should be 0
         
@@ -734,7 +723,9 @@ jQuery(document).ready(function($) {
                 action: 'get_vehicle_data',
                 tour_id: formData.tour_id,
                 package_id: formData.tour_package_id,
-                currency: formData.tour_currency
+                currency: formData.tour_currency,
+                vehicle_labels_for: 'staff',
+                show_archived: 0
             },
             success: function(response) {
                 if (response.success && response.data && Array.isArray(response.data)) {

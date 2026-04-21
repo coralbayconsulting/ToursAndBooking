@@ -14,6 +14,28 @@ jQuery(document).ready(function ($) {
   var extensionCheckbox = $("#extensionCheckbox");
   var extensionLabel = $("#extensionLabel");
 
+  /** Drop trailing "(...)" only if the first character after "(" is "+" or "-" (tour price / supplement). */
+  function bstStripLeadingPlusMinusParen(text) {
+    if (!text || typeof text !== "string") {
+      return "";
+    }
+    var s = text.replace(/\s+$/, "");
+    var prev;
+    do {
+      prev = s;
+      s = s.replace(/\s*\(\s*[+\-][^)]*\)\s*$/, "").replace(/\s+$/, "");
+    } while (s !== prev);
+    return s;
+  }
+
+  /** Remove trailing " - €1,234.56" (or $, £ with optional negative) from package label text. */
+  function bstStripPackagePriceSuffix(text) {
+    if (!text || typeof text !== "string") {
+      return "";
+    }
+    return text.replace(/\s*-\s*[€$£]\s*-?[0-9][0-9,]*(?:\.[0-9]{1,2})?\s*$/, "").trim();
+  }
+
   // Initial state
   tourpackagedropdown.prop("disabled", true);
   vehicleDropdown1Container.hide();
@@ -50,8 +72,8 @@ jQuery(document).ready(function ($) {
       calculateTotalPrice();
     }
     
-    // Check if we should show waiting list button instead of book button
-    checkButtonDisplayState();
+    // Book / waiting-list visibility and disabled state (includes vehicle + inventory rules)
+    checkBookButtonState();
   }
 
   // Function to calculate and display the total price
@@ -151,7 +173,6 @@ jQuery(document).ready(function ($) {
         });
 
         showHideFields();
-        checkButtonDisplayState(); // Check if we should show waiting list button
       },
       error: function (xhr, status, error) {
         console.log("Tour Package AJAX Error:", error);
@@ -184,8 +205,8 @@ jQuery(document).ready(function ($) {
       showHideFields();
     }
     
-    // Check button display state after date selection
-    checkButtonDisplayState();
+    // Book / waiting-list state after date selection
+    checkBookButtonState();
   });
 
   // Handle change event for the package dropdown
@@ -223,6 +244,7 @@ jQuery(document).ready(function ($) {
 
     // Get tour's assigned currency (from PHP localization)
     var tourCurrencyCode = (typeof tourCurrency !== 'undefined' && tourCurrency.currency) ? tourCurrency.currency : 'EUR';
+    var selectedTourDateId = tourdatedropdown.val() || "";
 
     // Trigger AJAX request to fetch vehicle data
     $.ajax({
@@ -233,6 +255,9 @@ jQuery(document).ready(function ($) {
         tour_id: tourId,
         package_id: packageId,
         currency: tourCurrencyCode,
+        tour_date_id: String(selectedTourDateId).split("|")[0],
+        vehicle_labels_for: "customer",
+        show_archived: 0,
       },
       success: function (response) {
         // Logic to show/hide vehicle dropdowns based on the number of vehicles and packageId
@@ -240,7 +265,9 @@ jQuery(document).ready(function ($) {
           ? packageSettings[packageId].vehicles
           : 1;
 
-        if (response.data.length < 2) {
+        if (!response.success || !Array.isArray(response.data) || response.data.length < 2) {
+          window.bstTourVehicleLimitedRemaining = {};
+          hideDualVehicleInventoryNotice();
           vehicleDropdown1Container.hide();
           vehicleDropdown2Container.hide();
           
@@ -248,22 +275,41 @@ jQuery(document).ready(function ($) {
           updateExtensionCheckbox();
         } else {
           // Populate the dropdowns with the fetched data
+          window.bstTourVehicleLimitedRemaining = {};
           $.each(response.data, function (index, item) {
-            vehicleDropdown1.append(
-              $("<option>", {
-                value: item.value, // This contains the price for calculations
-                text: item.text, // This is the display text
-                "data-id": item["data-id"], // Vehicle class ID
-              })
-            );
-            if (numVehicles == 2) {
-              vehicleDropdown2.append(
-                $("<option>", {
-                  value: item.value, // This contains the price for calculations  
-                  text: item.text, // This is the display text
-                  "data-id": item["data-id"], // Vehicle class ID
-                })
+            if (item.vehicle_id != null && item.limited_slots_remaining != null) {
+              window.bstTourVehicleLimitedRemaining[String(item.vehicle_id)] = parseInt(
+                item.limited_slots_remaining,
+                10
               );
+            }
+            var opt1 = $("<option>", {
+              value: item.value, // Price for calculations (0 when limited-unavailable)
+              text: item.text,
+              "data-id": item["data-id"],
+              "data-vehicle-id": item["vehicle_id"] || "",
+            });
+            if (item.unavailable) {
+              opt1.attr("data-unavailable", "true");
+            }
+            if (item.limited_slots_remaining != null) {
+              opt1.attr("data-limited-slots-remaining", item.limited_slots_remaining);
+            }
+            vehicleDropdown1.append(opt1);
+            if (numVehicles == 2) {
+              var opt2 = $("<option>", {
+                value: item.value,
+                text: item.text,
+                "data-id": item["data-id"],
+                "data-vehicle-id": item["vehicle_id"] || "",
+              });
+              if (item.unavailable) {
+                opt2.attr("data-unavailable", "true");
+              }
+              if (item.limited_slots_remaining != null) {
+                opt2.attr("data-limited-slots-remaining", item.limited_slots_remaining);
+              }
+              vehicleDropdown2.append(opt2);
             }
           });
 
@@ -278,6 +324,8 @@ jQuery(document).ready(function ($) {
           }
         }
 
+        refreshBothVehicleLimitedOptions();
+
         // Trigger change event to update calculations
         vehicleDropdown1.trigger("change");
         vehicleDropdown2.trigger("change");
@@ -285,26 +333,160 @@ jQuery(document).ready(function ($) {
         // Re-enable the book button if conditions are met
         checkBookButtonState();
         
-        // Calculate total price after vehicle dropdowns are populated
-        calculateTotalPrice();
+        // Total price: updateExtensionCheckbox (triggered by change) ends with calculateTotalPrice
       },
       error: function (xhr, status, error) {
         console.log("Vehicle Data AJAX Error:", error);
       },
     });
 
-    checkButtonDisplayState(); // Add this to check for sold out/unavailable state
-  });
-
-  // Handle change event for the vehicle dropdowns
-  vehicleDropdown1.on("change", function() {
-    updateExtensionCheckbox();
-    calculateTotalPrice();
     checkBookButtonState();
   });
-  vehicleDropdown2.on("change", function() {
+
+  function getPackageVehicleSlotCount() {
+    var packageId = tourpackagedropdown.find("option:selected").data("id");
+    if (packageId == null || packageId === "" || typeof packageSettings === "undefined" || !packageSettings[packageId]) {
+      return 1;
+    }
+    return parseInt(packageSettings[packageId].vehicles, 10) || 1;
+  }
+
+  function hideDualVehicleInventoryNotice() {
+    $("#bst-dual-vehicle-inventory-notice").hide().text("");
+  }
+
+  function showDualVehicleInventoryNotice(msg) {
+    $("#bst-dual-vehicle-inventory-notice").text(msg).show();
+  }
+
+  function parseLimitedSlotsRemainingAttr($opt) {
+    var a = $opt.attr("data-limited-slots-remaining");
+    if (a === undefined || a === "") {
+      return null;
+    }
+    var n = parseInt(a, 10);
+    return isNaN(n) ? null : n;
+  }
+
+  function selectedVehicleCptId($dropdown) {
+    var v = $dropdown.find("option:selected").attr("data-vehicle-id");
+    return v != null && String(v).trim() !== "" ? String(v) : "";
+  }
+
+  /**
+   * Two-car packages: if the other dropdown has chosen vehicle V and V has limited_slots_remaining < 2,
+   * the same V cannot be chosen here. Applies both directions (Car 1 affects Car 2 and Car 2 affects Car 1).
+   * If remaining >= 2, the same model may be selected in both slots.
+   */
+  function refreshBothVehicleLimitedOptions() {
+    if (getPackageVehicleSlotCount() < 2) {
+      vehicleDropdown1.find("option").prop("disabled", false);
+      vehicleDropdown2.find("option").prop("disabled", false);
+      return;
+    }
+    if (!vehicleDropdown1Container.is(":visible") || !vehicleDropdown2Container.is(":visible")) {
+      return;
+    }
+    var id1 = selectedVehicleCptId(vehicleDropdown1);
+    var id2 = selectedVehicleCptId(vehicleDropdown2);
+
+    function applyDisable($dropdown, otherSlotVehicleId) {
+      $dropdown.find("option").each(function () {
+        var $o = $(this);
+        if ($o.index() === 0) {
+          $o.prop("disabled", false);
+          return;
+        }
+        if (!otherSlotVehicleId) {
+          $o.prop("disabled", false);
+          return;
+        }
+        var idOptRaw = $o.attr("data-vehicle-id");
+        var idOpt = idOptRaw != null && String(idOptRaw).trim() !== "" ? String(idOptRaw) : "";
+        var lim = parseLimitedSlotsRemainingAttr($o);
+        var disable =
+          idOpt &&
+          idOpt === otherSlotVehicleId &&
+          lim !== null &&
+          lim < 2;
+        $o.prop("disabled", !!disable);
+      });
+    }
+
+    applyDisable(vehicleDropdown1, id2);
+    applyDisable(vehicleDropdown2, id1);
+
+    var $s1 = vehicleDropdown1.find("option:selected");
+    if ($s1.length && $s1.prop("disabled")) {
+      vehicleDropdown1.prop("selectedIndex", 0);
+    }
+    var $s2 = vehicleDropdown2.find("option:selected");
+    if ($s2.length && $s2.prop("disabled")) {
+      vehicleDropdown2.prop("selectedIndex", 0);
+    }
+  }
+
+  function dualLimitedSameVehicleOk() {
+    if (getPackageVehicleSlotCount() < 2) {
+      return true;
+    }
+    if (!vehicleDropdown1Container.is(":visible") || !vehicleDropdown2Container.is(":visible")) {
+      return true;
+    }
+    if (vehicleDropdown1.prop("selectedIndex") === 0 || vehicleDropdown2.prop("selectedIndex") === 0) {
+      return true;
+    }
+    var id1 = selectedVehicleCptId(vehicleDropdown1);
+    var id2 = selectedVehicleCptId(vehicleDropdown2);
+    if (!id1 || !id2 || id1 !== id2) {
+      return true;
+    }
+    var lim =
+      window.bstTourVehicleLimitedRemaining &&
+      window.bstTourVehicleLimitedRemaining[id1];
+    if (lim === undefined || lim === null) {
+      return true;
+    }
+    return lim >= 2;
+  }
+
+  var BST_DUAL_VEHICLE_INVENTORY_MSG =
+    "This vehicle only has one left on this tour date. It cannot be selected for both cars.";
+
+  function enforceDualLimitedSameVehicleRule(fromDropdown) {
+    if (dualLimitedSameVehicleOk()) {
+      hideDualVehicleInventoryNotice();
+      return;
+    }
+    console.error(
+      "[BST Tour Booking] Invalid vehicle pair: same limited model selected twice when fewer than two slots remain (package requires two cars)."
+    );
+    window.alert(BST_DUAL_VEHICLE_INVENTORY_MSG);
+    showDualVehicleInventoryNotice(
+      "Only one of this vehicle remains on this tour date. It cannot be used for both selections—please choose a different vehicle for the second car."
+    );
+    if (fromDropdown === 2) {
+      vehicleDropdown2.prop("selectedIndex", 0);
+    } else {
+      vehicleDropdown1.prop("selectedIndex", 0);
+    }
+  }
+
+  // Handle change event for the vehicle dropdowns
+  vehicleDropdown1.on("change", function (e) {
+    refreshBothVehicleLimitedOptions();
+    if (!e.isTrigger) {
+      enforceDualLimitedSameVehicleRule(1);
+    }
     updateExtensionCheckbox();
-    calculateTotalPrice();
+    checkBookButtonState();
+  });
+  vehicleDropdown2.on("change", function (e) {
+    refreshBothVehicleLimitedOptions();
+    if (!e.isTrigger) {
+      enforceDualLimitedSameVehicleRule(2);
+    }
+    updateExtensionCheckbox();
     checkBookButtonState();
   });
   
@@ -313,155 +495,181 @@ jQuery(document).ready(function ($) {
     calculateTotalPrice();
   });
   
-  // Function to update extension checkbox visibility and label
+  /** Legacy client-side extension math (fallback if AJAX fails). Uses option values as upgrade amounts. */
+  function computeExtensionPriceClientSide() {
+    var packageId = tourpackagedropdown.find("option:selected").data("id");
+    var extensionPrice = 0;
+    if (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.pricing && packageId != null && packageId !== '') {
+      var packageKey = 'package_' + packageId;
+      extensionPrice = parseFloat(tourExtensionSettings.pricing[packageKey]) || 0;
+    }
+    var extensionDays = (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.extensionDays)
+      ? parseInt(tourExtensionSettings.extensionDays, 10)
+      : 0;
+    var selectedTourDateId = tourdatedropdown.val();
+    var selectedDate = null;
+    if (selectedTourDateId && typeof tourDatesData !== 'undefined') {
+      selectedDate = tourDatesData.find(function (date) {
+        return date.id == selectedTourDateId;
+      });
+    }
+    if (selectedDate && extensionDays > 0) {
+      var adminDrivingDays = (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.adminVehicleDrivingDays)
+        ? parseFloat(tourExtensionSettings.adminVehicleDrivingDays)
+        : 0;
+      if (adminDrivingDays > 0 && extensionDays > 0) {
+        var vehicle1Selected = vehicleDropdown1.val();
+        if (vehicle1Selected && vehicle1Selected !== '' && vehicle1Selected !== '0') {
+          var vehicle1Upcharge = parseFloat(vehicle1Selected) || 0;
+          extensionPrice += Math.round(vehicle1Upcharge / adminDrivingDays * extensionDays);
+        }
+        var vehicle2Selected = vehicleDropdown2.val();
+        if (vehicle2Selected && vehicle2Selected !== '' && vehicle2Selected !== '0') {
+          var vehicle2Upcharge = parseFloat(vehicle2Selected) || 0;
+          extensionPrice += Math.round(vehicle2Upcharge / adminDrivingDays * extensionDays);
+        }
+      }
+    }
+    return Math.round(extensionPrice);
+  }
+
+  function finishExtensionUi(extensionPrice, selectedDate) {
+    extensionPrice = Math.round(extensionPrice);
+    var tourCurrencyCode = (typeof tourCurrency !== 'undefined' && tourCurrency.currency) ? tourCurrency.currency : 'EUR';
+    var symbol = (tourCurrencyCode === 'USD') ? '$' : '€';
+    var formattedPrice = symbol + extensionPrice.toLocaleString();
+    var extensionDays = (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.extensionDays)
+      ? parseInt(tourExtensionSettings.extensionDays, 10)
+      : 0;
+    var dateText = '';
+    var extEndDate = null;
+    if (selectedDate && extensionDays > 0) {
+      var tourEndDateStr = String(selectedDate.end_date);
+      var tourEndYear = parseInt(tourEndDateStr.substring(0, 4), 10);
+      var tourEndMonth = parseInt(tourEndDateStr.substring(4, 6), 10);
+      var tourEndDay = parseInt(tourEndDateStr.substring(6, 8), 10);
+      var extStartDate = new Date(tourEndYear, tourEndMonth - 1, tourEndDay);
+      extEndDate = new Date(extStartDate);
+      extEndDate.setDate(extEndDate.getDate() + extensionDays);
+      var startMonth = extStartDate.toLocaleDateString('en-US', { month: 'short' });
+      var endMonth = extEndDate.toLocaleDateString('en-US', { month: 'short' });
+      var startDay = extStartDate.getDate();
+      var endDay = extEndDate.getDate();
+      if (startMonth === endMonth) {
+        dateText = startDay + '-' + endDay + ' ' + endMonth;
+      } else {
+        dateText = startDay + ' ' + startMonth + ' - ' + endDay + ' ' + endMonth;
+      }
+    }
+    // Label should show extension amount for user selection clarity.
+    // Submitted extensiontext remains title-only in formData.
+    var labelText = tourExtensionSettings.title;
+    var extensionDatesWithYear = '';
+    if (dateText && extEndDate) {
+      var extYear = extEndDate.getFullYear();
+      extensionDatesWithYear = dateText + ' ' + extYear;
+      labelText += ' (' + dateText + ' ' + extYear + ' - ' + formattedPrice + ')';
+    } else {
+      labelText += ' (' + formattedPrice + ')';
+    }
+    extensionLabel.text(labelText);
+    extensionCheckbox.data('price', extensionPrice);
+    extensionCheckbox.data('extension-dates', extensionDatesWithYear);
+    extensionCheckboxContainer.show();
+  }
+
+  // Function to update extension checkbox visibility and label (amount from PHP when possible)
   function updateExtensionCheckbox() {
-    // Check if extension is offered at tour level and date level
     var tourExtensionOffered = (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.offered);
     var selectedTourDateId = tourdatedropdown.val();
     var dateExtensionOffered = false;
-    
-    // Find the selected tour date and check if extension is offered
+    var selectedDate = null;
+
     if (selectedTourDateId && typeof tourDatesData !== 'undefined') {
-      var selectedDate = tourDatesData.find(function(date) {
+      selectedDate = tourDatesData.find(function (date) {
         return date.id == selectedTourDateId;
       });
       if (selectedDate) {
         dateExtensionOffered = selectedDate.date_extension_offered == '1' || selectedDate.date_extension_offered === true;
       }
     }
-    
-    // Check if vehicles are available/shown
+
     var vehiclesAvailable = vehicleDropdown1Container.is(':visible');
-    
-    // Check if a vehicle has been selected (only relevant if vehicles are available)
     var vehicleSelected = vehicleDropdown1.val() && vehicleDropdown1.val() !== '';
-    
-    // Show extension checkbox if:
-    // 1. Extension is offered at both tour and date level AND
-    // 2. Either no vehicles are available OR a vehicle has been selected
     var shouldShowExtension = tourExtensionOffered && dateExtensionOffered && (!vehiclesAvailable || vehicleSelected);
-    
-    if (shouldShowExtension) {
-      // Get the selected package ID
-      var packageId = tourpackagedropdown.find("option:selected").data("id");
-      
-      // Get extension price for this package
-      var extensionPrice = 0;
-      if (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.pricing) {
-        var packageKey = 'package_' + packageId;
-        extensionPrice = parseFloat(tourExtensionSettings.pricing[packageKey]) || 0;
-      }
-      
-      // Calculate vehicle upcharge for extension if vehicles are selected
-      // Get extension days from tour settings
-      var extensionDays = (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.extensionDays) 
-        ? parseInt(tourExtensionSettings.extensionDays) 
-        : 0;
-      
-      if (selectedDate && extensionDays > 0) {
-        // Get admin vehicle driving days
-        var adminDrivingDays = (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.adminVehicleDrivingDays) 
-          ? parseFloat(tourExtensionSettings.adminVehicleDrivingDays) 
-          : 0;
-        
-        if (adminDrivingDays > 0 && extensionDays > 0) {
-          // Calculate vehicle 1 upcharge
-          var vehicle1Selected = vehicleDropdown1.val();
-          
-          if (vehicle1Selected && vehicle1Selected !== '' && vehicle1Selected !== '0') {
-            var vehicle1Upcharge = parseFloat(vehicle1Selected) || 0;
-            var addedAmount1 = Math.round(vehicle1Upcharge / adminDrivingDays * extensionDays);
-            
-            extensionPrice += addedAmount1;
-          }
-          
-          // Calculate vehicle 2 upcharge if applicable
-          var vehicle2Selected = vehicleDropdown2.val();
-          
-          if (vehicle2Selected && vehicle2Selected !== '' && vehicle2Selected !== '0') {
-            var vehicle2Upcharge = parseFloat(vehicle2Selected) || 0;
-            var addedAmount2 = Math.round(vehicle2Upcharge / adminDrivingDays * extensionDays);
-            
-            extensionPrice += addedAmount2;
-          }
-        }
-      }
-      
-      // Round extension price to nearest integer
-      extensionPrice = Math.round(extensionPrice);
-      
-      // Get tour currency
-      var tourCurrencyCode = (typeof tourCurrency !== 'undefined' && tourCurrency.currency) ? tourCurrency.currency : 'EUR';
-      var symbol = (tourCurrencyCode === 'USD') ? '$' : '€';
-      
-      // Format the price
-      var formattedPrice = symbol + extensionPrice.toLocaleString();
-      
-      // Format extension dates if available
-      var dateText = '';
-      var extensionDays = (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.extensionDays) 
-        ? parseInt(tourExtensionSettings.extensionDays) 
-        : 0;
-      
-      if (selectedDate && extensionDays > 0) {
-        // Extension starts on the last day of the tour (tour end date)
-        // Parse tour end date from YYYYMMDD format
-        var tourEndDateStr = String(selectedDate.end_date);
-        var tourEndYear = parseInt(tourEndDateStr.substring(0, 4));
-        var tourEndMonth = parseInt(tourEndDateStr.substring(4, 6));
-        var tourEndDay = parseInt(tourEndDateStr.substring(6, 8));
-        
-        // Extension starts on tour end date
-        var extStartDate = new Date(tourEndYear, tourEndMonth - 1, tourEndDay);
-        
-        // Extension ends extension_days after start
-        var extEndDate = new Date(extStartDate);
-        extEndDate.setDate(extEndDate.getDate() + extensionDays);
-        
-        // Format dates similar to tour date format (without year)
-        var startMonth = extStartDate.toLocaleDateString('en-US', { month: 'short' });
-        var endMonth = extEndDate.toLocaleDateString('en-US', { month: 'short' });
-        var startDay = extStartDate.getDate();
-        var endDay = extEndDate.getDate();
-        
-        if (startMonth === endMonth) {
-          dateText = startDay + '-' + endDay + ' ' + endMonth;
-        } else {
-          dateText = startDay + ' ' + startMonth + ' - ' + endDay + ' ' + endMonth;
-        }
-      }
-      
-      // Update label with title, dates (without year), and price in same parentheses
-      var labelText = tourExtensionSettings.title;
-      var extensionDatesWithYear = '';
-      if (dateText) {
-        // Store dates with year for database/gravity forms
-        var extYear = extEndDate.getFullYear();
-        extensionDatesWithYear = dateText + ' ' + extYear;
-        // Display dates without year in label
-        labelText += ' (' + dateText + ' - ' + formattedPrice + ')';
-      } else {
-        labelText += ' (' + formattedPrice + ')';
-      }
-      extensionLabel.text(labelText);
-      
-      // Store price and dates (with year) in checkbox data attributes
-      extensionCheckbox.data('price', extensionPrice);
-      extensionCheckbox.data('extension-dates', extensionDatesWithYear);
-      
-      // Show the container
-      extensionCheckboxContainer.show();
-    } else {
-      // Hide and uncheck the extension checkbox
+
+    function donePricing() {
+      calculateTotalPrice();
+      checkBookButtonState();
+    }
+
+    if (!shouldShowExtension) {
       extensionCheckboxContainer.hide();
       extensionCheckbox.prop('checked', false);
+      donePricing();
+      return;
     }
+
+    var packageId = tourpackagedropdown.find("option:selected").data("id");
+    var tourId =
+      (window.bstExtensionAddonAjax && window.bstExtensionAddonAjax.tourId) ||
+      parseInt($('#tourBookingForm').data('tour-id'), 10) ||
+      0;
+    var v1 = parseInt(vehicleDropdown1.find('option:selected').attr('data-vehicle-id') || '0', 10) || 0;
+    var v2 = parseInt(vehicleDropdown2.find('option:selected').attr('data-vehicle-id') || '0', 10) || 0;
+
+    if (
+      window.bstExtensionAddonAjax &&
+      window.bstExtensionAddonAjax.url &&
+      window.bstExtensionAddonAjax.nonce &&
+      tourId > 0 &&
+      packageId != null &&
+      packageId !== ''
+    ) {
+      $.ajax({
+        url: window.bstExtensionAddonAjax.url,
+        type: 'POST',
+        dataType: 'json',
+        data: {
+          action: 'bst_extension_addon_amount',
+          nonce: window.bstExtensionAddonAjax.nonce,
+          tour_id: tourId,
+          tour_package_id: packageId,
+          vehicle1_id: v1,
+          vehicle2_id: v2
+        }
+      })
+        .done(function (res) {
+          var amt =
+            res && res.success && res.data && res.data.amount !== undefined
+              ? parseFloat(res.data.amount)
+              : computeExtensionPriceClientSide();
+          finishExtensionUi(amt, selectedDate);
+        })
+        .fail(function () {
+          finishExtensionUi(computeExtensionPriceClientSide(), selectedDate);
+        })
+        .always(donePricing);
+      return;
+    }
+
+    finishExtensionUi(computeExtensionPriceClientSide(), selectedDate);
+    donePricing();
   }
 
   // Handle click event for the book button
   bookButton.on("click", function(e) {
     e.preventDefault();
     console.log('=== BOOK BUTTON CLICKED ===');
+
+    if (!dualLimitedSameVehicleOk()) {
+      console.error(
+        "[BST Tour Booking] Book blocked: same limited vehicle cannot fill both slots when only one remains."
+      );
+      window.alert(BST_DUAL_VEHICLE_INVENTORY_MSG);
+      checkBookButtonState();
+      return;
+    }
 
     // Get selected values
     var tourId = $('#tourBookingForm').data("tour-id"); // Get tour ID from data attribute
@@ -472,9 +680,18 @@ jQuery(document).ready(function ($) {
     var tourPackage = tourpackagedropdown.find("option:selected").data("id"); // Get package ID from data attribute
 
     console.log('About to check availability for tourDate:', tourDate, 'tourPackage:', tourPackage);
+
+    var precheckVehicle1Id = 0;
+    var precheckVehicle2Id = 0;
+    if (vehicleDropdown1Container.is(":visible") && vehicleDropdown1.val() && vehicleDropdown1.prop('selectedIndex') !== 0) {
+      precheckVehicle1Id = parseInt(vehicleDropdown1.find("option:selected").data("vehicle-id"), 10) || 0;
+    }
+    if (vehicleDropdown2Container.is(":visible") && vehicleDropdown2.val() && vehicleDropdown2.prop('selectedIndex') !== 0) {
+      precheckVehicle2Id = parseInt(vehicleDropdown2.find("option:selected").data("vehicle-id"), 10) || 0;
+    }
     
     // Real-time availability check before proceeding
-    checkAvailabilityBeforeBooking(tourDate, tourPackage, function(available, debugData) {
+    checkAvailabilityBeforeBooking(tourDate, tourPackage, precheckVehicle1Id, precheckVehicle2Id, function(available, debugData) {
       console.log('Availability check callback - available:', available, 'debugData:', debugData);
       if (!available) {
         // Alert and refresh are handled in the checkAvailabilityBeforeBooking function
@@ -489,8 +706,26 @@ jQuery(document).ready(function ($) {
     function proceedWithBooking() {
     console.log('=== BOOK BUTTON CLICKED - STARTING proceedWithBooking ===');
 
+    if (!vehicleDropdownSelectionOk(vehicleDropdown1, vehicleDropdown1Container) || !vehicleDropdownSelectionOk(vehicleDropdown2, vehicleDropdown2Container)) {
+      return;
+    }
+    if (!dualLimitedSameVehicleOk()) {
+      console.error(
+        "[BST Tour Booking] proceedWithBooking blocked: invalid dual limited vehicle selection."
+      );
+      window.alert(BST_DUAL_VEHICLE_INVENTORY_MSG);
+      showDualVehicleInventoryNotice(
+        "Only one of this vehicle remains on this tour date. Choose different vehicles for each car."
+      );
+      return;
+    }
+
     // Get package name from global settings
-    var packageName = tourpackagedropdown.find("option:selected").text().split(' ')[0]; // Use the first word in the text from the package dropdown
+    var packageName = bstStripPackagePriceSuffix(
+      bstStripLeadingPlusMinusParen(
+        tourpackagedropdown.find("option:selected").text()
+      )
+    );
 
     // Get package people and rooms from global settings
     var packagePeople = packageSettings[tourPackage].people;
@@ -506,13 +741,17 @@ jQuery(document).ready(function ($) {
     
     if(vehicleDropdown1Container.is(":visible") && vehicleDropdown1.val() && vehicleDropdown1.prop('selectedIndex') !== 0) {
       vehicle1 = vehicleDropdown1.val();
-      vehicle1Text = vehicleDropdown1.find("option:selected").text();
+      vehicle1Text = bstStripLeadingPlusMinusParen(
+        vehicleDropdown1.find("option:selected").text()
+      );
       hasVehicleChoices = true;
     }
     
     if(vehicleDropdown2Container.is(":visible") && vehicleDropdown2.val() && vehicleDropdown2.prop('selectedIndex') !== 0) {
       vehicle2 = vehicleDropdown2.val();
-      vehicle2Text = vehicleDropdown2.find("option:selected").text();
+      vehicle2Text = bstStripLeadingPlusMinusParen(
+        vehicleDropdown2.find("option:selected").text()
+      );
     }
     
     var product_name = tourTitle +' Tour, '+tourDateText+': '+packageName+' Package';
@@ -558,34 +797,23 @@ jQuery(document).ready(function ($) {
     balanceAmount = tourPrice - depositAmount;
 
     // Get extension information if selected
-    console.log('Extension checkbox:', extensionCheckbox);
-    console.log('Extension checkbox length:', extensionCheckbox.length);
     var extensionAdded = extensionCheckbox.is(':checked');
-    console.log('Extension checkbox is checked:', extensionAdded);
     var extensionText = '';
     var extensionDatesText = '';
     
     if (extensionAdded) {
-      // Get extension title from tourExtensionSettings
+      // Title only for GF snapshot field — amount is in tourprice and derived server-side; omit price from extensiontext.
       var extensionTitle = (typeof tourExtensionSettings !== 'undefined' && tourExtensionSettings.title) ? tourExtensionSettings.title : '';
-      
-      // Get extension price from checkbox data
-      var extensionPrice = parseFloat(extensionCheckbox.data('price')) || 0;
-      
-      // Get tour currency for formatting
-      var extensionCurrencyCode = (typeof tourCurrency !== 'undefined' && tourCurrency.currency) ? tourCurrency.currency : 'EUR';
-      var extensionSymbol = (extensionCurrencyCode === 'USD') ? '$' : '€';
-      var formattedPrice = extensionSymbol + Math.round(extensionPrice);
-      
-      // Set extensionText as title with price: "Title (+€price)"
-      extensionText = extensionTitle + ' (+' + formattedPrice + ')';
-      
-      // Get extension dates with year directly from data attribute
+      extensionText = extensionTitle;
       extensionDatesText = extensionCheckbox.data('extension-dates') || '';
-      console.log('Extension dates from data attribute:', extensionDatesText);
     }
 
     // Add hidden input fields for each Gravity Forms field
+    const vehicle1Id = hasVehicleChoices ? (vehicleDropdown1.find("option:selected").data("vehicle-id") || "") : "";
+    const vehicle2Id = (vehicleDropdown2Container.is(":visible") && vehicleDropdown2.val() && vehicleDropdown2.prop('selectedIndex') !== 0)
+      ? (vehicleDropdown2.find("option:selected").data("vehicle-id") || "")
+      : "";
+
     const formData = {
       'tour_id': tourId,
       'tourtext': tourTitle,
@@ -599,6 +827,10 @@ jQuery(document).ready(function ($) {
       'package_vehicles': packageVehicles,
       'vehicle1text': hasVehicleChoices ? vehicle1Text : '',
       'vehicle2text': hasVehicleChoices ? vehicle2Text : '', 
+      'vehicle1_id': vehicle1Id ? String(vehicle1Id) : '',
+      'vehicle2_id': vehicle2Id ? String(vehicle2Id) : '',
+      'vehicle1id': vehicle1Id ? String(vehicle1Id) : '',
+      'vehicle2id': vehicle2Id ? String(vehicle2Id) : '',
       'vehicle_choices': hasVehicleChoices ? (vehicle2Text ? '2' : '1') : '0',
       'tourprice': tourPrice.toFixed(2), 
       'deposit': depositAmount.toFixed(2),
@@ -647,14 +879,16 @@ jQuery(document).ready(function ($) {
   });
 
   // Function to check real-time availability before booking
-  function checkAvailabilityBeforeBooking(tourDateId, packageId, callback) {
+  function checkAvailabilityBeforeBooking(tourDateId, packageId, vehicle1Id, vehicle2Id, callback) {
     $.ajax({
       url: ajax_object.ajaxurl,
       type: 'POST',
       data: {
         action: 'check_tour_availability',
         tour_date_id: tourDateId,
-        package_id: packageId
+        package_id: packageId,
+        vehicle1_id: vehicle1Id || 0,
+        vehicle2_id: vehicle2Id || 0
       },
       success: function(response) {
         if (response.success && response.data) {
@@ -664,15 +898,24 @@ jQuery(document).ready(function ($) {
           if (!response.data.can_book) {
             var availableSlots = response.data.available_slots;
             var requiredSlots = response.data.package_vehicles;
-            var message;
-            
-            if (availableSlots === 0) {
-              message = 'Sorry, this tour is now fully booked. There are no remaining spots available.';
-            } else {
-              message = 'Sorry, there isn\'t enough space for your selected package. There ' + (availableSlots === 1 ? 'is' : 'are') + ' ' + availableSlots + ' remaining spot' + (availableSlots === 1 ? '' : 's') + ', but the selected package requires ' + requiredSlots + '.';
+            var slotsOk = response.data.slots_ok !== false;
+            var vehicleOk = response.data.vehicle_ok !== false;
+            var vehicleIssue = response.data.vehicle_issue || '';
+            var messageParts = [];
+            if (!slotsOk) {
+              if (availableSlots === 0) {
+                messageParts.push('Sorry, this tour is now fully booked. There are no remaining spots available.');
+              } else {
+                messageParts.push('Sorry, there isn\'t enough space for your selected package. There ' + (availableSlots === 1 ? 'is' : 'are') + ' ' + availableSlots + ' remaining spot' + (availableSlots === 1 ? '' : 's') + ', but the selected package requires ' + requiredSlots + '.');
+              }
             }
-            
-            alert(message + '\n\nThe page will refresh to show current availability and other package options.');
+            if (!vehicleOk && vehicleIssue) {
+              messageParts.push(vehicleIssue);
+            }
+            if (messageParts.length === 0) {
+              messageParts.push('Sorry, this booking cannot be completed with the current selection.');
+            }
+            alert(messageParts.join('\n\n') + '\n\nThe page will refresh to show current availability and other package options.');
           }
           
           callback(response.data.can_book === true);
@@ -713,50 +956,82 @@ jQuery(document).ready(function ($) {
   // Trigger change event to display the initial flag
   currencyDropdown.trigger('change');
 
-  function checkBookButtonState() {
-    const vehicle1Selected = vehicleDropdown1.val() && vehicleDropdown1.prop('selectedIndex') !== 0;
-    const vehicle2Selected = vehicleDropdown2.val() && vehicleDropdown2.prop('selectedIndex') !== 0;
-  
-    if (tourpackagedropdown.val() 
-      && (
-        (!vehicleDropdown1Container.is(":visible") && !vehicleDropdown2Container.is(":visible")) // No vehicle choices visible
-        || (vehicleDropdown1Container.is(":visible") && vehicle1Selected && (!vehicleDropdown2Container.is(":visible") || vehicle2Selected)) // Vehicle 1 visible and has a value, and if Vehicle 2 is visible, it also has a value
-      )
-    ) {
-      // Check if this should be booking or waiting list
-      checkButtonDisplayState();
-    } else {
-      bookButton.prop("disabled", true);
-      $("#waitingListButton").prop("disabled", true);
+  function vehicleDropdownSelectionOk($dropdown, $container) {
+    if (!$container.is(":visible")) {
+      return true;
     }
+    if ($dropdown.prop("selectedIndex") === 0) {
+      return false;
+    }
+    return $dropdown.find("option:selected").attr("data-unavailable") !== "true";
   }
 
-  // Function to check if waiting list button should be shown instead of book button
-  function checkButtonDisplayState() {
-    // Check if we have all required selections
+  function checkBookButtonState() {
+    const vehicle1Ok = vehicleDropdownSelectionOk(vehicleDropdown1, vehicleDropdown1Container);
+    const vehicle2Ok = vehicleDropdownSelectionOk(vehicleDropdown2, vehicleDropdown2Container);
+    const dualLimitedOk = dualLimitedSameVehicleOk();
+    if (!dualLimitedOk) {
+      showDualVehicleInventoryNotice(
+        "Only one of this vehicle remains on this tour date. It cannot be used for both selections—please choose a different vehicle for the second car."
+      );
+    } else {
+      hideDualVehicleInventoryNotice();
+    }
+
+    checkButtonDisplayState();
+
     if (!tourdatedropdown.val() || !tourpackagedropdown.val()) {
-      // Show book button but keep it disabled for consistent sizing
+      bookButton.prop("disabled", true);
+      $("#waitingListButton").prop("disabled", true);
+      return;
+    }
+
+    var isDateSoldOut = tourdatedropdown.find("option:selected").attr("data-sold-out") === "true";
+    var isPackageUnavailable = tourpackagedropdown.find("option:selected").attr("data-unavailable") === "true";
+    if (isDateSoldOut || isPackageUnavailable) {
+      $("#waitingListButton").prop("disabled", false);
+      return;
+    }
+
+    const vehiclesReady =
+      (!vehicleDropdown1Container.is(":visible") && !vehicleDropdown2Container.is(":visible")) ||
+      (vehicleDropdown1Container.is(":visible") &&
+        vehicle1Ok &&
+        (!vehicleDropdown2Container.is(":visible") || vehicle2Ok) &&
+        dualLimitedOk);
+
+    if (!vehiclesReady) {
+      bookButton.prop("disabled", true);
+      $("#waitingListButton").prop("disabled", true);
+      return;
+    }
+
+    bookButton.prop("disabled", false);
+    $("#waitingListButton").prop("disabled", true);
+  }
+
+  // Waiting list vs book visibility only — does not enable Book (checkBookButtonState sets disabled).
+  function checkButtonDisplayState() {
+    if (!tourdatedropdown.val() || !tourpackagedropdown.val()) {
       bookButton.show().prop("disabled", true);
       $("#waitingListButton").hide();
       $("#bookButtonText").show();
       $("#waitingListButtonText").hide();
       return;
     }
-    
+
     var isDateSoldOut = tourdatedropdown.find("option:selected").attr("data-sold-out") === "true";
     var isPackageUnavailable = tourpackagedropdown.find("option:selected").attr("data-unavailable") === "true";
-    
+
     if (isDateSoldOut || isPackageUnavailable) {
-      // Show waiting list button, hide book button
       bookButton.hide();
       $("#bookButtonText").hide();
       $("#waitingListButton").show().prop("disabled", false);
       $("#waitingListButtonText").show();
     } else {
-      // Show book button, hide waiting list button
       $("#waitingListButton").hide();
       $("#waitingListButtonText").hide();
-      bookButton.show().prop("disabled", false);
+      bookButton.show().prop("disabled", true);
       $("#bookButtonText").show();
     }
   }
@@ -880,7 +1155,7 @@ jQuery(document).ready(function ($) {
       notes: $("#waitingList_notes").val().trim(),
       tour_price: parseFloat($("#tourprice").val().replace(/[^0-9.-]+/g,"")) || 0,
       vehicle_choices: vehicleChoices,
-      vehicle1: vehicleDropdown1.find("option:selected").text() || '',
+      vehicle1: bstStripLeadingPlusMinusParen(vehicleDropdown1.find("option:selected").text() || ''),
       tour_extension_added: extensionCheckbox.is(":checked") ? '1' : '',
       tour_extension_text: extensionCheckbox.is(":checked") ? (typeof tourExtensionSettings !== 'undefined' ? tourExtensionSettings.title + ' (+' + (($("#tourprice").data("currency") || "EUR") === "USD" ? "$" : "€") + (extensionCheckbox.data('price') || 0).toFixed(0) + ')' : '') : '',
       tour_extension_date_text: extensionCheckbox.is(":checked") ? (extensionCheckbox.data("extension-dates") || '') : '',
@@ -890,7 +1165,7 @@ jQuery(document).ready(function ($) {
     
     // Only add vehicle2 if vehicle_choices is greater than 1
     if (vehicleChoices > 1) {
-      formData.vehicle2 = vehicleDropdown2.find("option:selected").text() || '';
+      formData.vehicle2 = bstStripLeadingPlusMinusParen(vehicleDropdown2.find("option:selected").text() || '');
     }
     
     // Submit via AJAX

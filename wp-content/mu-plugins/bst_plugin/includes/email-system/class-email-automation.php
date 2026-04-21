@@ -423,15 +423,16 @@ class BST_Email_Automation {
             $booking_table = $wpdb->prefix . 'bst_tour_booking';
             
             // Find bookings that need finalization
-            $bookings = $wpdb->get_results($wpdb->prepare("
-                SELECT id, tour_date_text 
-                FROM $booking_table 
-                WHERE booking_status = 'Booked' 
-                AND tour_date_text IS NOT NULL 
-                AND tour_date_text != '' 
-                AND tour_date_text != '0000-00-00'
-                AND DATEDIFF(STR_TO_DATE(tour_date_text, '%%Y-%%m-%%d'), CURDATE()) <= %d
-            ", $days));
+            $bookings = $wpdb->get_results($wpdb->prepare(
+                "SELECT b.id
+                 FROM $booking_table b
+                 INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = b.tour_date_id AND pm.meta_key = 'start_date'
+                 WHERE b.booking_status = 'Booked'
+                 AND b.tour_date_id IS NOT NULL AND b.tour_date_id != 0
+                 AND pm.meta_value IS NOT NULL AND pm.meta_value != ''
+                 AND DATEDIFF(pm.meta_value, CURDATE()) <= %d",
+                $days
+            ));
             
             foreach ($bookings as $booking) {
                 if (!$this->has_email_been_sent($booking->id, $template->ID)) {

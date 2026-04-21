@@ -50,14 +50,54 @@ function bst_export_booking_list_order_clause( $sort_by, $sort_order ) {
         return " ORDER BY created_date {$sort_ord}";
     }
     if ( 'tour' === $sort_by ) {
-        return " ORDER BY tour_text {$sort_ord}";
+        global $wpdb;
+        return " ORDER BY (SELECT post_title FROM {$wpdb->posts} p WHERE p.ID = {$wpdb->prefix}bst_tour_booking.tour_id LIMIT 1) {$sort_ord}";
     }
-    $allowed = array( 'id', 'guest1_first_name', 'guest1_last_name', 'tour_text', 'tour_date_text', 'booking_status', 'created_date' );
+    $allowed = array( 'id', 'guest1_first_name', 'guest1_last_name', 'booking_status', 'created_date' );
     if ( in_array( $sort_by, $allowed, true ) ) {
         return " ORDER BY {$sort_by} {$sort_ord}";
     }
     // Same fallback as list when column is unknown: avoid unbounded results order.
     return " ORDER BY id {$sort_ord}";
+}
+
+function bst_export_live_tour_title( $tour_id ) {
+    $tour_id = (int) $tour_id;
+    if ( $tour_id <= 0 ) {
+        return '';
+    }
+    $p = get_post( $tour_id );
+    return ( $p && 'tour' === $p->post_type ) ? (string) $p->post_title : '';
+}
+
+function bst_export_live_tour_date_text( $tour_date_id ) {
+    $tour_date_id = (int) $tour_date_id;
+    if ( $tour_date_id <= 0 ) {
+        return '';
+    }
+    $p = get_post( $tour_date_id );
+    if ( ! $p || 'tour-date' !== $p->post_type ) {
+        return '';
+    }
+    $start_date = get_post_meta( $tour_date_id, 'start_date', true );
+    $end_date   = get_post_meta( $tour_date_id, 'end_date', true );
+    if ( $start_date && $end_date ) {
+        return ( date( 'M', strtotime( $start_date ) ) === date( 'M', strtotime( $end_date ) ) )
+            ? date( 'j', strtotime( $start_date ) ) . '-' . date( 'j M Y', strtotime( $end_date ) )
+            : date( 'j M', strtotime( $start_date ) ) . ' - ' . date( 'j M Y', strtotime( $end_date ) );
+    }
+    if ( $start_date ) {
+        return date( 'j M Y', strtotime( $start_date ) );
+    }
+    return (string) $p->post_title;
+}
+
+function bst_export_live_package_name( $package_id ) {
+    $package_id = (int) $package_id;
+    if ( $package_id <= 0 ) {
+        return '';
+    }
+    return (string) get_option( 'bst_package_' . $package_id . '_name', '' );
 }
 
 // #region Tour Bookings Excel Export
@@ -273,6 +313,9 @@ function bst_export_bookings_excel_handler() {
     
     // Write booking data
     foreach ($bookings as $booking) {
+        $live_tour_text = bst_export_live_tour_title( $booking->tour_id );
+        $live_tour_date_text = bst_export_live_tour_date_text( $booking->tour_date_id );
+        $live_package_text = bst_export_live_package_name( $booking->tour_package_id );
         $row = array(
             $booking->id,
             $booking->booking_entry_id,
@@ -324,13 +367,13 @@ function bst_export_bookings_excel_handler() {
             !empty($booking->guest2_emergency_contact_phone) ? '="' . $booking->guest2_emergency_contact_phone . '"' : '',
             $booking->guest2_emergency_contact_email,
             $booking->tour_id,
-            $booking->tour_text,
+            $live_tour_text,
             $booking->tour_date_id,
-            $booking->tour_date_text,
+            $live_tour_date_text,
             $booking->tour_package_id,
-            $booking->tour_package_text,
-            $booking->vehicle1,
-            $booking->vehicle2,
+            $live_package_text,
+            function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 1 ) : '',
+            function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 2 ) : '',
             $booking->participant_sex ?? '',
             $booking->sharing_preference ?? '',
             $booking->bed_preference ?? '',
@@ -453,9 +496,9 @@ function bst_write_commission_booking_row($output, $booking, $usd_rate) {
         }
         
         // Build composite Tour field (same logic as listing)
-        $tour_label = $booking->tour_text;
+        $tour_label = bst_export_live_tour_title( $booking->tour_id );
         $tour_date_id = $booking->tour_date_id;
-        $tour_date_text = $booking->tour_date_text;
+        $tour_date_text = bst_export_live_tour_date_text( $booking->tour_date_id );
         $paren = '';
         if (!empty($tour_date_id)) {
             $parts = explode('|', $tour_date_id);
@@ -475,12 +518,15 @@ function bst_write_commission_booking_row($output, $booking, $usd_rate) {
         if ($date_label) {
             $paren = $date_label;
         }
-        $tour = $tour_label . ($paren ? ' (' . $paren . ')' : '') . ' - ' . $booking->tour_package_text;
+        $package_label = bst_export_live_package_name( $booking->tour_package_id );
+        $tour = $tour_label . ($paren ? ' (' . $paren . ')' : '') . ' - ' . $package_label;
         
-        // Build Vehicles field with + delimiter
-        $vehicles = trim($booking->vehicle1 ?? '');
-        if (!empty($booking->vehicle2)) {
-            $vehicles .= ($vehicles ? ' + ' : '') . trim($booking->vehicle2);
+        // Build Vehicles field from Vehicle CPT ids only.
+        $v1e = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 1 ) ) : '';
+        $v2e = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 2 ) ) : '';
+        $vehicles = $v1e;
+        if ( $v2e !== '' ) {
+            $vehicles .= ( $vehicles !== '' ? ' + ' : '' ) . $v2e;
         }
         
         // Build How Heard field with : delimiter when other is present
@@ -1450,9 +1496,7 @@ function bst_get_annual_commission_data($year) {
         SELECT 
             b.id,
             b.tour_id,
-            b.tour_text,
             b.tour_date_id,
-            b.tour_date_text,
             b.created_date as booking_date,
             b.deposit_payment_date,
             b.balance_payment_date,
@@ -1804,7 +1848,7 @@ function bst_export_rooming_list_csv($output, $bookings, $tour_date_id) {
         $row = array();
         $row[] = $guest1_name ?: '';
         $row[] = $guest2_name ?: '';
-        $row[] = !empty($booking->tour_package_text) ? $booking->tour_package_text : '';
+        $row[] = bst_export_live_package_name( $booking->tour_package_id );
         $row[] = !empty($booking->package_rooms) ? $booking->package_rooms : '';
         $row[] = !empty($booking->bed_preference) ? $booking->bed_preference : '';
         
@@ -1921,14 +1965,11 @@ function bst_export_vehicle_list_csv($output, $bookings, $tour_date_id) {
         $row = array();
         $row[] = $guest1_name ?: '';
         $row[] = $guest2_name ?: '';
-        $row[] = !empty($booking->tour_package_text) ? $booking->tour_package_text : '';
+        $row[] = bst_export_live_package_name( $booking->tour_package_id );
         $row[] = !empty($booking->package_vehicles) ? $booking->package_vehicles : '';
         
-        // Strip pricing from vehicle names (remove last set of parentheses)
-        $vehicle1 = !empty($booking->vehicle1) ? preg_replace('/\s*\([^)]*\)\s*$/', '', $booking->vehicle1) : '';
-        $vehicle2 = !empty($booking->vehicle2) ? preg_replace('/\s*\([^)]*\)\s*$/', '', $booking->vehicle2) : '';
-        $vehicle1 = trim($vehicle1);
-        $vehicle2 = trim($vehicle2);
+        $vehicle1 = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 1 ) ) : '';
+        $vehicle2 = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 2 ) ) : '';
         
         $row[] = $vehicle1;
         $row[] = $vehicle2;

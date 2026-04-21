@@ -72,7 +72,7 @@ function bst_check_bank_wire_pending() {
     $three_days_ago = date('Y-m-d H:i:s', strtotime('-3 days'));
     
     $pending_bookings = $wpdb->get_results($wpdb->prepare("
-        SELECT id, guest1_first_name, guest1_last_name, tour_text, tour_date_text, 
+        SELECT id, guest1_first_name, guest1_last_name, tour_id, tour_date_id,
                deposit_payment_method, balance_payment_method, created_date
         FROM {$table_name}
         WHERE booking_status = 'Pending'
@@ -90,7 +90,7 @@ function bst_check_bank_wire_pending() {
         
         if (!bst_notification_exists($notification_id)) {
             $guest_name = bst_format_guest_name($booking->guest1_first_name, $booking->guest1_last_name, $booking->guest2_first_name ?? '', $booking->guest2_last_name ?? '');
-            $tour_info = $booking->tour_text . ' on ' . $booking->tour_date_text;
+            $tour_info = function_exists('bst_live_booking_tour_display') ? bst_live_booking_tour_display($booking) : '';
             $days_pending = floor((time() - strtotime($booking->created_date)) / (24 * 60 * 60));
             
             $missing_payments = [];
@@ -135,7 +135,7 @@ function bst_check_reservation_not_booked() {
     $three_days_ago = date('Y-m-d H:i:s', strtotime('-3 days'));
     
     $reserved_bookings = $wpdb->get_results($wpdb->prepare("
-        SELECT id, guest1_first_name, guest1_last_name, tour_text, tour_date_text, created_date
+        SELECT id, guest1_first_name, guest1_last_name, tour_id, tour_date_id, created_date
         FROM {$table_name}
         WHERE booking_status = 'Reserved'
         AND created_date <= %s
@@ -147,7 +147,7 @@ function bst_check_reservation_not_booked() {
         
         if (!bst_notification_exists($notification_id)) {
             $guest_name = bst_format_guest_name($booking->guest1_first_name, $booking->guest1_last_name, $booking->guest2_first_name ?? '', $booking->guest2_last_name ?? '');
-            $tour_info = $booking->tour_text . ' on ' . $booking->tour_date_text;
+            $tour_info = function_exists('bst_live_booking_tour_display') ? bst_live_booking_tour_display($booking) : '';
             $days_reserved = floor((time() - strtotime($booking->created_date)) / (24 * 60 * 60));
             
             $message = sprintf(
@@ -184,7 +184,7 @@ function bst_check_tour_finalization_needed() {
     
     // Get bookings for tours starting within 120 days that haven't had finalization email sent
     $bookings_query = "
-        SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.tour_text, 
+        SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.tour_id, b.tour_date_id,
                td.tour_date, b.finalization_email_sent
         FROM {$table_name} b
         LEFT JOIN {$wpdb->prefix}bst_tour_dates td ON b.tour_date_id = td.id
@@ -209,7 +209,7 @@ function bst_check_tour_finalization_needed() {
                 date('Y-m-d'),
                 $days_until_tour,
                 esc_html($guest_name),
-                esc_html($booking->tour_text),
+                esc_html(function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : ''),
                 $tour_date,
                 admin_url('admin.php?page=edit_booking&id=' . $booking->id),
                 $booking->id

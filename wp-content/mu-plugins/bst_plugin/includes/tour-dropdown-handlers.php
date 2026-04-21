@@ -308,7 +308,43 @@ function get_vehicle_data() {
 
     $tour_id = intval($_POST['tour_id']);
     $selected_package_id = intval($_POST['package_id']);
-    
+    $tour_date_id        = isset($_POST['tour_date_id']) ? intval($_POST['tour_date_id']) : 0;
+    $booking_id_for_display = isset($_POST['booking_id']) ? intval($_POST['booking_id']) : 0;
+
+    // Option text / extra fields: customer (tour page) vs staff (WP booking UI). Not the same as archived visibility.
+    // Preferred: vehicle_labels_for = customer | staff. Legacy: audience (customer|cust|admin), vehicle_label_context (public|admin).
+    // If none sent: referer wp-admin → staff, else customer.
+    $labels_for = null;
+    if ( isset( $_POST['vehicle_labels_for'] ) ) {
+        $v = sanitize_text_field( wp_unslash( $_POST['vehicle_labels_for'] ) );
+        if ( in_array( $v, array( 'customer', 'staff' ), true ) ) {
+            $labels_for = $v;
+        }
+    } elseif ( isset( $_POST['audience'] ) ) {
+        $a = sanitize_text_field( wp_unslash( $_POST['audience'] ) );
+        if ( 'cust' === $a || 'customer' === $a ) {
+            $labels_for = 'customer';
+        } elseif ( 'admin' === $a ) {
+            $labels_for = 'staff';
+        }
+    } elseif ( isset( $_POST['vehicle_label_context'] ) ) {
+        $vlc = sanitize_text_field( wp_unslash( $_POST['vehicle_label_context'] ) );
+        $labels_for = ( 'admin' === $vlc ) ? 'staff' : 'customer';
+    }
+    if ( null === $labels_for ) {
+        $ref              = function_exists( 'wp_get_referer' ) ? wp_get_referer() : '';
+        $is_from_wp_admin = ( is_string( $ref ) && strpos( $ref, '/wp-admin/' ) !== false );
+        $labels_for       = $is_from_wp_admin ? 'staff' : 'customer';
+    }
+    if ( ! in_array( $labels_for, array( 'customer', 'staff' ), true ) ) {
+        $labels_for = 'customer';
+    }
+    $is_admin_vehicle_labels = ( 'staff' === $labels_for );
+
+    // Archived repeater rows: booking edit sends show_archived=1; new booking + single tour send 0.
+    $show_archived                    = isset( $_POST['show_archived'] ) ? (int) $_POST['show_archived'] : 0;
+    $include_archived_vehicle_choices = ( 1 === $show_archived );
+
     // Get tour-type from taxonomy relationship
     $tour_type_id = null;
     $taxonomy_terms = get_the_terms($tour_id, 'tour-type-code');
@@ -342,6 +378,7 @@ function get_vehicle_data() {
     // Fetch vehicle pricing data from the selected tour
     $vehicle_pricing = get_field('vehicle_pricing', $tour_id);
     $data = array();
+    $vehicle_row_order = 0;
     // No need to add "Select a..." option here as it's static in HTML
 
     // Step through the classes
@@ -350,28 +387,171 @@ function get_vehicle_data() {
             $class = $vehicle['class'];
             $price = isset($vehicle['vehicle_price_addition']) ? floatval($vehicle['vehicle_price_addition']) : 0;
             
-            foreach ($vehicle['vehicles'] as $vehicle_item) {
-                // Format the price addition with currency symbol
+            if (empty($vehicle['vehicles']) || !is_array($vehicle['vehicles'])) {
+                continue;
+            }
+            foreach ( $vehicle['vehicles'] as $vehicle_item ) {
+                if ( ! $include_archived_vehicle_choices
+                    && function_exists( 'bst_vehicle_pricing_vehicle_choice_is_archived' )
+                    && bst_vehicle_pricing_vehicle_choice_is_archived( $vehicle_item ) ) {
+                    continue;
+                }
+
+                $linked_id = isset($vehicle_item['vehicle_id']) ? $vehicle_item['vehicle_id'] : 0;
+                if (is_array($linked_id) && isset($linked_id['ID'])) {
+                    $linked_id = (int) $linked_id['ID'];
+                } else {
+                    $linked_id = (int) $linked_id;
+                }
+
+                // Booking lists use the Vehicle CPT title only (repeater text field is legacy / being removed).
+                if ($linked_id <= 0) {
+                    continue;
+                }
+                $vp = get_post($linked_id);
+                if (!$vp || 'vehicle' !== $vp->post_type) {
+                    continue;
+                }
+                $vehicle_id = $linked_id;
+
+                if ($vehicle_id > 0 && function_exists('bst_vehicle_is_available_for_booking')
+                    && ! bst_vehicle_is_available_for_booking($vehicle_id)) {
+                    /* Still list vehicles on this tour’s pricing so legacy tours stay understandable; cannot be booked. */
+                    $vehicle_name = get_the_title($vehicle_id) . ' ' . __('(No longer available for assignment)', 'bst-plugin');
+                    $data[]       = array(
+                        'text'       => $vehicle_name,
+                        'value'      => 0,
+                        'price'      => 0,
+                        'data-id'    => $class,
+                        'vehicle_id' => $vehicle_id,
+                        'unavailable' => true,
+                        'retired'    => true,
+                        '_order'     => $vehicle_row_order++,
+                    );
+                    continue;
+                }
+
+                $symbol    = ($currency === 'USD') ? '$' : '€';
+                $abs_price = abs($price);
+
+                $limited_row_stats = null;
+                if ( $tour_date_id > 0 && function_exists( 'bst_limited_vehicle_max_sold_for_vehicle' ) ) {
+                    $limited_row_stats = bst_limited_vehicle_max_sold_for_vehicle( $tour_date_id, $vehicle_id );
+                }
+                $raw_limited_remaining = null;
+                if ( $limited_row_stats !== null ) {
+                    $raw_limited_remaining = max( 0, (int) $limited_row_stats['max'] - (int) $limited_row_stats['sold'] );
+                }
+
+                $limited_display_remaining = null;
+                if (! $is_admin_vehicle_labels && $raw_limited_remaining !== null
+                    && function_exists('bst_limited_vehicle_slots_remaining_for_display')) {
+                    $limited_display_remaining = bst_limited_vehicle_slots_remaining_for_display(
+                        $tour_date_id,
+                        $vehicle_id,
+                        0
+                    );
+                }
+
+                $admin_booking_edit = ($booking_id_for_display > 0 && function_exists('bst_user_can_manage_bookings')
+                    && bst_user_can_manage_bookings());
+                $limited_sold_out_block = ($raw_limited_remaining !== null && $raw_limited_remaining <= 0 && ! $admin_booking_edit);
+
                 $formatted_price = '';
                 if ($price != 0) {
-                    $symbol = ($currency === 'USD') ? '$' : '€';
-                    $abs_price = abs($price);
                     $sign = ($price > 0) ? '+' : '-';
                     $formatted_price = ' (' . $sign . $symbol . number_format($abs_price, 0) . ')';
                 }
-                // No indication when price is 0 - just show vehicle name
-                
-                $vehicle_name = $vehicle_item['vehicle'] . $formatted_price;
-                
+
+                if ($limited_display_remaining !== null) {
+                    if ($limited_display_remaining <= 0) {
+                        /* translators: appended to vehicle title when limited inventory is exhausted (public tour page) */
+                        $vehicle_name = get_the_title($vehicle_id) . ' ' . __('(Unavailable)', 'bst-plugin');
+                    } else {
+                        if ($price > 0) {
+                            $price_fragment = '+' . $symbol . number_format($abs_price, 0);
+                        } elseif ($price < 0) {
+                            $price_fragment = '-' . $symbol . number_format($abs_price, 0);
+                        } else {
+                            $price_fragment = $symbol . '0';
+                        }
+                        /* translators: 1: price fragment e.g. +€1,400, 2: slots remaining, 3: word "left" */
+                        $vehicle_name = get_the_title($vehicle_id) . ' ' . sprintf(
+                            '(%1$s - %2$d %3$s)',
+                            $price_fragment,
+                            (int) $limited_display_remaining,
+                            __('left', 'bst-plugin')
+                        );
+                    }
+                } else {
+                    $vehicle_name = get_the_title($vehicle_id) . $formatted_price;
+                }
+
+                $out_price = $limited_sold_out_block ? 0 : $price;
+
+                $limited_sold_other = null;
+                if ($is_admin_vehicle_labels && $limited_row_stats !== null
+                    && function_exists('bst_limited_vehicle_sold_count_excluding_booking')) {
+                    $limited_sold_other = bst_limited_vehicle_sold_count_excluding_booking(
+                        $tour_date_id,
+                        $vehicle_id,
+                        $booking_id_for_display
+                    );
+                }
+
+                $limited_slots_remaining_public = null;
+                if (! $is_admin_vehicle_labels && $limited_display_remaining !== null) {
+                    $limited_slots_remaining_public = (int) $limited_display_remaining;
+                }
+
+                $choice_archived = function_exists( 'bst_vehicle_pricing_vehicle_choice_is_archived' )
+                    && bst_vehicle_pricing_vehicle_choice_is_archived( $vehicle_item );
+
                 $data[] = array(
-                    'text' => $vehicle_name, // Clean vehicle name without price
-                    'value' => $price, // Price for calculations
-                    'price' => $price,
-                    'data-id' => $class // Vehicle class ID
+                    'text' => $vehicle_name,
+                    'value' => $out_price,
+                    'price' => $out_price,
+                    'data-id' => $class, // Vehicle class ID
+                    'vehicle_id' => $vehicle_id,
+                    'unavailable' => $limited_sold_out_block,
+                    'limited_max' => $limited_row_stats ? (int) $limited_row_stats['max'] : null,
+                    'limited_sold_other_bookings' => $limited_sold_other,
+                    'limited_slots_remaining' => $limited_slots_remaining_public,
+                    'choice_archived' => $choice_archived,
+                    '_order' => $vehicle_row_order++,
                 );
             }
         }
     }
+
+    if (count($data) > 1) {
+        usort(
+            $data,
+            static function ($a, $b) {
+                $ida = isset($a['vehicle_id']) ? (int) $a['vehicle_id'] : 0;
+                $idb = isset($b['vehicle_id']) ? (int) $b['vehicle_id'] : 0;
+                $sa = 0.0;
+                $sb = 0.0;
+                if ($ida && function_exists('get_field')) {
+                    $v = get_field('listing_sort_order', $ida);
+                    $sa = is_numeric($v) ? (float) $v : 0.0;
+                }
+                if ($idb && function_exists('get_field')) {
+                    $v = get_field('listing_sort_order', $idb);
+                    $sb = is_numeric($v) ? (float) $v : 0.0;
+                }
+                if ($sa !== $sb) {
+                    return $sa <=> $sb;
+                }
+                return ((int) ($a['_order'] ?? 0)) <=> ((int) ($b['_order'] ?? 0));
+            }
+        );
+    }
+
+    foreach ($data as $i => $row) {
+        unset($data[$i]['_order']);
+    }
+
     wp_send_json_success($data);
 }
 

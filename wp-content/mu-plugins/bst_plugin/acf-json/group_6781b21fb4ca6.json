@@ -1,6 +1,6 @@
 {
     "key": "group_6781b21fb4ca6",
-    "title": "Tours",
+    "title": "Tour",
     "fields": [
         {
             "key": "field_678d94efcb0cb",
@@ -371,6 +371,56 @@
                             "placeholder": "",
                             "prepend": "",
                             "append": "",
+                            "parent_repeater": "field_67ad574316fd3"
+                        },
+                        {
+                            "key": "field_67f9e40b1c001",
+                            "label": "Vehicle (CPT)",
+                            "name": "vehicle_id",
+                            "aria-label": "",
+                            "type": "post_object",
+                            "instructions": "Linked Vehicle post for inventory and IDs. Filled by migration or manually.",
+                            "required": 0,
+                            "conditional_logic": 0,
+                            "wrapper": {
+                                "width": "",
+                                "class": "",
+                                "id": ""
+                            },
+                            "post_type": [
+                                "vehicle"
+                            ],
+                            "post_status": "",
+                            "taxonomy": "",
+                            "return_format": "id",
+                            "multiple": 0,
+                            "allow_null": 1,
+                            "allow_in_bindings": 0,
+                            "bidirectional": 0,
+                            "ui": 1,
+                            "bidirectional_target": [],
+                            "parent_repeater": "field_67ad574316fd3"
+                        },
+                        {
+                            "key": "field_68a1b2c3d4e5",
+                            "label": "Archived (new bookings)",
+                            "name": "vehicle_choice_archived",
+                            "aria-label": "",
+                            "type": "true_false",
+                            "instructions": "When enabled, this choice is hidden from public (customer) booking flows only. In WordPress admin, all choices including archived ones still appear in vehicle dropdowns. The row stays on the tour for completed bookings and records.",
+                            "required": 0,
+                            "conditional_logic": 0,
+                            "wrapper": {
+                                "width": "",
+                                "class": "",
+                                "id": ""
+                            },
+                            "message": "Hide from new bookings only",
+                            "default_value": 0,
+                            "allow_in_bindings": 0,
+                            "ui": 1,
+                            "ui_on_text": "",
+                            "ui_off_text": "",
                             "parent_repeater": "field_67ad574316fd3"
                         }
                     ]
@@ -1382,5 +1432,5 @@
     "description": "",
     "show_in_rest": 1,
     "display_title": "",
-    "modified": 1774118249
+    "modified": 1776710194
 }

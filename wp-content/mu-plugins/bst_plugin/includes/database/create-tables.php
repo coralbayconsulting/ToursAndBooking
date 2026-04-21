@@ -1,5 +1,80 @@
 <?php
 
+/**
+ * Add vehicle1_id / vehicle2_id if missing, placed immediately before vehicle1 / vehicle2 (same order as CREATE TABLE in create_tour_booking_tables()).
+ *
+ * @return bool True if table exists and both columns are present afterward.
+ */
+function bst_ensure_tour_booking_vehicle_id_columns() {
+	global $wpdb;
+
+	if ( (int) get_option( 'bst_booking_vehicle_id_columns_ok', 0 ) === 1 ) {
+		return true;
+	}
+
+	$table = $wpdb->prefix . 'bst_tour_booking';
+	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+	if ( ! $found ) {
+		return false;
+	}
+
+	$cols = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
+	if ( ! is_array( $cols ) ) {
+		return false;
+	}
+
+	$has1 = in_array( 'vehicle1_id', $cols, true );
+	$has2 = in_array( 'vehicle2_id', $cols, true );
+	if ( $has1 && $has2 ) {
+		update_option( 'bst_booking_vehicle_id_columns_ok', 1, false );
+		return true;
+	}
+
+	$anchor = null;
+	if ( in_array( 'tour_package_text', $cols, true ) ) {
+		$anchor = 'tour_package_text';
+	} elseif ( in_array( 'tour_package_id', $cols, true ) ) {
+		$anchor = 'tour_package_id';
+	}
+
+	$sql = null;
+	if ( ! $has1 && ! $has2 ) {
+		if ( $anchor ) {
+			$sql = "ALTER TABLE `{$table}` ADD COLUMN `vehicle1_id` BIGINT(20) UNSIGNED NULL DEFAULT NULL AFTER `{$anchor}`, ADD COLUMN `vehicle2_id` BIGINT(20) UNSIGNED NULL DEFAULT NULL AFTER `vehicle1_id`";
+		} else {
+			$sql = "ALTER TABLE `{$table}` ADD COLUMN `vehicle1_id` BIGINT(20) UNSIGNED NULL DEFAULT NULL, ADD COLUMN `vehicle2_id` BIGINT(20) UNSIGNED NULL DEFAULT NULL";
+		}
+	} elseif ( ! $has1 ) {
+		if ( $anchor ) {
+			$sql = "ALTER TABLE `{$table}` ADD COLUMN `vehicle1_id` BIGINT(20) UNSIGNED NULL DEFAULT NULL AFTER `{$anchor}`";
+		} else {
+			$sql = "ALTER TABLE `{$table}` ADD COLUMN `vehicle1_id` BIGINT(20) UNSIGNED NULL DEFAULT NULL";
+		}
+	} elseif ( ! $has2 ) {
+		if ( $has1 ) {
+			$sql = "ALTER TABLE `{$table}` ADD COLUMN `vehicle2_id` BIGINT(20) UNSIGNED NULL DEFAULT NULL AFTER `vehicle1_id`";
+		} elseif ( $anchor ) {
+			$sql = "ALTER TABLE `{$table}` ADD COLUMN `vehicle2_id` BIGINT(20) UNSIGNED NULL DEFAULT NULL AFTER `{$anchor}`";
+		} else {
+			$sql = "ALTER TABLE `{$table}` ADD COLUMN `vehicle2_id` BIGINT(20) UNSIGNED NULL DEFAULT NULL";
+		}
+	}
+
+	if ( ! $sql ) {
+		update_option( 'bst_booking_vehicle_id_columns_ok', 1, false );
+		return true;
+	}
+
+	$result = $wpdb->query( $sql );
+	if ( false === $result ) {
+		error_log( 'BST Plugin: bst_ensure_tour_booking_vehicle_id_columns failed: ' . $wpdb->last_error );
+		return false;
+	}
+
+	update_option( 'bst_booking_vehicle_id_columns_ok', 1, false );
+	return true;
+}
+
 function create_tour_booking_tables() {
     global $wpdb;
 
@@ -29,7 +104,7 @@ function create_tour_booking_tables() {
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
     dbDelta($sql);
 
-    // Now create the tour booking table
+    // Now create the tour booking table (vehicle1_id / vehicle2_id immediately before vehicle1 / vehicle2 text).
     $tour_booking_table = $wpdb->prefix . "bst_tour_booking";
 
     $sql = "
@@ -90,6 +165,8 @@ function create_tour_booking_tables() {
             tour_date_text VARCHAR(40),
             tour_package_id BIGINT(20) UNSIGNED,
             tour_package_text VARCHAR(20),
+            vehicle1_id BIGINT(20) UNSIGNED,
+            vehicle2_id BIGINT(20) UNSIGNED,
             vehicle1 VARCHAR(100),
             vehicle2 VARCHAR(100),
             tour_extension_added BOOLEAN DEFAULT FALSE,
@@ -158,6 +235,7 @@ function create_tour_booking_tables() {
 
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
     dbDelta($sql);
+    bst_ensure_tour_booking_vehicle_id_columns();
 
     // Add foreign key constraint separately (dbDelta doesn't handle constraints well)
     // Check if the constraint already exists before trying to create it
@@ -273,4 +351,14 @@ if (isset($wpdb) && $wpdb->dbh !== null) {
         }
     }
 }
+
+add_action(
+	'plugins_loaded',
+	static function () {
+		if ( function_exists( 'bst_ensure_tour_booking_vehicle_id_columns' ) ) {
+			bst_ensure_tour_booking_vehicle_id_columns();
+		}
+	},
+	25
+);
 

@@ -7,6 +7,15 @@
 // Include SimpleXLSXGen library
 require_once BST_PLUGIN_DIR . 'includes/vendor/SimpleXLSXGen.php';
 
+function bst_xlsx_live_tour_title( $tour_id ) {
+    $tour_id = (int) $tour_id;
+    if ( $tour_id <= 0 ) {
+        return '';
+    }
+    $p = get_post( $tour_id );
+    return ( $p && 'tour' === $p->post_type ) ? (string) $p->post_title : '';
+}
+
 /**
  * Enhanced commission export with proper formatting
  */
@@ -203,7 +212,7 @@ function bst_export_commission_bookings_xlsx_handler() {
     foreach ($grouped_bookings as $group_key => $group_data) {
         // Sort bookings within group
         usort($group_data['bookings'], function($a, $b) {
-            $tour_compare = strcasecmp($a->tour_text, $b->tour_text);
+            $tour_compare = strcasecmp(bst_xlsx_live_tour_title($a->tour_id ?? 0), bst_xlsx_live_tour_title($b->tour_id ?? 0));
             if ($tour_compare !== 0) return $tour_compare;
             
             $name_compare = strcasecmp($a->guest1_last_name, $b->guest1_last_name);
@@ -343,12 +352,11 @@ function bst_get_commission_booking_row_data_xlsx($booking, $exchange_rate) {
     // Extract data similar to CSV export but return raw numbers for Excel formatting
     $guest_name = trim(($booking->guest1_first_name ?? '') . ' ' . ($booking->guest1_last_name ?? ''));
     
-    $vehicle_text = '';
-    if (!empty($booking->vehicle1)) {
-        $vehicle_text = $booking->vehicle1;
-        if (!empty($booking->vehicle2) && $booking->vehicle2 !== $booking->vehicle1) {
-            $vehicle_text .= ', ' . $booking->vehicle2;
-        }
+    $v1x = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 1 ) ) : '';
+    $v2x = function_exists( 'bst_booking_vehicle_display_text' ) ? trim( (string) bst_booking_vehicle_display_text( $booking, 2 ) ) : '';
+    $vehicle_text = $v1x;
+    if ( $v2x !== '' && $v2x !== $v1x ) {
+        $vehicle_text .= ( $vehicle_text !== '' ? ', ' : '' ) . $v2x;
     }
     
     // Use actual booking currency (not always EUR)
@@ -400,10 +408,12 @@ function bst_get_commission_booking_row_data_xlsx($booking, $exchange_rate) {
         $currency_format = '€#,##0.00';
     }
     
+    $tour_title = bst_xlsx_live_tour_title($booking->tour_id ?? 0);
+
     return array(
         '<style font-size="10">' . $booking->id . '</style>',
         '<style font-size="10">' . $guest_name . '</style>',
-        '<style font-size="10">' . ($booking->tour_text ?? '') . '</style>',
+        '<style font-size="10">' . $tour_title . '</style>',
         '<style font-size="10">' . $vehicle_text . '</style>',
         '<style font-size="10" nf="' . $currency_format . '">' . $tour_cost_display . '</style>',
         '<style font-size="10" nf="' . $currency_format . '">' . $total_paid_display . '</style>',

@@ -90,8 +90,8 @@ class BST_Email_Merge_Fields {
                 'tour_package_id' => 'Package ID',
                 'tour_package_text' => 'Package name',
                 'tour_extension_added' => 'Whether tour extension was added',
-                'tour_extension_text' => 'Tour extension description',
-                'tour_extension_date_text' => 'Tour extension date',
+                'tour_extension_text' => 'Tour extension title (from Tour ACF when extension offered)',
+                'tour_extension_date_text' => 'Tour extension date range (from tour + tour-date, not booking snapshot)',
                 'vehicle1' => 'Primary vehicle assignment',
                 'vehicle2' => 'Secondary vehicle assignment',
                 'participant_sex' => 'Participant gender',
@@ -168,6 +168,9 @@ class BST_Email_Merge_Fields {
      * Public method to allow other classes to access field values
      */
     public function get_field_values($booking, $extra_fields = []) {
+        $live_tour_text = $this->get_live_tour_title($booking->tour_id ?? 0);
+        $live_tour_date_text = $this->get_live_tour_date_text($booking->tour_date_id ?? 0);
+        $live_package_text = $this->get_live_package_name($booking->tour_package_id ?? 0);
         $fields = [
             // Booking Information
             'booking_id' => $booking->id ?? '',
@@ -222,18 +225,18 @@ class BST_Email_Merge_Fields {
             
             // Tour Details
             'tour_id' => $booking->tour_id ?? '',
-            'tour_text' => $booking->tour_text ?? '',
+            'tour_text' => $live_tour_text,
             'tour_date_id' => $booking->tour_date_id ?? '',
-            'tour_date_text' => $booking->tour_date_text ?? '',
+            'tour_date_text' => $live_tour_date_text,
             'tour_date_start' => $this->get_tour_date_start($booking),
             'tour_date_end' => $this->get_tour_date_end($booking),
             'tour_package_id' => $booking->tour_package_id ?? '',
-            'tour_package_text' => $booking->tour_package_text ?? '',
+            'tour_package_text' => $live_package_text,
             'tour_extension_added' => $this->format_boolean($booking->tour_extension_added ?? false),
-            'tour_extension_text' => $booking->tour_extension_text ?? '',
-            'tour_extension_date_text' => $booking->tour_extension_date_text ?? '',
-            'vehicle1' => $booking->vehicle1 ?? '',
-            'vehicle2' => $booking->vehicle2 ?? '',
+            'tour_extension_text' => function_exists( 'bst_live_extension_title_for_tour' ) ? bst_live_extension_title_for_tour( (int) ( $booking->tour_id ?? 0 ) ) : '',
+            'tour_extension_date_text' => function_exists( 'bst_live_extension_date_range_for_booking' ) ? bst_live_extension_date_range_for_booking( $booking ) : '',
+            'vehicle1' => function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 1 ) : '',
+            'vehicle2' => function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 2 ) : '',
             'participant_sex' => $booking->participant_sex ?? '',
             'sharing_preference' => $booking->sharing_preference ?? '',
             'bed_preference' => $booking->bed_preference ?? '',
@@ -277,9 +280,9 @@ class BST_Email_Merge_Fields {
             'referrer' => $booking->referrer ?? '',
             
             // Legacy/Calculated Fields (for backward compatibility)
-            'tour_name' => $booking->tour_text ?? '',
-            'tour_date' => $this->format_date($booking->tour_date_text ?? ''),
-            'package_name' => $booking->tour_package_text ?? '',
+            'tour_name' => $live_tour_text,
+            'tour_date' => $live_tour_date_text,
+            'package_name' => $live_package_text,
             'currency' => $booking->tour_currency ?? 'EUR',
             'currency_symbol' => $this->get_currency_symbol($booking->tour_currency ?? 'EUR'),
             'booking_source' => $booking->source ?? '',
@@ -454,10 +457,11 @@ class BST_Email_Merge_Fields {
     private function extract_tour_time($booking) {
         // Try to get time from tour_date_text or other fields
         $time = '';
-        
-        if (!empty($booking->tour_date_text)) {
+        $tour_date_text = $this->get_live_tour_date_text($booking->tour_date_id ?? 0);
+
+        if (!empty($tour_date_text)) {
             // Look for time patterns in the date text
-            if (preg_match('/(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?)/', $booking->tour_date_text, $matches)) {
+            if (preg_match('/(\d{1,2}:\d{2}(?:\s*(?:AM|PM|am|pm))?)/', $tour_date_text, $matches)) {
                 $time = $matches[1];
             }
         }
@@ -632,40 +636,56 @@ class BST_Email_Merge_Fields {
         
         return trim($first . ' ' . $last);
     }
+
+    private function get_live_tour_title($tour_id) {
+        $tour_id = intval($tour_id);
+        if ($tour_id <= 0) {
+            return '';
+        }
+        $p = get_post($tour_id);
+        return ($p && $p->post_type === 'tour') ? (string) $p->post_title : '';
+    }
+
+    private function get_live_tour_date_text($tour_date_id) {
+        $tour_date_id = intval($tour_date_id);
+        if ($tour_date_id <= 0) {
+            return '';
+        }
+        $p = get_post($tour_date_id);
+        if (!$p || $p->post_type !== 'tour-date') {
+            return '';
+        }
+        $start_date = get_post_meta($tour_date_id, 'start_date', true);
+        $end_date = get_post_meta($tour_date_id, 'end_date', true);
+        if ($start_date && $end_date) {
+            return (date('M', strtotime($start_date)) == date('M', strtotime($end_date)))
+                ? date('j', strtotime($start_date)) . '-' . date('j M Y', strtotime($end_date))
+                : date('j M', strtotime($start_date)) . ' - ' . date('j M Y', strtotime($end_date));
+        }
+        if ($start_date) {
+            return date('j M Y', strtotime($start_date));
+        }
+        return (string) $p->post_title;
+    }
+
+    private function get_live_package_name($package_id) {
+        $package_id = intval($package_id);
+        if ($package_id <= 0) {
+            return '';
+        }
+        return (string) get_option('bst_package_' . $package_id . '_name', '');
+    }
     
     /**
      * Format tour full display exactly like booking list
      * Uses the same logic from tour-bookings-list.php lines 945-969
      */
     private function format_tour_full_display($booking) {
-        $tour_label = $booking->tour_text ?? '';
+        $tour_label = $this->get_live_tour_title($booking->tour_id ?? 0);
+        $tour_date_text = $this->get_live_tour_date_text($booking->tour_date_id ?? 0);
+        $package_text = $this->get_live_package_name($booking->tour_package_id ?? 0);
         $tour_date_id = $booking->tour_date_id ?? '';
-        $tour_date_text = $booking->tour_date_text ?? '';
-        $package_text = $booking->tour_package_text ?? '';
-        
         $paren = '';
-        if (!empty($tour_date_id)) {
-            $parts = explode('|', $tour_date_id);
-            $tour_date_id_val = trim($parts[0]);
-            
-            // Try to get the tour date text from the tour-date post
-            $tour_date_post = get_post($tour_date_id_val);
-            if ($tour_date_post && $tour_date_post->post_type === 'tour-date') {
-                $start_date = get_post_meta($tour_date_id_val, 'start_date', true);
-                $end_date = get_post_meta($tour_date_id_val, 'end_date', true);
-                
-                if ($start_date && $end_date) {
-                    $tour_date_text = (date('M', strtotime($start_date)) == date('M', strtotime($end_date)))
-                        ? date('j', strtotime($start_date)) . '-' . date('j M Y', strtotime($end_date))
-                        : date('j M', strtotime($start_date)) . ' - ' . date('j M Y', strtotime($end_date));
-                } elseif ($start_date) {
-                    $tour_date_text = date('j M Y', strtotime($start_date));
-                } else {
-                    $tour_date_text = $tour_date_post->post_title;
-                }
-            }
-        }
-        
         $date_label = $tour_date_text !== '' ? $tour_date_text : $tour_date_id;
         if ($date_label) {
             $paren = $date_label;
@@ -793,7 +813,7 @@ class BST_Email_Merge_Fields {
      */
     private function generate_bst_subject($booking) {
         $guest_name = $this->format_booking_name($booking);
-        $tour_text = $booking->tour_text ?? '';
+        $tour_text = $this->get_live_tour_title($booking->tour_id ?? 0);
         $extension_added = $booking->tour_extension_added ?? false;
         
         // Determine if booked or finalized based on finalization_entry_id
@@ -836,7 +856,7 @@ class BST_Email_Merge_Fields {
      * Generate customer email subject
      */
     private function generate_customer_subject($booking) {
-        $tour_text = $booking->tour_text ?? '';
+        $tour_text = $this->get_live_tour_title($booking->tour_id ?? 0);
         $extension_added = $booking->tour_extension_added ?? false;
         
         // Determine if booked or finalized based on finalization_entry_id

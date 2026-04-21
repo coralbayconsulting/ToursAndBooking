@@ -11,42 +11,108 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Get the error log path used on the Tools page (Azure, WP debug.log, etc.).
+ * Normalized filesystem path from PHP's error_log INI, or empty if syslog / unset / not a path.
  *
- * @return string Path to the error log file (existing or fallback).
+ * @return string Absolute path or ''.
+ */
+function bst_tools_normalize_ini_error_log_path() {
+    $ini = ini_get( 'error_log' );
+    if ( ! is_string( $ini ) || '' === trim( $ini ) ) {
+        return '';
+    }
+    $ini = trim( $ini );
+    if ( 0 === stripos( $ini, 'syslog' ) ) {
+        return '';
+    }
+    // Absolute Unix/Windows path only (what we can read in Tools).
+    if ( ! preg_match( '#^([a-zA-Z]:[/\\\\]|[/\\\\])#', $ini ) ) {
+        return '';
+    }
+    return wp_normalize_path( $ini );
+}
+
+/**
+ * Human-readable value of PHP error_log INI for admin UI.
+ *
+ * @return string
+ */
+function bst_tools_get_ini_error_log_display() {
+    $raw = ini_get( 'error_log' );
+    if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
+        return __( '(not set — PHP may send errors to stderr / the host log stream instead of a file)', 'bst-plugin' );
+    }
+    return trim( $raw );
+}
+
+/**
+ * Get the error log file path to show in Tools (tail / download / clear).
+ *
+ * Priority: (1) PHP INI error_log when that file exists and is readable — this is where
+ * error_log() from cron (e.g. exchange rates), plugins, and BST release cleanup lines go.
+ * (2) wp-content/debug.log / error.log (WordPress WP_DEBUG_LOG or copies). (3) hosted-env
+ * fallbacks (Azure paths, etc.). (4) display fallback when the file is missing.
+ *
+ * This is not tied to Apache; PHP-FPM / php.ini / pool config set error_log.
+ *
+ * @return string Path to the error log file (existing or best guess for display).
  */
 function bst_get_tools_error_log_path() {
+    $ini_path = bst_tools_normalize_ini_error_log_path();
+    if ( $ini_path && file_exists( $ini_path ) && is_readable( $ini_path ) ) {
+        return $ini_path;
+    }
+
+    $wp_debug = trailingslashit( WP_CONTENT_DIR ) . 'debug.log';
+    if ( file_exists( $wp_debug ) && is_readable( $wp_debug ) ) {
+        return wp_normalize_path( $wp_debug );
+    }
+
+    $wp_err = trailingslashit( WP_CONTENT_DIR ) . 'error.log';
+    if ( file_exists( $wp_err ) && is_readable( $wp_err ) ) {
+        return wp_normalize_path( $wp_err );
+    }
+
     $potential_paths = array(
         '/home/LogFiles/php_errors.log',
         '/home/LogFiles/application.log',
-        WP_CONTENT_DIR . '/debug.log',
-        WP_CONTENT_DIR . '/error.log',
-        ini_get('error_log'),
+        $wp_debug,
+        $wp_err,
+        $ini_path,
         '/var/log/php_errors.log',
     );
 
-    foreach ($potential_paths as $path) {
-        if ($path && file_exists($path) && filesize($path) > 0) {
-            return $path;
+    foreach ( $potential_paths as $path ) {
+        if ( $path && file_exists( $path ) && filesize( $path ) > 0 ) {
+            return wp_normalize_path( $path );
         }
     }
-    foreach ($potential_paths as $path) {
-        if ($path && file_exists($path)) {
-            return $path;
-        }
-    }
-
-    if (is_dir('/home/logfiles/wordpress/logs')) {
-        $log_files = glob('/home/logfiles/wordpress/logs/wordpress_*.log');
-        if ($log_files) {
-            usort($log_files, function ($a, $b) {
-                return filemtime($b) - filemtime($a);
-            });
-            return $log_files[0];
+    foreach ( $potential_paths as $path ) {
+        if ( $path && file_exists( $path ) ) {
+            return wp_normalize_path( $path );
         }
     }
 
-    return WP_CONTENT_DIR . '/debug.log';
+    if ( is_dir( '/home/logfiles/wordpress/logs' ) ) {
+        $log_files = glob( '/home/logfiles/wordpress/logs/wordpress_*.log' );
+        if ( $log_files ) {
+            usort(
+                $log_files,
+                function ( $a, $b ) {
+                    return filemtime( $b ) - filemtime( $a );
+                }
+            );
+            return wp_normalize_path( $log_files[0] );
+        }
+    }
+
+    if ( $ini_path ) {
+        return $ini_path;
+    }
+    if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG ) {
+        return wp_normalize_path( $wp_debug );
+    }
+
+    return wp_normalize_path( $wp_debug );
 }
 
 /**

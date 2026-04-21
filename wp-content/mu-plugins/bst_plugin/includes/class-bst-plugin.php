@@ -25,6 +25,12 @@ class BST_Plugin {
         require_once BST_PLUGIN_DIR . 'includes/database/create-tables.php';
         require_once BST_PLUGIN_DIR . 'includes/database/database-utils.php';
         require_once BST_PLUGIN_DIR . 'includes/database/tour-booking-actions.php'; 
+        require_once BST_PLUGIN_DIR . 'includes/custom-post-types.php';
+        require_once BST_PLUGIN_DIR . 'includes/vehicle-helpers.php';
+        require_once BST_PLUGIN_DIR . 'includes/tour-date-limited-vehicles.php';
+        require_once BST_PLUGIN_DIR . 'includes/vehicle-migration.php';
+        require_once BST_PLUGIN_DIR . 'includes/vehicle-tour-names-export.php';
+        require_once BST_PLUGIN_DIR . 'includes/vehicle-booking-remap.php';
         require_once BST_PLUGIN_DIR . 'includes/rating-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/dashboard-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/tour-type-helpers.php';
@@ -84,12 +90,13 @@ class BST_Plugin {
         add_action('wp_ajax_bst_regenerate_tour_date_titles', array($this, 'handle_regenerate_tour_date_titles'));
         add_action('wp_ajax_bst_sync_sold_slots_ajax', array($this, 'handle_sync_sold_slots_ajax'));
         add_action('wp_ajax_bst_release_data_cleanup', array($this, 'handle_release_data_cleanup'));
-        
+        add_action('wp_ajax_bst_sync_limited_vehicles_create', array($this, 'handle_sync_limited_vehicles_create'));
+        add_action('wp_ajax_bst_sync_limited_vehicles_sold', array($this, 'handle_sync_limited_vehicles_sold'));
         // Daily availability sync automation
         add_action('wp_loaded', array($this, 'schedule_daily_availability_sync'));
         add_action('bst_daily_availability_sync', array($this, 'run_daily_availability_sync'));
         
-        // Edit page navigation for tours and tour-dates
+        // Edit page navigation for tours, tour-dates, and vehicles
         add_action('edit_form_after_title', array($this, 'add_edit_page_navigation'));
         add_filter('post_row_actions', array($this, 'modify_post_row_actions'), 10, 2);
         add_action('admin_footer', array($this, 'add_tour_edit_link_script'));
@@ -116,6 +123,9 @@ class BST_Plugin {
         add_action('wp_ajax_nopriv_bst_create_waiting_list_booking', 'bst_create_waiting_list_booking');
         add_action('wp_ajax_bst_delete_booking', 'bst_delete_booking');
         add_action('wp_ajax_bst_recalculate_invoice_data', 'bst_recalculate_invoice_data');
+        add_action('wp_ajax_bst_extension_addon_amount', 'bst_ajax_extension_addon_amount');
+        add_action('wp_ajax_nopriv_bst_extension_addon_amount', 'bst_ajax_extension_addon_amount');
+        add_action('wp_ajax_bst_booking_extension_addon_amount', 'bst_ajax_extension_addon_amount');
         add_action('wp_ajax_bst_get_tour_dates', array($this, 'bst_get_tour_dates'));
         add_action('wp_ajax_bst_get_tour_packages', array($this, 'bst_get_tour_packages')); 
         add_action('wp_ajax_bst_get_package_config', array($this, 'bst_get_package_config')); 
@@ -153,7 +163,10 @@ class BST_Plugin {
         add_filter('acf/prepare_field/name=sold_slots', array($this, 'make_sold_slots_readonly'));
         add_filter('acf/prepare_field/name=reserved_slots', array($this, 'make_reserved_slots_readonly'));
         add_filter('acf/prepare_field/name=available_slots', array($this, 'make_available_slots_readonly'));
-        
+        add_filter('acf/prepare_field/name=limited_vehicle_sold', array($this, 'make_limited_vehicle_sold_readonly'));
+        add_filter('acf/fields/post_object/query/key=field_696e8b1a0a002', array($this, 'acf_limited_vehicle_post_object_query'), 10, 3);
+        add_filter('acf/fields/post_object/query/key=field_67f9e40b1c001', array($this, 'acf_tour_vehicle_pricing_cpt_query'), 10, 3);
+
         // Make title field readonly for tour-date posts
         add_action('admin_head', array($this, 'make_tour_date_title_readonly'));
         
@@ -485,6 +498,7 @@ class BST_Plugin {
                 'edit-tags.php?taxonomy=tour-type-code&post_type=tour', // Tour Type Codes (taxonomy for types)
                 'edit.php?post_type=tour',                // Tours (content using the types)
                 'edit.php?post_type=tour-date',           // Tour Dates (dates for the tours)
+                'edit.php?post_type=vehicle',             // Vehicles (under Tour Dates)
                 'edit.php?post_type=source-code',         // Source Codes
                 'edit-tags.php?taxonomy=tour-rating&post_type=tour',    // Tour Ratings
                 'edit.php?post_type=email-template',      // Email Templates
@@ -602,10 +616,10 @@ class BST_Plugin {
                 // For date sorting, use created_date field
                 $order_clause = " ORDER BY created_date $sort_order";
             } elseif ($sort_by === 'tour') {
-                // For tour sorting, use tour_text field
-                $order_clause = " ORDER BY tour_text $sort_order";
+                // For tour sorting, use live tour title from posts table.
+                $order_clause = " ORDER BY (SELECT post_title FROM {$wpdb->posts} p WHERE p.ID = {$tour_booking_table}.tour_id LIMIT 1) $sort_order";
             } else {
-                $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'tour_text', 'tour_date_text', 'booking_status', 'created_date');
+                $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'booking_status', 'created_date');
                 if (in_array($sort_by, $allowed_sort_columns)) {
                     $order_clause = " ORDER BY $sort_by $sort_order";
                 }
@@ -633,12 +647,19 @@ class BST_Plugin {
         $tour_booking_table = $wpdb->prefix . "bst_tour_booking";
     
         $booking = null;
-        if (isset($_GET['id'])) {
-            $id = intval($_GET['id']);
-            // Try both id and booking_entry_id for backward compatibility
-            $booking = $wpdb->get_row($wpdb->prepare("SELECT * FROM $tour_booking_table WHERE id = %d OR booking_entry_id = %d", $id, $id), OBJECT);
+        // `id` / `booking_id` = bst_tour_booking primary key only (same as view_booking). Do not OR booking_entry_id:
+        // e.g. id=285 must open booking row 285, not row 281 with booking_entry_id 285 (GF entry id).
+        if ( isset( $_GET['id'] ) ) {
+            $id      = intval( $_GET['id'] );
+            $booking = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $tour_booking_table WHERE id = %d", $id ), OBJECT );
+        } elseif ( isset( $_GET['booking_id'] ) ) {
+            $id      = intval( $_GET['booking_id'] );
+            $booking = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $tour_booking_table WHERE id = %d", $id ), OBJECT );
+        } elseif ( isset( $_GET['booking_entry_id'] ) ) {
+            $entry_id = intval( $_GET['booking_entry_id'] );
+            $booking  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $tour_booking_table WHERE booking_entry_id = %d", $entry_id ), OBJECT );
         }
-    
+
         // Build filtered query for navigation (respecting filters from main page)
         $where_conditions = array();
         $query_params = array();
@@ -691,11 +712,11 @@ class BST_Plugin {
             // Sort by created date
             $order_sql = " ORDER BY created_date $sort_order";
         } elseif ($sort_by === 'tour') {
-            // Sort by tour text
-            $order_sql = " ORDER BY tour_text $sort_order";
+            // Sort by live tour title
+            $order_sql = " ORDER BY (SELECT post_title FROM {$wpdb->posts} p WHERE p.ID = {$tour_booking_table}.tour_id LIMIT 1) $sort_order";
         } else {
             // Fallback to safe column whitelist
-            $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'tour_text', 'tour_date_text', 'booking_status', 'created_date');
+            $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'booking_status', 'created_date');
             if (!in_array($sort_by, $allowed_sort_columns, true)) {
                 $sort_by = 'id';
             }
@@ -731,6 +752,10 @@ class BST_Plugin {
         // Set page title for admin header
         global $title;
         $title = $booking ? 'Edit Booking #' . $booking->id : 'Add Booking';
+
+        if ($booking && function_exists('bst_booking_extension_addon_amount')) {
+            $booking->bst_extension_addon_amount = bst_booking_extension_addon_amount($booking);
+        }
         
         include BST_PLUGIN_DIR . 'templates/tour-bookings-edit.php';
     }
@@ -806,11 +831,11 @@ class BST_Plugin {
             // Sort by created date
             $order_sql = " ORDER BY created_date $sort_order";
         } elseif ($sort_by === 'tour') {
-            // Sort by tour text
-            $order_sql = " ORDER BY tour_text $sort_order";
+            // Sort by live tour title
+            $order_sql = " ORDER BY (SELECT post_title FROM {$wpdb->posts} p WHERE p.ID = {$tour_booking_table}.tour_id LIMIT 1) $sort_order";
         } else {
             // Fallback to safe column whitelist
-            $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'tour_text', 'tour_date_text', 'booking_status', 'created_date');
+            $allowed_sort_columns = array('id', 'guest1_first_name', 'guest1_last_name', 'booking_status', 'created_date');
             if (!in_array($sort_by, $allowed_sort_columns, true)) {
                 $sort_by = 'id';
             }
@@ -1024,9 +1049,21 @@ class BST_Plugin {
     // Enqueue admin scripts
     public function enqueue_admin_scripts($hook) {
         $screen = get_current_screen();
+        $screen_id = isset($screen->id) ? (string) $screen->id : '';
+        $screen_post_type = isset($screen->post_type) ? (string) $screen->post_type : '';
+
+        // Do not run BST admin enhancement scripts on ACF/SCF field-group editors.
+        // These screens manage field definitions and can break if unrelated admin scripts run.
+        if (
+            false !== strpos($screen_id, 'acf-field-group') ||
+            false !== strpos($screen_id, 'scf-field-group') ||
+            'acf-field-group' === $screen_post_type
+        ) {
+            return;
+        }
 
         // Enqueue scripts for Tour Dates meta box on Tour edit/new pages
-        if ($hook == 'post.php' || $hook == 'post-new.php') {
+        if (($hook == 'post.php' || $hook == 'post-new.php') && ($screen_post_type === 'tour' || $screen_post_type === 'tour-date')) {
             // Use a more reliable URL path for Azure
             $script_url = content_url('mu-plugins/bst_plugin/js/tour-dates-admin.js');
             $script_path = WP_CONTENT_DIR . '/mu-plugins/bst_plugin/js/tour-dates-admin.js';
@@ -1710,6 +1747,113 @@ class BST_Plugin {
     }
 
     /**
+     * Make limited_vehicle_sold (repeater sub-field) readonly on tour-date — value comes from bookings.
+     */
+    public function make_limited_vehicle_sold_readonly($field) {
+        global $post;
+        if ($post && $post->post_type === 'tour-date') {
+            $field['readonly'] = 1;
+            $field['wrapper']['class'] .= ' readonly-field';
+            $field['instructions'] = '';
+        }
+        return $field;
+    }
+
+    /**
+     * Limit tour-date limited-vehicle picker to vehicles linked on the parent tour (vehicle_pricing).
+     *
+     * @param array $args WP_Query args for post_object field.
+     * @param array $field ACF field array.
+     * @param int|string $post_id Post ID being edited.
+     * @return array
+     */
+    public function acf_limited_vehicle_post_object_query( $args, $field, $post_id ) {
+        if ( ! function_exists( 'acf_get_valid_post_id' ) || ! function_exists( 'bst_tour_id_for_tour_date' ) || ! function_exists( 'bst_vehicle_ids_for_tour_date_limited_picker' ) ) {
+            return $args;
+        }
+        $resolved = acf_get_valid_post_id( $post_id );
+        if ( ! $resolved || 'tour-date' !== get_post_type( $resolved ) ) {
+            return $args;
+        }
+        $tour_id = bst_tour_id_for_tour_date( $resolved );
+        $ids     = bst_vehicle_ids_for_tour_date_limited_picker( (int) $resolved, $tour_id );
+        if ( empty( $ids ) ) {
+            $args['post__in'] = array( 0 );
+        } else {
+            $args['post__in'] = $ids;
+        }
+        unset( $args['meta_query'] );
+        if ( function_exists( 'bst_limited_vehicles_row_key_from_prefix' ) && function_exists( 'bst_limited_vehicle_ids_assigned_other_rows' ) && ! empty( $field['prefix'] ) ) {
+            $row_key = bst_limited_vehicles_row_key_from_prefix( $field['prefix'] );
+            if ( null !== $row_key ) {
+                $exclude = bst_limited_vehicle_ids_assigned_other_rows( (int) $resolved, $row_key );
+                if ( ! empty( $exclude ) ) {
+                    $not_in   = isset( $args['post__not_in'] ) ? (array) $args['post__not_in'] : array();
+                    $args['post__not_in'] = array_values( array_unique( array_merge( $not_in, $exclude ) ) );
+                }
+            }
+        }
+        return $args;
+    }
+
+    /**
+     * On Tour → Vehicle Pricing → Vehicle (CPT): only cars for driving tours, only motorcycles for motorcycle tours.
+     *
+     * Migration / remap uses {@see update_field()} on the whole `vehicle_pricing` repeater. If this filter applies
+     * `post__in` to a list that excludes the Vehicle IDs being written, ACF/SCF may refuse the save. The migration
+     * therefore calls {@see bst_vehicle_migration_push_post_object_query_bypass()} for the duration of
+     * {@see bst_migrate_vehicle_cpt_links()}, and {@see bst_vehicle_migration_acf_pass_vehicle_pricing_vehicle_id}
+     * relaxes validate_value for the same field key. Do not remove those without replacing the save strategy.
+     *
+     * @param array $args WP_Query args for post_object field.
+     * @param array $field ACF field array.
+     * @param int|string $post_id Post ID being edited.
+     * @return array
+     */
+    public function acf_tour_vehicle_pricing_cpt_query( $args, $field, $post_id ) {
+        if ( function_exists( 'bst_vehicle_migration_is_post_object_query_bypassed' ) && bst_vehicle_migration_is_post_object_query_bypassed() ) {
+            return $args;
+        }
+        if ( ! function_exists( 'acf_get_valid_post_id' ) || ! function_exists( 'bst_vehicle_ids_for_tour_pricing_picker' ) ) {
+            return $args;
+        }
+        $resolved = acf_get_valid_post_id( $post_id );
+        if ( ! $resolved || 'tour' !== get_post_type( $resolved ) ) {
+            return $args;
+        }
+        $tour_id = (int) $resolved;
+        $ids     = bst_vehicle_ids_for_tour_pricing_picker( $tour_id );
+        // Belt-and-suspenders: include every vehicle id already on pricing rows (linked or label-resolved) so
+        // post__in always contains saved selections (nested rows may use field_* keys that linked_ids missed before).
+        if ( function_exists( 'bst_tour_pricing_vehicle_ids_resolved' ) ) {
+            $ids = array_values( array_unique( array_merge( $ids, bst_tour_pricing_vehicle_ids_resolved( $tour_id ) ) ) );
+        }
+        // Ensure the value for this subfield is in the query (ACF may omit it from merged lists in edge cases).
+        if ( ! empty( $field['value'] ) ) {
+            $v = $field['value'];
+            $vid = 0;
+            if ( is_numeric( $v ) ) {
+                $vid = (int) $v;
+            } elseif ( is_array( $v ) && isset( $v['ID'] ) ) {
+                $vid = (int) $v['ID'];
+            } elseif ( is_object( $v ) && isset( $v->ID ) ) {
+                $vid = (int) $v->ID;
+            }
+            if ( $vid > 0 ) {
+                $ids[] = $vid;
+                $ids   = array_values( array_unique( array_map( 'intval', $ids ) ) );
+            }
+        }
+        if ( empty( $ids ) ) {
+            $args['post__in'] = array( 0 );
+        } else {
+            $args['post__in'] = $ids;
+        }
+        unset( $args['meta_query'] );
+        return $args;
+    }
+
+    /**
      * Make title field readonly for tour-date posts
      */
     public function make_tour_date_title_readonly() {
@@ -2242,18 +2386,21 @@ class BST_Plugin {
 
         $current_version = get_option('bst_plugin_version', '1.0.0');
         $force_rerun = isset($_POST['force']) && $_POST['force'] === 'true';
-        
-        // Check if cleanup already run for this version (unless force rerun)
-        $cleanup_status = get_option('bst_release_cleanup_status', array());
-        if (!$force_rerun && isset($cleanup_status[$current_version])) {
-            wp_send_json_error('Cleanup already completed for version ' . $current_version . '. Use force rerun to execute again.');
-            return;
-        }
-        
+        $repair_repeater = isset($_POST['repair']) && $_POST['repair'] === 'true';
+
         // Get cleanup tasks for current version
         $cleanup_tasks = bst_get_release_cleanup_tasks();
         if (empty($cleanup_tasks)) {
             wp_send_json_error('No cleanup tasks defined for current version');
+            return;
+        }
+
+        // Block repeat runs unless force reset and/or re-link from labels is checked.
+        if ( ! $force_rerun && ! $repair_repeater && function_exists( 'bst_release_cleanup_is_complete_for_tasks' )
+            && bst_release_cleanup_is_complete_for_tasks( $current_version, $cleanup_tasks ) ) {
+            wp_send_json_error(
+                'Cleanup already completed for version ' . $current_version . ' for all current tasks. Use the “Force reset vehicle migration” or “Re-link tour pricing from labels” button to run again.'
+            );
             return;
         }
 
@@ -2262,20 +2409,117 @@ class BST_Plugin {
         
         try {
             // Execute cleanup tasks based on current version
-            $results = bst_execute_release_cleanup_tasks($cleanup_tasks, $current_version);
+            $results = bst_execute_release_cleanup_tasks($cleanup_tasks, $current_version, $force_rerun, $repair_repeater);
+
+            if ( function_exists( 'bst_log_release_cleanup_results' ) ) {
+                bst_log_release_cleanup_results( $results );
+            }
             
-            // Mark cleanup as completed (or update timestamp if force rerun)
-            $cleanup_status[$current_version] = time();
-            update_option('bst_release_cleanup_status', $cleanup_status);
+            // Mark each task complete under this version (preserves legacy metadata if present).
+            $cleanup_status = get_option( 'bst_release_cleanup_status', array() );
+            $bucket         = bst_release_cleanup_get_version_bucket( $current_version );
+            $ts             = time();
+            foreach ( $cleanup_tasks as $task ) {
+                if ( empty( $task['name'] ) ) {
+                    continue;
+                }
+                $bucket['tasks'][ bst_release_cleanup_task_slug( $task['name'] ) ] = $ts;
+            }
+            $cleanup_status[ $current_version ] = $bucket;
+            update_option( 'bst_release_cleanup_status', $cleanup_status );
             
             // Success message
-            $rerun_note = $force_rerun ? ' (Force rerun executed)' : '';
-            $message = "Release data cleanup completed successfully for version {$current_version}{$rerun_note}! " . implode('. ', $results);
-            wp_send_json_success($message);
+            $rerun_note = '';
+            if ( $force_rerun ) {
+                $rerun_note .= ' (Force reset executed)';
+            }
+            if ( $repair_repeater ) {
+                $rerun_note .= ' (Re-link from labels executed)';
+            }
+            $message = "Release data cleanup completed successfully for version {$current_version}{$rerun_note}! Full detail is logged to PHP error_log (lines prefixed [BST release cleanup]). " . implode('. ', $results);
+            wp_send_json_success(
+                array(
+                    'message'   => $message,
+                    'tools_url' => admin_url( 'admin.php?page=bst_tools_page' ),
+                )
+            );
             
         } catch (Exception $e) {
+            error_log( '[BST release cleanup] [ERROR] ' . $e->getMessage() );
             wp_send_json_error('Cleanup failed: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Tools → add limited-vehicle rows (vehicle + max) on child tour-dates from tours.
+     */
+    public function handle_sync_limited_vehicles_create() {
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bst_sync_limited_vehicles_create_nonce' ) ) {
+            wp_send_json_error( __( 'Security check failed.', 'bst-plugin' ) );
+            return;
+        }
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Insufficient permissions.', 'bst-plugin' ) );
+            return;
+        }
+        if ( ! function_exists( 'bst_migrate_limited_vehicles_create_only_batch' ) ) {
+            wp_send_json_error( __( 'Migration is not available.', 'bst-plugin' ) );
+            return;
+        }
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( 300 );
+        }
+        $packed      = bst_migrate_limited_vehicles_create_only_batch();
+        $lines       = isset( $packed['lines'] ) && is_array( $packed['lines'] ) ? $packed['lines'] : array();
+        $error_count = isset( $packed['error_count'] ) ? (int) $packed['error_count'] : 0;
+        $text        = implode( ' ', array_map( 'wp_strip_all_tags', $lines ) );
+        wp_send_json_success(
+            array(
+                'message'    => $text,
+                'has_errors' => $error_count > 0,
+            )
+        );
+    }
+
+    /**
+     * Tools → recalculate Sold from bookings; return oversold list.
+     */
+    public function handle_sync_limited_vehicles_sold() {
+        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bst_sync_limited_vehicles_sold_nonce' ) ) {
+            wp_send_json_error( __( 'Security check failed.', 'bst-plugin' ) );
+            return;
+        }
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( __( 'Insufficient permissions.', 'bst-plugin' ) );
+            return;
+        }
+        if ( ! function_exists( 'bst_migrate_limited_vehicles_sync_sold_batch' ) ) {
+            wp_send_json_error( __( 'Migration is not available.', 'bst-plugin' ) );
+            return;
+        }
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( 300 );
+        }
+        $packed = bst_migrate_limited_vehicles_sync_sold_batch();
+        $lines  = isset( $packed['lines'] ) && is_array( $packed['lines'] ) ? $packed['lines'] : array();
+        $errors = isset( $packed['error_count'] ) ? (int) $packed['error_count'] : 0;
+        $n      = isset( $packed['rows_updated'] ) ? (int) $packed['rows_updated'] : 0;
+        $os     = isset( $packed['oversold'] ) && is_array( $packed['oversold'] ) ? $packed['oversold'] : array();
+
+        /* translators: %d: number of limited-vehicle rows whose sold value changed */
+        $msg = sprintf( __( 'Updated sold values for %d limited-vehicle row(s) (where the calculated sold differed from what was stored).', 'bst-plugin' ), $n );
+        if ( $errors > 0 ) {
+            $msg .= ' ' . implode( ' ', array_map( 'wp_strip_all_tags', $lines ) );
+        }
+
+        wp_send_json_success(
+            array(
+                'message'      => $msg,
+                'rows_updated' => $n,
+                'oversold'     => $os,
+                'has_errors'   => $errors > 0,
+            )
+        );
     }
 
     /**
@@ -2770,7 +3014,7 @@ class BST_Plugin {
      * Modify post row actions to add filter preservation for tours and tour-dates
      */
     public function modify_post_row_actions($actions, $post) {
-        if (in_array($post->post_type, array('tour', 'tour-date'))) {
+        if (in_array($post->post_type, array('tour', 'tour-date', 'vehicle'), true)) {
             // Keep the default actions but they'll be enhanced by our JavaScript
             // to preserve list state parameters
         }
@@ -2835,11 +3079,11 @@ class BST_Plugin {
     }
     
     /**
-     * Add JavaScript to modify tour and tour-date edit links with current list state
+     * Add JavaScript to modify tour, tour-date, and vehicle edit links with current list state
      */
     public function add_tour_edit_link_script() {
         $screen = get_current_screen();
-        if (!$screen || !in_array($screen->id, array('edit-tour', 'edit-tour-date'))) {
+        if (!$screen || !in_array($screen->id, array('edit-tour', 'edit-tour-date', 'edit-vehicle'), true)) {
             return;
         }
         
@@ -2856,6 +3100,12 @@ class BST_Plugin {
             $params['filter_status'] = sanitize_text_field($_GET['post_status']);
         }
         if (isset($_GET['m']) && !empty($_GET['m'])) $params['filter_date'] = sanitize_text_field($_GET['m']);
+        if ( 'edit-vehicle' === $screen->id && isset( $_GET['bst_vehicle_type'] ) ) {
+            $vtf = sanitize_text_field( wp_unslash( $_GET['bst_vehicle_type'] ) );
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $params['bst_vehicle_type'] = $vtf;
+            }
+        }
         
         if (empty($params)) {
             return; // No parameters to add
@@ -2925,7 +3175,7 @@ class BST_Plugin {
     public function preserve_list_state_after_save($location, $post_id) {
         $post = get_post($post_id);
         
-        if (!$post || !in_array($post->post_type, array('tour', 'tour-date'))) {
+        if (!$post || !in_array($post->post_type, array('tour', 'tour-date', 'vehicle'), true)) {
             return $location;
         }
         
@@ -2942,6 +3192,17 @@ class BST_Plugin {
                 $list_params[$param] = sanitize_text_field($_GET[$param]);
             }
         }
+        if ( isset( $_POST['bst_vehicle_type'] ) ) {
+            $vtf = sanitize_text_field( wp_unslash( $_POST['bst_vehicle_type'] ) );
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $list_params['bst_vehicle_type'] = $vtf;
+            }
+        } elseif ( isset( $_GET['bst_vehicle_type'] ) ) {
+            $vtf = sanitize_text_field( wp_unslash( $_GET['bst_vehicle_type'] ) );
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $list_params['bst_vehicle_type'] = $vtf;
+            }
+        }
         
         // Add list state parameters to the redirect location
         if (!empty($list_params)) {
@@ -2952,10 +3213,10 @@ class BST_Plugin {
     }
     
     /**
-     * Add navigation elements to edit pages for tours and tour-dates
+     * Add navigation elements to edit pages for tours, tour-dates, and vehicles
      */
     public function add_edit_page_navigation($post) {
-        if (!in_array($post->post_type, array('tour', 'tour-date'))) {
+        if (!in_array($post->post_type, array('tour', 'tour-date', 'vehicle'), true)) {
             return;
         }
         
@@ -2987,6 +3248,14 @@ class BST_Plugin {
                 continue;
             }
             $list_state[ $wp_param ] = sanitize_text_field( wp_unslash( $_GET[ $our_param ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        }
+
+        // Vehicle list filter (?bst_vehicle_type=car|motorcycle) — same param name on list and edit screen.
+        if ( isset( $_GET['bst_vehicle_type'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            $vtf = sanitize_text_field( wp_unslash( $_GET['bst_vehicle_type'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $list_state['bst_vehicle_type'] = $vtf;
+            }
         }
         
         // Build the back to list URL
@@ -3037,6 +3306,9 @@ class BST_Plugin {
                     echo '<input type="hidden" name="' . esc_attr($our_param) . '" value="' . esc_attr($value) . '">';
                 }
             }
+        }
+        if ( ! empty( $list_state['bst_vehicle_type'] ) && in_array( $list_state['bst_vehicle_type'], array( 'car', 'motorcycle' ), true ) ) {
+            echo '<input type="hidden" name="bst_vehicle_type" value="' . esc_attr( $list_state['bst_vehicle_type'] ) . '">';
         }
 
         // Ensure navigation links do not trigger the browser's unsaved-changes dialog
@@ -3110,6 +3382,19 @@ class BST_Plugin {
                     'compare' => '='
                 )
             );
+        }
+
+        // Vehicle list type filter (matches edit.php?post_type=vehicle&bst_vehicle_type=…)
+        if ( 'vehicle' === $post->post_type && ! empty( $list_state['bst_vehicle_type'] ) ) {
+            $vtf = $list_state['bst_vehicle_type'];
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $mq = isset( $query_args['meta_query'] ) && is_array( $query_args['meta_query'] ) ? $query_args['meta_query'] : array();
+                $mq[] = array(
+                    'key'   => 'vehicle_type',
+                    'value' => $vtf,
+                );
+                $query_args['meta_query'] = $mq;
+            }
         }
         
         // Add ordering - for tour-dates we need special handling
@@ -3259,6 +3544,18 @@ class BST_Plugin {
                 )
             );
         }
+
+        if ( 'vehicle' === $post->post_type && ! empty( $list_state['bst_vehicle_type'] ) ) {
+            $vtf = $list_state['bst_vehicle_type'];
+            if ( in_array( $vtf, array( 'car', 'motorcycle' ), true ) ) {
+                $mq = isset( $query_args['meta_query'] ) && is_array( $query_args['meta_query'] ) ? $query_args['meta_query'] : array();
+                $mq[] = array(
+                    'key'   => 'vehicle_type',
+                    'value' => $vtf,
+                );
+                $query_args['meta_query'] = $mq;
+            }
+        }
         
         // Handle sorting - special case for tour-dates
         if ($post->post_type === 'tour-date') {
@@ -3381,6 +3678,11 @@ class BST_Plugin {
                     case 'm':
                         $edit_params['filter_date'] = $value;
                         break;
+                    case 'bst_vehicle_type':
+                        if ( in_array( (string) $value, array( 'car', 'motorcycle' ), true ) ) {
+                            $edit_params['bst_vehicle_type'] = $value;
+                        }
+                        break;
                 }
             }
             
@@ -3420,6 +3722,11 @@ class BST_Plugin {
                         break;
                     case 'm':
                         $edit_params['filter_date'] = $value;
+                        break;
+                    case 'bst_vehicle_type':
+                        if ( in_array( (string) $value, array( 'car', 'motorcycle' ), true ) ) {
+                            $edit_params['bst_vehicle_type'] = $value;
+                        }
                         break;
                 }
             }
@@ -3552,21 +3859,50 @@ class BST_Plugin {
                 return;
             }
 
-            // Simple check: get available slots from tour date
+            $vehicle1_id = isset($_POST['vehicle1_id']) ? intval($_POST['vehicle1_id']) : 0;
+            $vehicle2_id = isset($_POST['vehicle2_id']) ? intval($_POST['vehicle2_id']) : 0;
+
+            bst_sync_tour_date_sold_slots($tour_date_id, 'pre_book_check');
+            if (function_exists('bst_sync_limited_vehicle_sold_for_tour_date')) {
+                $lv_sync = bst_sync_limited_vehicle_sold_for_tour_date($tour_date_id);
+                if (is_wp_error($lv_sync)) {
+                    error_log('BST pre_book_check limited vehicle sync failed for tour date ' . $tour_date_id . ': ' . $lv_sync->get_error_message());
+                }
+            }
+
             $available_slots = intval(get_field('available_slots', $tour_date_id));
 
-            // Can book if package vehicles needed <= available slots
-            $can_book = ($package_vehicles <= $available_slots);
+            $slots_ok = ($package_vehicles <= $available_slots);
+            $vehicle_ok = true;
+            $vehicle_issue = '';
+            if (function_exists('bst_limited_vehicle_selection_allowed')) {
+                $vcheck = bst_limited_vehicle_selection_allowed($tour_date_id, $vehicle1_id, $vehicle2_id);
+                $vehicle_ok = !empty($vcheck['allowed']);
+                if (!$vehicle_ok && !empty($vcheck['issue'])) {
+                    $vehicle_issue = $vcheck['issue'];
+                }
+            }
 
-            // Send admin notification if availability check fails
+            $can_book = ($slots_ok && $vehicle_ok);
+
             if (!$can_book) {
-                $this->send_availability_failure_notification($tour_date_id, $available_slots, $package_vehicles);
+                $this->send_availability_failure_notification(
+                    $tour_date_id,
+                    $available_slots,
+                    $package_vehicles,
+                    $slots_ok,
+                    $vehicle_ok,
+                    $vehicle_issue
+                );
             }
 
             wp_send_json_success([
                 'available_slots' => $available_slots,
                 'package_vehicles' => $package_vehicles,
-                'can_book' => $can_book
+                'can_book' => $can_book,
+                'slots_ok' => $slots_ok,
+                'vehicle_ok' => $vehicle_ok,
+                'vehicle_issue' => $vehicle_issue,
             ]);
 
         } catch (Exception $e) {
@@ -3578,7 +3914,7 @@ class BST_Plugin {
     /**
      * Send admin notification when availability check fails
      */
-    private function send_availability_failure_notification($tour_date_id, $available_slots, $package_vehicles) {
+    private function send_availability_failure_notification($tour_date_id, $available_slots, $package_vehicles, $slots_ok = null, $vehicle_ok = null, $vehicle_issue = '') {
         // Get tour date information
         $tour_date_post = get_post($tour_date_id);
         $tour_id = get_field('tour', $tour_date_id);
@@ -3604,8 +3940,15 @@ class BST_Plugin {
         $message .= "Date: {$tour_date_title}\n";
         $message .= "Start Date: {$start_date}\n";
         $message .= "Available Slots: {$available_slots}\n";
-        $message .= "Required Slots: {$package_vehicles}\n\n";
-        $message .= "Time: " . current_time('Y-m-d H:i:s') . "\n";
+        $message .= "Required Slots: {$package_vehicles}\n";
+        if ($slots_ok !== null && $vehicle_ok !== null) {
+            $message .= 'Slots OK: ' . ($slots_ok ? 'yes' : 'no') . "\n";
+            $message .= 'Vehicle OK: ' . ($vehicle_ok ? 'yes' : 'no') . "\n";
+            if ($vehicle_issue !== '') {
+                $message .= 'Vehicle issue: ' . $vehicle_issue . "\n";
+            }
+        }
+        $message .= "\nTime: " . current_time('Y-m-d H:i:s') . "\n";
         $message .= "IP Address: " . ($_SERVER['REMOTE_ADDR'] ?? 'Unknown') . "\n\n";
         $message .= "The customer was shown an error message and the booking was prevented.\n\n";
         $message .= "Admin Panel: " . admin_url('edit.php?post_type=tour-date');
@@ -3636,6 +3979,11 @@ class BST_Plugin {
     public function run_daily_availability_sync() {
         // Call the existing sync function
         $results = bst_sync_sold_slots();
+
+        $lv_batch = null;
+        if (function_exists('bst_migrate_limited_vehicles_sync_sold_batch')) {
+            $lv_batch = bst_migrate_limited_vehicles_sync_sold_batch();
+        }
         
         // Send notification email to admin only if running automated (not manual button click)
         $admin_email = get_option('admin_email');
@@ -3652,6 +4000,17 @@ class BST_Plugin {
             $message .= "Total tour dates processed: {$total_processed}\n";
             $message .= "Tour dates updated: {$updated_count}\n";
             $message .= "Tour dates unchanged: {$unchanged_count}\n\n";
+            if (is_array($lv_batch)) {
+                $lv_rows = isset($lv_batch['rows_updated']) ? (int) $lv_batch['rows_updated'] : 0;
+                $lv_errs = isset($lv_batch['error_count']) ? (int) $lv_batch['error_count'] : 0;
+                $message .= "Limited-vehicle sold recalc: repeater rows updated (total): {$lv_rows}\n";
+                $message .= "Limited-vehicle batch errors: {$lv_errs}\n";
+                if (!empty($lv_batch['oversold']) && is_array($lv_batch['oversold'])) {
+                    $os_count = count($lv_batch['oversold']);
+                    $message .= "Oversold limited-vehicle warnings: {$os_count}\n";
+                }
+                $message .= "\n";
+            }
             
             if (!empty($results['errors'])) {
                 $error_count = count($results['errors']);
@@ -3734,7 +4093,7 @@ class BST_Plugin {
     public function add_overbooking_dashboard_widget() {
         wp_add_dashboard_widget(
             'bst_dashboard_summary_widget',
-            'BST Tours & Bookings Summary',
+            __( 'Tours & Bookings Summary', 'bst-plugin' ),
             array($this, 'bst_dashboard_summary_widget_content')
         );
     }
@@ -3744,8 +4103,14 @@ class BST_Plugin {
         $plugin_dashboard_url = admin_url('admin.php?page=bst-plugin');
         $booking_table = $wpdb->prefix . 'bst_tour_booking';
 
-        // 1. Overbooked tour dates
+        // 1. Overbooked tour dates (slot capacity)
         $overbooked_dates = $this->get_overbooked_tour_dates();
+
+        // 1b. Limited-vehicle oversold (sold from bookings > max on tour-date repeater)
+        $lv_oversold_count = 0;
+        if ( function_exists( 'bst_limited_vehicle_dashboard_oversold_rows' ) ) {
+            $lv_oversold_count = count( bst_limited_vehicle_dashboard_oversold_rows() );
+        }
 
         // 2. Waiting list bookings
         $waiting_list_count = $wpdb->get_var("SELECT COUNT(*) FROM $booking_table WHERE booking_status = 'Waiting List'");
@@ -3820,8 +4185,9 @@ class BST_Plugin {
         
         // Always show all summary tiles - complete overview
         $tiles = array(
-            array('🚨', 'Overbooked Tour Dates', count($overbooked_dates), '#dc3545', true),
-            array('💰', 'Refunds Due', $refunds_due_count, '#dc3232', true),
+            array('🚨', __('Overbooked Tour Dates', 'bst-plugin'), count($overbooked_dates), '#dc3545', true),
+            array('🚐', __('Oversold Limited Vehicles', 'bst-plugin'), $lv_oversold_count, '#c05621', true),
+            array('💰', __('Refunds Due', 'bst-plugin'), $refunds_due_count, '#dc3232', true),
             array('🏦', 'Bank Transfer Pending', $bank_wire_count, '#dc3232', true),
             array('⏳', 'Processing Payments', $processing_count, '#ff9500', true),
             array('❌', 'Payment Failed', $payment_failed_count, '#dc3232', true),
@@ -3859,7 +4225,7 @@ class BST_Plugin {
         
         echo '<div style="text-align: center; margin-top: 15px; padding-top: 10px; border-top: 1px solid #ddd;">';
         echo '<a href="' . esc_url($plugin_dashboard_url) . '" class="button button-primary">';
-        echo 'View Full BST Dashboard →';
+        esc_html_e('View full dashboard →', 'bst-plugin');
         echo '</a>';
         echo '</div>';
         
@@ -4736,3 +5102,4 @@ class BST_Plugin {
         ));
     }
 }
+

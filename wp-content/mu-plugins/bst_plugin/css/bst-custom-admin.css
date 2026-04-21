@@ -787,6 +787,44 @@ body.admin_page_bst-tour-bookings .wp-list-table.widefat.fixed.striped .view-boo
     text-align: center;
 }
 
+/* Tour Date edit: helper text above “Add limited vehicles from tour” */
+.acf-field[data-name="limited_vehicles"] .bst-lv-add-from-tour-note {
+	margin: 0 0 10px;
+	max-width: 720px;
+}
+
+/* Tour Date edit: limited vehicles repeater — footer actions (custom button left, Add vehicle right) */
+.acf-field[data-name="limited_vehicles"] .acf-actions.bst-lv-repeater-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.acf-field[data-name="limited_vehicles"] .acf-actions.bst-lv-repeater-actions .bst-lv-repeater-actions-spacer {
+	flex: 1;
+	min-width: 8px;
+}
+
+/* Tour Date edit: limited vehicles repeater (table) */
+.acf-field[data-name="limited_vehicles"] .acf-repeater.-table .acf-field[data-name="limited_vehicle"] {
+    min-width: 200px;
+}
+.acf-field[data-name="limited_vehicles"] .acf-field[data-name="limited_vehicle"].bst-lv-vehicle-locked .select2-container {
+    opacity: 0.88;
+    pointer-events: none;
+}
+.acf-field[data-name="limited_vehicles"] .acf-repeater.-table .acf-field[data-name="limited_vehicle_max"] {
+    max-width: 88px;
+}
+.acf-field[data-name="limited_vehicles"] .acf-repeater.-table .acf-field[data-name="limited_vehicle_sold"],
+.acf-field[data-name="limited_vehicles"] .acf-repeater.-table .acf-field[data-name="limited_vehicle_avail_display"] {
+    text-align: center;
+}
+.acf-field[data-name="limited_vehicles"] .acf-repeater.-table .acf-field[data-name="limited_vehicle_avail_display"] .acf-message {
+    margin: 0;
+    padding: 4px 0;
+}
+
 /* Ensure text doesn't wrap in columns */
 .post-type-tour-date .wp-list-table td {
     white-space: nowrap;
@@ -1643,4 +1681,112 @@ input[type="date"]::-webkit-clear-button {
     color: #666666;
     font-style: italic;
     font-size: 13px;
+}
+
+/* Tour edit: Vehicle Pricing — ACF table repeater has row-handle column FIRST; then Class, Price, Vehicles */
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table {
+    table-layout: fixed !important;
+    width: 100% !important;
+}
+
+/* Col 1: drag/order handle */
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > thead > tr > th:nth-child(1),
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > tbody > tr.acf-row > td:nth-child(1) {
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 52px !important;
+    box-sizing: border-box !important;
+}
+
+/* Col 2: Class */
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > thead > tr > th:nth-child(2),
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > tbody > tr.acf-row > td:nth-child(2) {
+    width: 7% !important;
+    min-width: 52px !important;
+    max-width: 80px !important;
+}
+
+/* Col 3: Vehicle Price Addition (keep narrow — small numeric field) */
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > thead > tr > th:nth-child(3),
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > tbody > tr.acf-row > td:nth-child(3) {
+    width: 11% !important;
+    min-width: 88px !important;
+    max-width: 120px !important;
+}
+
+/* Col 4: Vehicles nested repeater — take remaining width */
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > thead > tr > th:nth-child(4),
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > tbody > tr.acf-row > td:nth-child(4) {
+    width: auto !important;
+    min-width: 58% !important;
+}
+
+/* Tbody: ACF often sets data-name on td — reinforce widths if present */
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > tbody > tr > .acf-field[data-name="class"] {
+    width: 7% !important;
+    min-width: 52px !important;
+    max-width: 80px !important;
+}
+
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > tbody > tr > .acf-field[data-name="vehicle_price_addition"] {
+    width: 11% !important;
+    min-width: 88px !important;
+    max-width: 120px !important;
+}
+
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] > .acf-input > .acf-repeater > table.acf-table > tbody > tr > .acf-field[data-name="vehicles"] {
+    width: auto !important;
+    min-width: 58% !important;
+}
+
+/* Nested "Vehicles" repeater: same pattern — handle, legacy Vehicle text, Vehicle (CPT) */
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table {
+    table-layout: fixed !important;
+    width: 100% !important;
+}
+
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > thead > tr > th:nth-child(1),
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr.acf-row > td:nth-child(1) {
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 52px !important;
+    box-sizing: border-box !important;
+}
+
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > thead > tr > th:nth-child(2),
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr.acf-row > td:nth-child(2) {
+    width: 30% !important;
+    min-width: 140px !important;
+    max-width: 38% !important;
+}
+
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > thead > tr > th:nth-child(3),
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr.acf-row > td:nth-child(3) {
+    width: auto !important;
+    min-width: 180px !important;
+}
+
+/* Col 4: Archived (new bookings) toggle */
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > thead > tr > th:nth-child(4),
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr.acf-row > td:nth-child(4) {
+    width: 22% !important;
+    min-width: 160px !important;
+    max-width: 260px !important;
+}
+
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr > .acf-field[data-name="vehicle"] {
+    width: 30% !important;
+    min-width: 140px !important;
+    max-width: 38% !important;
+}
+
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr > .acf-field[data-name="vehicle_id"] {
+    width: auto !important;
+    min-width: 180px !important;
+}
+
+body.post-type-tour .acf-field[data-name="vehicle_pricing"] .acf-field[data-name="vehicles"] table.acf-table > tbody > tr > .acf-field[data-name="vehicle_choice_archived"] {
+    width: 22% !important;
+    min-width: 160px !important;
+    max-width: 260px !important;
 }

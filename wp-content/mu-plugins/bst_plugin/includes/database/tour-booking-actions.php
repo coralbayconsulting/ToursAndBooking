@@ -46,8 +46,8 @@ function bst_calculate_invoice_fields($booking) {
 
     $tour_id = $booking->tour_id;
     $tour_extension_added = $booking->tour_extension_added;
-    $vehicle1 = $booking->vehicle1;
-    $vehicle2 = $booking->vehicle2;
+    $vehicle1_id = (int) ( $booking->vehicle1_id ?? 0 );
+    $vehicle2_id = (int) ( $booking->vehicle2_id ?? 0 );
     $package_vehicles = intval($booking->package_vehicles ?? 0);
 
     if ($tour_id) {
@@ -68,15 +68,13 @@ function bst_calculate_invoice_fields($booking) {
                     // Vehicle 1: Always charge base cost if package includes vehicles
                     $booking_vehicle_1_use_amount = $vehicle_use_cost;
 
-                    // If vehicle1 is selected, extract and add upcharge
-                    if (!empty($vehicle1)) {
-                        $vehicle1_upcharge = bst_extract_vehicle_price($vehicle1);
-                        if ($vehicle1_upcharge > 0) {
-                            // Add full upcharge for the base tour
+                    // If vehicle1 is selected, add upgrade from tour pricing (CPT id).
+                    if ( $vehicle1_id > 0 && function_exists( 'bst_tour_vehicle_upgrade_amount' ) ) {
+                        $vehicle1_upcharge = bst_tour_vehicle_upgrade_amount( (int) $tour_id, $vehicle1_id );
+                        if ( 0.0 !== $vehicle1_upcharge ) {
                             $booking_vehicle_1_use_amount += $vehicle1_upcharge;
-                            // Add prorated extension cost: (upcharge / tour_driving_days) * extension_driving_days
-                            if ($tour_driving_days > 0 && $extension_driving_days > 0) {
-                                $extension_upgrade_cost = round(($vehicle1_upcharge / $tour_driving_days) * $extension_driving_days, 2);
+                            if ( $tour_driving_days > 0 && $extension_driving_days > 0 ) {
+                                $extension_upgrade_cost = round( ( $vehicle1_upcharge / $tour_driving_days ) * $extension_driving_days, 2 );
                                 $booking_vehicle_1_use_amount += $extension_upgrade_cost;
                             }
                         }
@@ -86,15 +84,12 @@ function bst_calculate_invoice_fields($booking) {
                     if ($package_vehicles == 2) {
                         $booking_vehicle_2_use_amount = $vehicle_use_cost;
 
-                        // If vehicle2 is selected, extract and add upcharge
-                        if (!empty($vehicle2)) {
-                            $vehicle2_upcharge = bst_extract_vehicle_price($vehicle2);
-                            if ($vehicle2_upcharge > 0) {
-                                // Add full upcharge for the base tour
+                        if ( $vehicle2_id > 0 && function_exists( 'bst_tour_vehicle_upgrade_amount' ) ) {
+                            $vehicle2_upcharge = bst_tour_vehicle_upgrade_amount( (int) $tour_id, $vehicle2_id );
+                            if ( 0.0 !== $vehicle2_upcharge ) {
                                 $booking_vehicle_2_use_amount += $vehicle2_upcharge;
-                                // Add prorated extension cost: (upcharge / tour_driving_days) * extension_driving_days
-                                if ($tour_driving_days > 0 && $extension_driving_days > 0) {
-                                    $extension_upgrade_cost = round(($vehicle2_upcharge / $tour_driving_days) * $extension_driving_days, 2);
+                                if ( $tour_driving_days > 0 && $extension_driving_days > 0 ) {
+                                    $extension_upgrade_cost = round( ( $vehicle2_upcharge / $tour_driving_days ) * $extension_driving_days, 2 );
                                     $booking_vehicle_2_use_amount += $extension_upgrade_cost;
                                 }
                             }
@@ -111,10 +106,10 @@ function bst_calculate_invoice_fields($booking) {
                     // Vehicle 1: Always charge base cost if package includes vehicles
                     $booking_vehicle_1_use_amount = $vehicle_use_cost;
 
-                    // If vehicle1 is selected, extract and add upcharge
-                    if (!empty($vehicle1)) {
-                        $vehicle1_upcharge = bst_extract_vehicle_price($vehicle1);
-                        if ($vehicle1_upcharge > 0) {
+                    // If vehicle1 is selected, add upgrade from tour pricing.
+                    if ( $vehicle1_id > 0 && function_exists( 'bst_tour_vehicle_upgrade_amount' ) ) {
+                        $vehicle1_upcharge = bst_tour_vehicle_upgrade_amount( (int) $tour_id, $vehicle1_id );
+                        if ( 0.0 !== $vehicle1_upcharge ) {
                             $booking_vehicle_1_use_amount += $vehicle1_upcharge;
                         }
                     }
@@ -123,10 +118,9 @@ function bst_calculate_invoice_fields($booking) {
                     if ($package_vehicles == 2) {
                         $booking_vehicle_2_use_amount = $vehicle_use_cost;
 
-                        // If vehicle2 is selected, extract and add upcharge
-                        if (!empty($vehicle2)) {
-                            $vehicle2_upcharge = bst_extract_vehicle_price($vehicle2);
-                            if ($vehicle2_upcharge > 0) {
+                        if ( $vehicle2_id > 0 && function_exists( 'bst_tour_vehicle_upgrade_amount' ) ) {
+                            $vehicle2_upcharge = bst_tour_vehicle_upgrade_amount( (int) $tour_id, $vehicle2_id );
+                            if ( 0.0 !== $vehicle2_upcharge ) {
                                 $booking_vehicle_2_use_amount += $vehicle2_upcharge;
                             }
                         }
@@ -168,8 +162,17 @@ function bst_create_booking_notification($booking_id, $booking_data, $action, $s
         }
     }
     
-    // Format tour info
-    $tour_info = ($booking_data['tour_text'] ?? 'Tour') . ' (' . ($booking_data['tour_date_text'] ?? 'Date') . ') - ' . ($booking_data['tour_package_text'] ?? 'Package');
+    // Format tour info from normalized IDs.
+    $tour_title = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking_data['tour_id'] ?? 0) : '';
+    $tour_date  = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking_data['tour_date_id'] ?? 0) : '';
+    $package    = function_exists('bst_live_package_name') ? bst_live_package_name($booking_data['tour_package_id'] ?? 0) : '';
+    $tour_info  = $tour_title !== '' ? $tour_title : 'Tour';
+    if ($tour_date !== '') {
+        $tour_info .= ' (' . $tour_date . ')';
+    }
+    if ($package !== '') {
+        $tour_info .= ' - ' . $package;
+    }
     
     // Add pending status highlighting if applicable
     $status_note = '';
@@ -284,6 +287,34 @@ function bst_convert_empty_to_null($data) {
 }
 
 /**
+ * Remove denormalized snapshot columns from booking insert/update payloads.
+ * UI and exports must resolve labels from tour_id, tour_date_id, tour_package_id,
+ * vehicle*_id, tour_extension_added, etc. These DB columns are legacy; a future
+ * release will drop them after migration is verified.
+ *
+ * @param array $data Booking row data.
+ * @return array
+ */
+function bst_booking_strip_denormalized_snapshot_fields( $data ) {
+    if ( ! is_array( $data ) ) {
+        return $data;
+    }
+    $keys = array(
+        'tour_text',
+        'tour_date_text',
+        'tour_package_text',
+        'vehicle1',
+        'vehicle2',
+        'tour_extension_text',
+        'tour_extension_date_text',
+    );
+    foreach ( $keys as $key ) {
+        unset( $data[ $key ] );
+    }
+    return $data;
+}
+
+/**
  * Centralized function to create a new tour booking
  * 
  * @param array $data Booking data to insert
@@ -303,6 +334,7 @@ function bst_create_tour_booking($data, $context = 'manual') {
     try {
         // Add creation audit fields using shared utility
         $data = bst_add_audit_fields_create($data);
+        $data = bst_booking_strip_denormalized_snapshot_fields($data);
         
         // Insert the booking
         $insert_result = $wpdb->insert($booking_table, $data);
@@ -343,7 +375,7 @@ function bst_create_tour_booking($data, $context = 'manual') {
                 $booking_entry_id = isset($data['booking_entry_id']) ? $data['booking_entry_id'] : 'unknown';
                 $guest_name = (isset($data['guest1_first_name']) ? $data['guest1_first_name'] : '') . ' ' . 
                              (isset($data['guest1_last_name']) ? $data['guest1_last_name'] : '');
-                $tour_info = isset($data['tour_text']) ? $data['tour_text'] : 'Unknown Tour';
+                $tour_info = function_exists('bst_live_tour_title') ? bst_live_tour_title($data['tour_id'] ?? 0) : 'Unknown Tour';
                 
                 BST_Plugin::add_notification(
                     'database_insert_failed_' . $booking_entry_id . '_' . time(),
@@ -372,7 +404,7 @@ function bst_create_tour_booking($data, $context = 'manual') {
             $booking_entry_id = isset($data['booking_entry_id']) ? $data['booking_entry_id'] : 'unknown';
             $guest_name = (isset($data['guest1_first_name']) ? $data['guest1_first_name'] : '') . ' ' . 
                          (isset($data['guest1_last_name']) ? $data['guest1_last_name'] : '');
-            $tour_info = isset($data['tour_text']) ? $data['tour_text'] : 'Unknown Tour';
+            $tour_info = function_exists('bst_live_tour_title') ? bst_live_tour_title($data['tour_id'] ?? 0) : 'Unknown Tour';
             
             // Get stack trace
             $stack_trace = $e->getTraceAsString();
@@ -414,6 +446,7 @@ function bst_create_tour_booking_with_custom_date($data, $context = 'manual') {
     
     try {
         // Don't add audit fields - they're already in $data with custom date
+        $data = bst_booking_strip_denormalized_snapshot_fields($data);
         
         // Insert the booking
         $insert_result = $wpdb->insert($booking_table, $data);
@@ -499,6 +532,7 @@ function bst_update_tour_booking($booking_id, $data, $context = 'manual') {
         
         // Add update audit fields using shared utility
         $data = bst_add_audit_fields_update($data);
+        $data = bst_booking_strip_denormalized_snapshot_fields($data);
         
         // Update the booking
         $update_result = $wpdb->update($booking_table, $data, array('id' => $booking_id));
@@ -1026,14 +1060,9 @@ function bst_update_tile() {
                 'tour_id' => intval($_POST['tour_id'] ?? 0),
                 'tour_date_id' => intval($_POST['tour_date_id'] ?? 0),
                 'tour_package_id' => intval($_POST['tour_package_id'] ?? 0),
-                'tour_package_text' => sanitize_text_field($_POST['tour_package_text'] ?? ''),
-                'tour_text' => sanitize_text_field($_POST['tour_text'] ?? ''),
-                'tour_date_text' => sanitize_text_field($_POST['tour_date_text'] ?? ''),
-                'vehicle1' => sanitize_text_field($_POST['vehicle1'] ?? ''),
-                'vehicle2' => sanitize_text_field($_POST['vehicle2'] ?? ''),
+                'vehicle1_id' => intval($_POST['vehicle1_id'] ?? 0),
+                'vehicle2_id' => intval($_POST['vehicle2_id'] ?? 0),
                 'tour_extension_added' => ($_POST['tour_extension_added'] ?? '') === '1' ? 1 : 0,
-                'tour_extension_text' => sanitize_text_field($_POST['tour_extension_text'] ?? ''),
-                'tour_extension_date_text' => sanitize_text_field($_POST['tour_extension_date_text'] ?? ''),
                 'participant_sex' => sanitize_text_field($_POST['participant_sex'] ?? ''),
                 'sharing_preference' => sanitize_text_field($_POST['sharing_preference'] ?? ''),
                 'bed_preference' => sanitize_text_field($_POST['bed_preference'] ?? ''),
@@ -1327,7 +1356,6 @@ function bst_create_booking() {
     $booking_data['package_rooms'] = floatval($_POST['package_rooms'] ?? 0);
     $booking_data['package_vehicles'] = intval($_POST['package_vehicles'] ?? 0);
     $booking_data['vehicle_choices'] = sanitize_text_field($_POST['vehicle_choices'] ?? '');
-    $booking_data['tour_package_text'] = sanitize_text_field($_POST['tour_package_text'] ?? '');
     
     // Notes
     $booking_data['notes'] = sanitize_textarea_field($_POST['notes'] ?? '');
@@ -1624,27 +1652,14 @@ function bst_create_waiting_list_booking() {
     // Vehicle choices
     $booking_data['vehicle_choices'] = intval($_POST['vehicle_choices'] ?? 0);
     
-    // Vehicle selections (actual vehicle IDs)
-    if (!empty($_POST['vehicle1'])) {
-        $booking_data['vehicle1'] = sanitize_text_field($_POST['vehicle1']);
-    }
-    if (!empty($_POST['vehicle2'])) {
-        $booking_data['vehicle2'] = sanitize_text_field($_POST['vehicle2']);
-    }
+    // Vehicle selections (normalized IDs only)
+    $booking_data['vehicle1_id'] = intval($_POST['vehicle1_id'] ?? ($_POST['vehicle1id'] ?? ($_POST['vehicle1'] ?? 0)));
+    $booking_data['vehicle2_id'] = intval($_POST['vehicle2_id'] ?? ($_POST['vehicle2id'] ?? ($_POST['vehicle2'] ?? 0)));
     
     // Extension information
     if (!empty($_POST['tour_extension_added']) && $_POST['tour_extension_added'] === '1') {
         $booking_data['tour_extension_added'] = '1';
     }
-    if (!empty($_POST['tour_extension_text'])) {
-        $booking_data['tour_extension_text'] = sanitize_text_field($_POST['tour_extension_text']);
-    }
-    if (!empty($_POST['tour_extension_date_text'])) {
-        $booking_data['tour_extension_date_text'] = sanitize_text_field($_POST['tour_extension_date_text']);
-    }
-    
-    // Package text (from JavaScript)
-    $booking_data['tour_package_text'] = sanitize_text_field($_POST['tour_package_text'] ?? '');
     
     // Notes
     $booking_data['notes'] = sanitize_textarea_field($_POST['notes'] ?? '');
@@ -1844,7 +1859,16 @@ function bst_create_waiting_list_booking_with_notification($booking_data) {
         }
         
         // Format tour info like the tour bookings list
-        $tour_info = ($booking_data['tour_text'] ?? 'Tour') . ' (' . ($booking_data['tour_date_text'] ?? 'Date') . ') - ' . ($booking_data['tour_package_text'] ?? 'Package');
+        $tour_title = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking_data['tour_id'] ?? 0) : '';
+        $tour_date  = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking_data['tour_date_id'] ?? 0) : '';
+        $package    = function_exists('bst_live_package_name') ? bst_live_package_name($booking_data['tour_package_id'] ?? 0) : '';
+        $tour_info  = $tour_title !== '' ? $tour_title : 'Tour';
+        if ($tour_date !== '') {
+            $tour_info .= ' (' . $tour_date . ')';
+        }
+        if ($package !== '') {
+            $tour_info .= ' - ' . $package;
+        }
         $booking_link = admin_url('admin.php?page=view_booking&booking_id=' . $booking_id);
         
         $message = sprintf(
@@ -1867,6 +1891,48 @@ function bst_create_waiting_list_booking_with_notification($booking_data) {
     }
     
     return $result;
+}
+
+/**
+ * AJAX: canonical extension add-on amount (tour ACF + vehicle CPT ids). No booking row required.
+ * Admin: nonce bst_tour_bookings_nonce + edit_posts. Public single-tour: nonce bst_extension_addon + published tour.
+ */
+function bst_ajax_extension_addon_amount() {
+    $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+    $authorized = false;
+    if ($nonce && wp_verify_nonce($nonce, 'bst_tour_bookings_nonce') && current_user_can('edit_posts')) {
+        $authorized = true;
+    } elseif ($nonce && wp_verify_nonce($nonce, 'bst_extension_addon')) {
+        $authorized = true;
+    }
+    if (!$authorized) {
+        wp_send_json_error(array('message' => 'Invalid or missing nonce.'), 403);
+        return;
+    }
+
+    $tour_id     = isset($_POST['tour_id']) ? (int) $_POST['tour_id'] : 0;
+    $package_id  = isset($_POST['tour_package_id']) ? (int) $_POST['tour_package_id'] : 0;
+    $vehicle1_id = isset($_POST['vehicle1_id']) ? (int) $_POST['vehicle1_id'] : 0;
+    $vehicle2_id = isset($_POST['vehicle2_id']) ? (int) $_POST['vehicle2_id'] : 0;
+
+    if ($tour_id <= 0 || get_post_type($tour_id) !== 'tour') {
+        wp_send_json_error(array('message' => 'Invalid tour.'), 400);
+        return;
+    }
+    $status = get_post_status($tour_id);
+    if ('publish' !== $status && !current_user_can('edit_post', $tour_id)) {
+        wp_send_json_error(array('message' => 'Forbidden.'), 403);
+        return;
+    }
+
+    $stub = (object) array(
+        'tour_id'         => $tour_id,
+        'tour_package_id' => $package_id,
+        'vehicle1_id'     => $vehicle1_id,
+        'vehicle2_id'     => $vehicle2_id,
+    );
+    $amount = function_exists('bst_booking_extension_addon_amount') ? bst_booking_extension_addon_amount($stub) : 0.0;
+    wp_send_json_success(array('amount' => $amount));
 }
 
 /**

@@ -441,6 +441,7 @@ if (is_singular('tour')) {
                                             <option value="">Select a <?php echo $vehicle_descriptor; ?></option>
                                         </select>
                                     </div>
+                                    <p id="bst-dual-vehicle-inventory-notice" class="small-text" style="display:none;color:#b32d2e;margin-top:8px;text-align:left;" role="alert" aria-live="polite"></p>
                                     <div id="vehicle-disclaimer" style="display: none; margin-top: 5px;">
                                         <p class="small-text" style="color: #666; font-style: italic; text-align: left;">(**) <?php echo $vehicle_descriptor; ?> choice is subject to availability</p>
                                     </div>
@@ -720,6 +721,13 @@ if (is_singular('tour')) {
                     adminVehicleDrivingDays: <?php echo json_encode($admin_vehicle_driving_days, JSON_HEX_TAG); ?>
                 };
 
+                // Canonical extension add-on (same PHP as admin booking edit; no booking row required)
+                window.bstExtensionAddonAjax = {
+                    url: <?php echo json_encode( admin_url( 'admin-ajax.php' ) ); ?>,
+                    nonce: <?php echo json_encode( wp_create_nonce( 'bst_extension_addon' ) ); ?>,
+                    tourId: <?php echo (int) $tourid; ?>
+                };
+                
                 // Pass tour dates with extension info to JavaScript
                 window.tourDatesData = <?php echo json_encode($all_dates, JSON_HEX_TAG); ?>;
                 

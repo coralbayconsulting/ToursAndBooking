@@ -68,29 +68,19 @@ function bst_get_tours_by_year_for_tour_type($tour_type_term_id) {
         return array();
     }
 
-    // For each tour, collect its tour-date posts.
-    $tour_date_ids = array();
-
-    foreach ($tour_ids as $tour_id) {
-        $tour_date_query = new WP_Query(array(
-            'post_type'      => 'tour-date',
-            'posts_per_page' => -1,
-            'meta_query'     => array(
-                array(
-                    'key'     => 'tour',
-                    'value'   => $tour_id,
-                    'compare' => '=',
-                ),
+    // Collect tour-date IDs for all matching tours in a single query.
+    $tour_date_ids = get_posts(array(
+        'post_type'      => 'tour-date',
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            array(
+                'key'     => 'tour',
+                'value'   => $tour_ids,
+                'compare' => 'IN',
             ),
-            'fields'         => 'ids',
-        ));
-
-        if ($tour_date_query->have_posts()) {
-            $tour_date_ids = array_merge($tour_date_ids, $tour_date_query->posts);
-        }
-
-        wp_reset_postdata();
-    }
+        ),
+        'fields'         => 'ids',
+    ));
 
     if (empty($tour_date_ids)) {
         return array();

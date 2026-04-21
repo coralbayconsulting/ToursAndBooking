@@ -125,13 +125,13 @@ $current_time = time();
 
     <h2>Error Log</h2>
     <div class="bst-tools-section">
-        <p>View and manage PHP error logs for debugging issues.</p>
+        <p class="description" style="max-width:720px;"><?php esc_html_e( 'BST release cleanup and vehicle migration log each line here via PHP’s error_log(). This viewer shows the file we resolve below (INI error_log when it is a readable path, otherwise wp-content/debug.log when present).', 'bst-plugin' ); ?></p>
+        <p><strong>PHP <code>error_log</code> (INI):</strong> <code><?php echo esc_html( function_exists( 'bst_tools_get_ini_error_log_display' ) ? bst_tools_get_ini_error_log_display() : ini_get( 'error_log' ) ); ?></code></p>
+        <p><strong>File shown below:</strong> <code><?php echo esc_html( $error_log_path ); ?></code></p>
 
         <?php if (isset($_GET['download_error']) && $_GET['download_error'] === 'headers_sent') : ?>
             <div class="notice notice-error"><p>Error: Could not download log file. Headers already sent. This may be due to output before the download request.</p></div>
         <?php endif; ?>
-
-        <p><strong>Error log path:</strong> <code><?php echo esc_html($error_log_path); ?></code></p>
 
         <?php if (file_exists($error_log_path)) : ?>
             <?php

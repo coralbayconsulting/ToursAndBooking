@@ -1,10 +1,12 @@
-# STAGING ONLY — deploys to App Service slot "staging".
-# Production uses deploy-production.yml (default slot), not this file.
+# STAGING — deploys to App Service slot "staging" (manual only).
+# Pushes to main deploy to the "testing" slot via main_bluestradatours(testing).yml.
+# Production uses deploy-production.yml (default slot).
 #
 # Docs: https://github.com/Azure/webapps-deploy
 # Azure Actions: https://github.com/Azure/actions
 
 name: Deploy to Azure — bluestradatours (STAGING slot)
+
 on:
   workflow_dispatch:
 
