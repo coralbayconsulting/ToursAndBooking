@@ -1023,7 +1023,8 @@ class BST_Email_Log_Viewer {
         if ($result['success']) {
             wp_send_json_success(array('message' => 'Email resent successfully'));
         } else {
-            wp_send_json_error($result['error']);
+            $error_message = !empty($result['error']) ? $result['error'] : 'Failed to resend email.';
+            wp_send_json_error($error_message);
         }
     }
     

@@ -29,8 +29,6 @@ class BST_Plugin {
         require_once BST_PLUGIN_DIR . 'includes/vehicle-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/tour-date-limited-vehicles.php';
         require_once BST_PLUGIN_DIR . 'includes/vehicle-migration.php';
-        require_once BST_PLUGIN_DIR . 'includes/vehicle-tour-names-export.php';
-        require_once BST_PLUGIN_DIR . 'includes/vehicle-booking-remap.php';
         require_once BST_PLUGIN_DIR . 'includes/rating-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/dashboard-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/tour-type-helpers.php';
@@ -89,9 +87,6 @@ class BST_Plugin {
         add_action('wp_ajax_sync_tour_date', array($this, 'sync_tour_date'));
         add_action('wp_ajax_bst_regenerate_tour_date_titles', array($this, 'handle_regenerate_tour_date_titles'));
         add_action('wp_ajax_bst_sync_sold_slots_ajax', array($this, 'handle_sync_sold_slots_ajax'));
-        add_action('wp_ajax_bst_release_data_cleanup', array($this, 'handle_release_data_cleanup'));
-        add_action('wp_ajax_bst_sync_limited_vehicles_create', array($this, 'handle_sync_limited_vehicles_create'));
-        add_action('wp_ajax_bst_sync_limited_vehicles_sold', array($this, 'handle_sync_limited_vehicles_sold'));
         // Daily availability sync automation
         add_action('wp_loaded', array($this, 'schedule_daily_availability_sync'));
         add_action('bst_daily_availability_sync', array($this, 'run_daily_availability_sync'));
@@ -2366,160 +2361,6 @@ class BST_Plugin {
             $message = "Sync encountered {$error_count} error(s). Please check the logs for details.";
             wp_send_json_error($message);
         }
-    }
-
-    /**
-     * AJAX handler for release data cleanup
-     */
-    public function handle_release_data_cleanup() {
-        // Verify nonce
-        if (!wp_verify_nonce($_POST['nonce'], 'bst_release_cleanup_nonce')) {
-            wp_send_json_error('Security check failed');
-            return;
-        }
-
-        // Check user capabilities
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error('Insufficient permissions');
-            return;
-        }
-
-        $current_version = get_option('bst_plugin_version', '1.0.0');
-        $force_rerun = isset($_POST['force']) && $_POST['force'] === 'true';
-        $repair_repeater = isset($_POST['repair']) && $_POST['repair'] === 'true';
-
-        // Get cleanup tasks for current version
-        $cleanup_tasks = bst_get_release_cleanup_tasks();
-        if (empty($cleanup_tasks)) {
-            wp_send_json_error('No cleanup tasks defined for current version');
-            return;
-        }
-
-        // Block repeat runs unless force reset and/or re-link from labels is checked.
-        if ( ! $force_rerun && ! $repair_repeater && function_exists( 'bst_release_cleanup_is_complete_for_tasks' )
-            && bst_release_cleanup_is_complete_for_tasks( $current_version, $cleanup_tasks ) ) {
-            wp_send_json_error(
-                'Cleanup already completed for version ' . $current_version . ' for all current tasks. Use the “Force reset vehicle migration” or “Re-link tour pricing from labels” button to run again.'
-            );
-            return;
-        }
-
-        global $wpdb;
-        $results = array();
-        
-        try {
-            // Execute cleanup tasks based on current version
-            $results = bst_execute_release_cleanup_tasks($cleanup_tasks, $current_version, $force_rerun, $repair_repeater);
-
-            if ( function_exists( 'bst_log_release_cleanup_results' ) ) {
-                bst_log_release_cleanup_results( $results );
-            }
-            
-            // Mark each task complete under this version (preserves legacy metadata if present).
-            $cleanup_status = get_option( 'bst_release_cleanup_status', array() );
-            $bucket         = bst_release_cleanup_get_version_bucket( $current_version );
-            $ts             = time();
-            foreach ( $cleanup_tasks as $task ) {
-                if ( empty( $task['name'] ) ) {
-                    continue;
-                }
-                $bucket['tasks'][ bst_release_cleanup_task_slug( $task['name'] ) ] = $ts;
-            }
-            $cleanup_status[ $current_version ] = $bucket;
-            update_option( 'bst_release_cleanup_status', $cleanup_status );
-            
-            // Success message
-            $rerun_note = '';
-            if ( $force_rerun ) {
-                $rerun_note .= ' (Force reset executed)';
-            }
-            if ( $repair_repeater ) {
-                $rerun_note .= ' (Re-link from labels executed)';
-            }
-            $message = "Release data cleanup completed successfully for version {$current_version}{$rerun_note}! Full detail is logged to PHP error_log (lines prefixed [BST release cleanup]). " . implode('. ', $results);
-            wp_send_json_success(
-                array(
-                    'message'   => $message,
-                    'tools_url' => admin_url( 'admin.php?page=bst_tools_page' ),
-                )
-            );
-            
-        } catch (Exception $e) {
-            error_log( '[BST release cleanup] [ERROR] ' . $e->getMessage() );
-            wp_send_json_error('Cleanup failed: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Tools → add limited-vehicle rows (vehicle + max) on child tour-dates from tours.
-     */
-    public function handle_sync_limited_vehicles_create() {
-        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bst_sync_limited_vehicles_create_nonce' ) ) {
-            wp_send_json_error( __( 'Security check failed.', 'bst-plugin' ) );
-            return;
-        }
-        if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( __( 'Insufficient permissions.', 'bst-plugin' ) );
-            return;
-        }
-        if ( ! function_exists( 'bst_migrate_limited_vehicles_create_only_batch' ) ) {
-            wp_send_json_error( __( 'Migration is not available.', 'bst-plugin' ) );
-            return;
-        }
-        if ( function_exists( 'set_time_limit' ) ) {
-            @set_time_limit( 300 );
-        }
-        $packed      = bst_migrate_limited_vehicles_create_only_batch();
-        $lines       = isset( $packed['lines'] ) && is_array( $packed['lines'] ) ? $packed['lines'] : array();
-        $error_count = isset( $packed['error_count'] ) ? (int) $packed['error_count'] : 0;
-        $text        = implode( ' ', array_map( 'wp_strip_all_tags', $lines ) );
-        wp_send_json_success(
-            array(
-                'message'    => $text,
-                'has_errors' => $error_count > 0,
-            )
-        );
-    }
-
-    /**
-     * Tools → recalculate Sold from bookings; return oversold list.
-     */
-    public function handle_sync_limited_vehicles_sold() {
-        if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'bst_sync_limited_vehicles_sold_nonce' ) ) {
-            wp_send_json_error( __( 'Security check failed.', 'bst-plugin' ) );
-            return;
-        }
-        if ( ! current_user_can( 'manage_options' ) ) {
-            wp_send_json_error( __( 'Insufficient permissions.', 'bst-plugin' ) );
-            return;
-        }
-        if ( ! function_exists( 'bst_migrate_limited_vehicles_sync_sold_batch' ) ) {
-            wp_send_json_error( __( 'Migration is not available.', 'bst-plugin' ) );
-            return;
-        }
-        if ( function_exists( 'set_time_limit' ) ) {
-            @set_time_limit( 300 );
-        }
-        $packed = bst_migrate_limited_vehicles_sync_sold_batch();
-        $lines  = isset( $packed['lines'] ) && is_array( $packed['lines'] ) ? $packed['lines'] : array();
-        $errors = isset( $packed['error_count'] ) ? (int) $packed['error_count'] : 0;
-        $n      = isset( $packed['rows_updated'] ) ? (int) $packed['rows_updated'] : 0;
-        $os     = isset( $packed['oversold'] ) && is_array( $packed['oversold'] ) ? $packed['oversold'] : array();
-
-        /* translators: %d: number of limited-vehicle rows whose sold value changed */
-        $msg = sprintf( __( 'Updated sold values for %d limited-vehicle row(s) (where the calculated sold differed from what was stored).', 'bst-plugin' ), $n );
-        if ( $errors > 0 ) {
-            $msg .= ' ' . implode( ' ', array_map( 'wp_strip_all_tags', $lines ) );
-        }
-
-        wp_send_json_success(
-            array(
-                'message'      => $msg,
-                'rows_updated' => $n,
-                'oversold'     => $os,
-                'has_errors'   => $errors > 0,
-            )
-        );
     }
 
     /**

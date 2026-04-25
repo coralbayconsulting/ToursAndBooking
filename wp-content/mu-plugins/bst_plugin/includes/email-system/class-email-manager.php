@@ -1156,6 +1156,8 @@ class BST_Email_Manager {
         // Send the email again using configured method
         $email_method = get_option('bst_email_method', 'wp_mail');
         
+        $resend_error = '';
+
         if ($email_method === 'gmail') {
             // Send using Gmail API with configured from name
             $from_name = get_option('bst_from_email_name', 'Blue Strada Tours');
@@ -1169,6 +1171,11 @@ class BST_Email_Manager {
             $sent = $send_result['success'];
             $gmail_message_id = $send_result['gmail_message_id'];
             $gmail_thread_id = $send_result['gmail_thread_id'];
+            if (!$sent) {
+                $resend_error = !empty($send_result['error'])
+                    ? (string) $send_result['error']
+                    : 'Failed to resend email via Gmail API.';
+            }
         } else {
             // Send using WordPress wp_mail with configured from email
             $from_email = get_option('bst_from_email_address', 'info@bluestradatours.com');
@@ -1185,6 +1192,9 @@ class BST_Email_Manager {
             );
             $gmail_message_id = null;
             $gmail_thread_id = null;
+            if (!$sent) {
+                $resend_error = 'Failed to resend email via wp_mail.';
+            }
         }
         
         // Log the resend
@@ -1204,7 +1214,8 @@ class BST_Email_Manager {
         
         return array(
             'success' => $sent,
-            'new_log_id' => $new_log_id
+            'new_log_id' => $new_log_id,
+            'error' => $resend_error
         );
     }
     
