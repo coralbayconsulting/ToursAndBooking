@@ -3967,10 +3967,13 @@ class BST_Plugin {
         }
         set_transient('bst_availability_cron_check', true, DAY_IN_SECONDS);
         
-        if (!wp_next_scheduled('bst_daily_availability_sync')) {
-            // Schedule to run daily at 3:00 AM
-            wp_schedule_event(strtotime('3:00 AM tomorrow'), 'daily', 'bst_daily_availability_sync');
-        }
+        // Schedule to run daily at 3:00 AM.
+        bst_schedule_cron_event_once(
+            'bst_daily_availability_sync',
+            strtotime('3:00 AM tomorrow'),
+            'daily',
+            'daily availability sync'
+        );
     }
 
     /**

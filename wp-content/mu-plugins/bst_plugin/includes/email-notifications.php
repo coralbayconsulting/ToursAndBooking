@@ -16,10 +16,13 @@ function bst_schedule_digest_cron() {
     }
     set_transient('bst_digest_cron_check', true, DAY_IN_SECONDS);
     
-    if (!wp_next_scheduled('bst_daily_digest_cron')) {
-        // Run every 5 minutes to check for users whose digest time has arrived
-        wp_schedule_event(time(), 'bst_every_5_minutes', 'bst_daily_digest_cron');
-    }
+    // Run every 5 minutes to check for users whose digest time has arrived.
+    bst_schedule_cron_event_once(
+        'bst_daily_digest_cron',
+        time(),
+        'bst_every_5_minutes',
+        'daily digest dispatcher'
+    );
 }
 
 // Add custom cron interval

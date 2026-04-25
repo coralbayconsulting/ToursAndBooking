@@ -191,18 +191,34 @@ function bst_tools_get_cron_event_descriptions() {
 function bst_tools_reschedule_cron($hook, $new_frequency) {
     wp_clear_scheduled_hook($hook);
     if ($new_frequency === 'disabled') {
+        error_log('BST Cron: Disabled scheduled hook (' . $hook . ') via Tools page.');
         return;
     }
+
+    $label = 'cron hook';
+    $log_success = false;
+    $known_labels = bst_tools_get_cron_event_descriptions();
+    if (isset($known_labels[$hook])) {
+        $label = strtolower($known_labels[$hook]);
+        $log_success = true;
+    }
+
     if ($hook === 'bst_daily_availability_sync') {
         $next_time = strtotime('3:00 AM today');
         if ($next_time < time()) {
             $next_time = strtotime('3:00 AM tomorrow');
         }
-        wp_schedule_event($next_time, $new_frequency, $hook);
+        bst_schedule_cron_event_once($hook, $next_time, $new_frequency, $label, $log_success);
     } elseif ($hook === 'bst_fetch_exchange_rates_event') {
-        wp_schedule_event(strtotime('tomorrow 00:30:00 UTC'), $new_frequency, $hook);
+        bst_schedule_cron_event_once(
+            $hook,
+            strtotime('tomorrow 00:30:00 UTC'),
+            $new_frequency,
+            $label,
+            $log_success
+        );
     } else {
-        wp_schedule_event(time() + 60, $new_frequency, $hook);
+        bst_schedule_cron_event_once($hook, time() + 60, $new_frequency, $label, $log_success);
     }
 }
 

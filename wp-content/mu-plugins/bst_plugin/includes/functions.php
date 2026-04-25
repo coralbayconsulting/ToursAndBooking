@@ -49,6 +49,57 @@ if (!session_id() && !headers_sent()) {
 }
 
 /**
+ * Check whether a cron hook currently has a scheduled event.
+ *
+ * @param string $hook Cron hook name.
+ * @return bool
+ */
+function bst_is_cron_hook_scheduled($hook) {
+    if (function_exists('wp_get_scheduled_event')) {
+        return (bool) wp_get_scheduled_event($hook);
+    }
+    return (bool) wp_next_scheduled($hook);
+}
+
+/**
+ * Schedule a cron hook only when not already scheduled, with consistent logging.
+ *
+ * @param string $hook         Cron hook name.
+ * @param int    $timestamp    First run timestamp.
+ * @param string $recurrence   Cron recurrence key (daily, hourly, etc).
+ * @param string $label        Human-friendly label for logs.
+ * @param bool   $log_success  Whether to log successful scheduling.
+ * @return bool True when scheduled or already scheduled; false only on hard failure.
+ */
+function bst_schedule_cron_event_once($hook, $timestamp, $recurrence, $label, $log_success = true) {
+    if (bst_is_cron_hook_scheduled($hook)) {
+        return true;
+    }
+
+    $scheduled = wp_schedule_event($timestamp, $recurrence, $hook);
+
+    if ($scheduled === true || $scheduled === null) {
+        if ($log_success) {
+            error_log('BST Cron: Scheduled ' . $label . ' (' . $hook . ') with recurrence "' . $recurrence . '".');
+        }
+        return true;
+    }
+
+    if (is_wp_error($scheduled)) {
+        error_log('BST Cron: Failed to schedule ' . $label . ' (' . $hook . '). Error: ' . $scheduled->get_error_message());
+        return false;
+    }
+
+    if (bst_is_cron_hook_scheduled($hook)) {
+        error_log('BST Cron: ' . $label . ' (' . $hook . ') was already scheduled by another request.');
+        return true;
+    }
+
+    error_log('BST Cron: Failed to schedule ' . $label . ' (' . $hook . '). wp_schedule_event returned: ' . var_export($scheduled, true));
+    return false;
+}
+
+/**
  * Calculate deposit amount based on tour's deposit settings
  * 
  * @param int $tour_id Tour post ID

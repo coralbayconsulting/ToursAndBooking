@@ -25,9 +25,12 @@ class BST_Email_Automation {
      * Schedule daily automation check
      */
     public function schedule_daily_automation() {
-        if (!wp_next_scheduled('bst_daily_email_automation')) {
-            wp_schedule_event(time(), 'daily', 'bst_daily_email_automation');
-        }
+        bst_schedule_cron_event_once(
+            'bst_daily_email_automation',
+            time(),
+            'daily',
+            'daily email automation'
+        );
     }
     
     /**
@@ -39,9 +42,12 @@ class BST_Email_Automation {
         $inbox_enabled = get_option('bst_gmail_inbox_checking_enabled', false);
         
         if ($email_method === 'gmail' && $gmail_enabled && $inbox_enabled) {
-            if (!wp_next_scheduled('bst_hourly_inbox_check')) {
-                wp_schedule_event(time(), 'hourly', 'bst_hourly_inbox_check');
-            }
+            bst_schedule_cron_event_once(
+                'bst_hourly_inbox_check',
+                time(),
+                'hourly',
+                'hourly inbox checking'
+            );
         } else {
             // Remove scheduled event if Gmail is disabled or inbox checking is off
             $timestamp = wp_next_scheduled('bst_hourly_inbox_check');
