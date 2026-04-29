@@ -873,15 +873,15 @@ class BST_Plugin {
     function bst_tour_bookings_new_page() {
         global $wpdb;
         
-        // Get booking type and tour/date filters
-        $booking_type = isset($_GET['type']) ? sanitize_text_field($_GET['type']) : 'paper';
+        // Get booking type and tour/date filters (waiting list or reservation only)
+        $booking_type = isset($_GET['type']) ? sanitize_text_field($_GET['type']) : '';
         $selected_tour_id = isset($_GET['filter_tour_id']) ? intval($_GET['filter_tour_id']) : 0;
         $selected_tour_date_id = isset($_GET['filter_tour_date_id']) ? intval($_GET['filter_tour_date_id']) : 0;
         
-        // Validate booking type
-        $allowed_types = ['paper', 'waiting_list', 'reservation'];
-        if (!in_array($booking_type, $allowed_types)) {
-            $booking_type = 'paper';
+        $allowed_types = ['waiting_list', 'reservation'];
+        if (!in_array($booking_type, $allowed_types, true)) {
+            wp_safe_redirect(admin_url('admin.php?page=bst-tour-bookings'));
+            exit;
         }
         
         // Get all published tours for the dropdown

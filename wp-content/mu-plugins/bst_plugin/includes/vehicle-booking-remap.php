@@ -1,6 +1,6 @@
 <?php
 /**
- * Tools: remap booking vehicle1_id / vehicle2_id from legacy text only (no CPT creates).
+ * Tools: remap booking vehicle1_id / vehicle2_id from legacy snapshot text columns (no CPT creates).
  *
  * Run after consolidating Vehicle CPT duplicates: matches booking text to Vehicle post_title exactly (trim + strip tags).
  *
@@ -40,7 +40,13 @@ function bst_remap_booking_vehicle_ids_from_legacy_text() {
 		}
 	}
 
-	$table    = $wpdb->prefix . 'bst_tour_booking';
+	$table = $wpdb->prefix . 'bst_tour_booking';
+	$cols  = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
+	if ( ! is_array( $cols ) || ! in_array( 'vehicle1', $cols, true ) ) {
+		$results[] = 'Booking table has no legacy vehicle1/vehicle2 text columns (already removed); nothing to remap.';
+		return $results;
+	}
+
 	$bookings = $wpdb->get_results( "SELECT id, vehicle1, vehicle2, vehicle1_id, vehicle2_id FROM {$table}", ARRAY_A );
 	$rows     = 0;
 	$slots    = 0;

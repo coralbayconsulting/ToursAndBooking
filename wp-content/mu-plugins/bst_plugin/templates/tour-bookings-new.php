@@ -1,63 +1,41 @@
 <?php
 /**
- * Template for creating a new tou<div class="wrap">
-    <h1 class="wp-heading-inline"><?php echo esc_html($page_title); ?></h1>
-
-    <div id="booking-creation-form" style="background: white; padding: 20p        <!-- Action Buttons -->
-        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; text-align: right;">
-            <button type="button" id="cancel-booking-btn" class="button" style="margin-right: 10px;">Cancel</button>
-            
-            <button type="button" id="create-booking-btn" class="button button-primary">`n-top: 20px; border: 1px solid #ccd0d4; box-shadow: 0 1px 1px rgba(0,0,0,.04);">`ng.
+ * Template for creating a waiting-list or reservation booking (staff admin UI).
  *
  * Available variables:
  *   - $tours: Array of tour posts
  *   - $selected_tour_id: Pre-selected tour ID from filters
  *   - $selected_tour_date_id: Pre-selected tour date ID from filters
- *   - $booking_type: Type of booking (paper, waiting_list, reservation)
+ *   - $booking_type: waiting_list | reservation
  */
 
-// Get current user info for defaults
-$current_user = wp_get_current_user();
 $default_commission_reason = '';
 $default_commission_percent = 0;
 $default_booking_method = '';
 $default_status = '';
 
-// Set defaults based on booking type
-switch($booking_type) {
-    case 'paper':
-        $default_commission_reason = 'Bill';
-        $default_commission_percent = 2; // Store as percentage for display
-        $default_booking_method = 'Offline';
-        $default_status = 'Booked';
-        $page_title = 'Add Paper Booking';
-        break;
-    case 'waiting_list':
-        $default_commission_reason = '';
-        $default_commission_percent = 0;
-        $default_booking_method = 'Web';
-        $default_status = 'Waiting List';
-        $page_title = 'Add to Waiting List';
-        break;
-    case 'reservation':
-        $default_commission_reason = '';
-        $default_commission_percent = 0;
-        $default_booking_method = 'Web';
-        $default_status = 'Reserved';
-        $page_title = 'Add Reservation';
-        break;
-    default:
-        $page_title = 'Add New Booking';
+switch ($booking_type) {
+	case 'waiting_list':
+		$page_title                   = 'Add to Waiting List';
+		$default_booking_method       = 'Web';
+		$default_status               = 'Waiting List';
+		break;
+	case 'reservation':
+		$page_title                   = 'Add Reservation';
+		$default_booking_method       = 'Web';
+		$default_status               = 'Reserved';
+		break;
+	default:
+		$page_title = 'Add New Booking';
+		break;
 }
 ?>
 
 <div class="wrap">
     <h1 class="wp-heading-inline"><?php echo esc_html($page_title); ?></h1>
-    <?php if ($booking_type !== 'waiting_list' && $booking_type !== 'reservation'): ?>
     <a href="<?php echo esc_url(admin_url('admin.php?page=bst-tour-bookings' . 
         ($selected_tour_id ? '&filter_tour_id=' . $selected_tour_id : '') . 
         ($selected_tour_date_id ? '&filter_tour_date_id=' . $selected_tour_date_id : ''))); ?>" class="page-title-action">← Back to Bookings</a>
-    <?php endif; ?>
 
     <div id="booking-creation-form" style="background: white; padding: 20px; margin-top: 20px; border: 1px solid #ccd0d4; box-shadow: 0 1px 1px rgba(0,0,0,.04);">
         
@@ -103,14 +81,9 @@ switch($booking_type) {
                 <div>
                     <label for="tour_currency" style="display: block; font-weight: 600; margin-bottom: 5px;">Currency</label>
                     <select id="tour_currency" name="tour_currency" style="width: 100%; padding: 8px;">
-                        <?php if ($booking_type === 'paper'): ?>
-                            <option value="USD" selected>USD ($)</option>
-                            <option value="EUR">EUR (€)</option>
-                        <?php else: ?>
-                            <option value="">Select Currency</option>
-                            <option value="EUR">EUR (€)</option>
-                            <option value="USD">USD ($)</option>
-                        <?php endif; ?>
+                        <option value="">Select Currency</option>
+                        <option value="EUR">EUR (€)</option>
+                        <option value="USD">USD ($)</option>
                     </select>
                 </div>
             </div>
@@ -190,41 +163,6 @@ switch($booking_type) {
             </div>
         </div>
 
-        <?php if ($booking_type === 'paper'): ?>
-        <!-- Deposit Payment Section (renamed and only for paper bookings) -->
-        <div class="creation-section" id="deposit-section" style="margin-bottom: 30px; display: none;">
-            <h3 style="margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #ddd;">Deposit Payment</h3>
-            
-            <div style="margin-top: 15px;">
-                <div style="display: grid; grid-template-columns: 100px 130px 1fr; gap: 12px;">
-                    <div>
-                        <label for="deposit_payment_amount" style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 13px;">Amount</label>
-                        <input type="number" id="deposit_payment_amount" name="deposit_payment_amount" step="0.01" style="width: 100%; padding: 6px; font-size: 13px;">
-                        <small style="color: #666; font-size: 11px;">Optional</small>
-                    </div>
-                    
-                    <div>
-                        <label for="deposit_payment_method" style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 13px;">Method</label>
-                        <select id="deposit_payment_method" name="deposit_payment_method" style="width: 100%; padding: 6px; font-size: 13px;">
-                            <option value="">Select Method</option>
-                            <option value="Bank Wire">Bank Transfer</option>
-                            <option value="Cash">Cash</option>
-                            <option value="Check">Check</option>
-                            <option value="Credit Card">Credit Card</option>
-                        </select>
-                        <small style="color: #666; font-size: 11px;">If amount entered</small>
-                    </div>
-                    
-                    <div>
-                        <label for="deposit_payment_date" style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 13px;">Date</label>
-                        <input type="date" id="deposit_payment_date" name="deposit_payment_date" style="width: 100%; padding: 6px; font-size: 13px; max-width: 150px;" value="<?php echo date('Y-m-d'); ?>">
-                        <small style="color: #666; font-size: 11px;">Defaults to today</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
-
         <!-- Notes Section -->
         <div class="creation-section" id="notes-section" style="margin-bottom: 30px; display: none;">
             <h3 style="margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #ddd;">Notes</h3>
@@ -241,15 +179,7 @@ switch($booking_type) {
         <input type="hidden" name="booking_status" value="<?php echo esc_attr($default_status); ?>">
         <input type="hidden" name="booking_commission_percent" value="<?php echo esc_attr($default_commission_percent / 100); ?>"> <!-- Store as decimal -->
         <input type="hidden" name="booking_commission_reason" value="<?php echo esc_attr($default_commission_reason); ?>">
-        <input type="hidden" name="data_source" value="<?php 
-            if ($booking_type === 'waiting_list') {
-                echo 'Waiting List';
-            } elseif ($booking_type === 'reservation') {
-                echo 'Reservation';
-            } else {
-                echo 'Bill Booking';
-            }
-        ?>">
+        <input type="hidden" name="data_source" value="<?php echo esc_attr(('reservation' === $booking_type) ? 'Reservation' : 'Waiting List'); ?>">
         <input type="hidden" name="action" value="bst_create_booking">
         
         <!-- Package-related fields (populated when package is selected) -->
@@ -265,18 +195,11 @@ switch($booking_type) {
             <a href="<?php echo esc_url(admin_url('admin.php?page=bst-tour-bookings' . 
                 ($selected_tour_id ? '&filter_tour_id=' . $selected_tour_id : '') . 
                 ($selected_tour_date_id ? '&filter_tour_date_id=' . $selected_tour_date_id : ''))); ?>" 
+               id="cancel-booking-btn"
                class="button" style="margin-right: 10px;">Cancel</a>
             
             <button type="button" id="create-booking-btn" class="button button-primary">
-                <?php if ($booking_type === 'paper'): ?>
-                    Create Paper Booking
-                <?php elseif ($booking_type === 'waiting_list'): ?>
-                    Add to Waiting List
-                <?php elseif ($booking_type === 'reservation'): ?>
-                    Create Reservation
-                <?php else: ?>
-                    Create Booking
-                <?php endif; ?>
+                <?php echo ('reservation' === $booking_type) ? 'Create Reservation' : 'Add to Waiting List'; ?>
             </button>
         </div>
     </div>
@@ -604,7 +527,6 @@ jQuery(document).ready(function($) {
     
     function hideDependentSections() {
         $('#essential-section').hide();
-        $('#deposit-section').hide();
         $('#notes-section').hide();
         $('#action-buttons').hide();
         $('#progress-message').show().text('Please select a tour, tour date, and package to continue.');
@@ -617,7 +539,6 @@ jQuery(document).ready(function($) {
         
         if (selectedTour && selectedDate && selectedPackage) {
             $('#essential-section').show();
-            $('#deposit-section').show();
             $('#notes-section').show();
             $('#action-buttons').show();
             $('#progress-message').hide();
@@ -647,42 +568,6 @@ jQuery(document).ready(function($) {
             }
         });
         
-        // Special validation for deposit fields (only for paper bookings)
-        var bookingType = $('input[name="booking_type"]').val();
-        
-        if (bookingType === 'paper') {
-            var depositAmount = parseFloat($('#deposit_payment_amount').val() || 0);
-            
-            if (depositAmount > 0) {
-                var $methodField = $('#deposit_payment_method');
-                var $dateField = $('#deposit_payment_date');
-                
-                if (!$methodField.val()) {
-                    $methodField.addClass('error');
-                    if (!$methodField.next('.error-message').length) {
-                        $methodField.after('<span class="error-message">Payment method required when deposit amount is entered</span>');
-                    }
-                    isValid = false;
-                } else {
-                    $methodField.removeClass('error');
-                    $methodField.next('.error-message').remove();
-                }
-                
-                if (!$dateField.val()) {
-                    $dateField.addClass('error');
-                    if (!$dateField.next('.error-message').length) {
-                        $dateField.after('<span class="error-message">Payment date required when deposit amount is entered</span>');
-                    }
-                    isValid = false;
-                } else {
-                    $dateField.removeClass('error');
-                    $dateField.next('.error-message').remove();
-                }
-            } else {
-                // No deposit amount, skip deposit validation
-            }
-        }
-        
         if (!isValid) {
             showMessage('Please fill in all required fields', 'error');
             return;
@@ -706,7 +591,6 @@ jQuery(document).ready(function($) {
         // Calculate and add derived fields
         var bookingType = formData.booking_type;
         var tourPrice = parseFloat(formData.tour_price) || 0;
-        var depositAmount = parseFloat(formData.deposit_payment_amount) || 0;
         
         // 1. vehicle_choices - based on actual vehicle pricing grid rows available
         // Need to check if there are any vehicle pricing options for this tour/package
@@ -734,8 +618,7 @@ jQuery(document).ready(function($) {
                     if (vehicleCount === 0) {
                         vehicleChoices = 0; // No vehicles available
                     } else {
-                        // For paper bookings, we set vehicle_choices based on package configuration
-                        // since there's no user selection interface
+                        // Staff entry: vehicle_choices from package vs available vehicle rows
                         var packageVehicles = parseInt(formData.package_vehicles) || 0;
                         vehicleChoices = Math.min(packageVehicles, vehicleCount); // Don't exceed available vehicles
                     }
@@ -753,14 +636,8 @@ jQuery(document).ready(function($) {
         // 3. net_tour_price - same as tour_price for new bookings (no coupons initially)
         formData.net_tour_price = tourPrice;
         
-        // 4. total_paid - based on booking type
-        if (bookingType === 'paper') {
-            // For paper bookings, total_paid = deposit amount
-            formData.total_paid = depositAmount;
-        } else {
-            // For reservations and waiting list, total_paid = 0
-            formData.total_paid = 0;
-        }
+        // 4. total_paid — waiting list / reservation: no payment on create
+        formData.total_paid = 0;
         
         // 5. additional_charge - default to 0 for new bookings
         formData.additional_charge = 0;
@@ -780,64 +657,26 @@ jQuery(document).ready(function($) {
             success: function(response) {
                 if (response.success) {
                     var bookingType = formData.booking_type;
-                    var bookingId = response.data.booking_id;
-                    
-                    if (bookingType === 'paper') {
-                        // For paper bookings, redirect to edit page with filters preserved
-                        var urlParams = new URLSearchParams(window.location.search);
-                        var editUrlParams = new URLSearchParams();
-                        
-                        // Add the base edit parameters
-                        editUrlParams.set('page', 'bst-tour-bookings');
-                        editUrlParams.set('action', 'edit');
-                        editUrlParams.set('id', bookingId);
-                        
-                        // Preserve filter parameters for the back button on edit page
-                        var filterParams = ['filter_tour_id', 'filter_tour_date_id', 'filter_package_id', 'filter_status', 'filter_search', 'current_page', 'per_page'];
-                        filterParams.forEach(function(param) {
-                            var value = urlParams.get(param);
-                            if (value) {
-                                editUrlParams.set(param, value);
-                            }
-                        });
-                        
-                        var editUrl = '<?php echo admin_url('admin.php'); ?>' + '?' + editUrlParams.toString();
-                        window.location.href = editUrl;
-                    } else {
-                        // For waiting list and reservations, go back to list with filters preserved
-                        var returnUrl = '<?php echo admin_url('admin.php'); ?>';
-                        
-                        // Preserve current filters from URL parameters
-                        var urlParams = new URLSearchParams(window.location.search);
-                        
-                        // Start building the return URL properly
-                        var returnUrlParams = new URLSearchParams();
-                        
-                        // Add the base page parameter
-                        returnUrlParams.set('page', 'bst-tour-bookings');
-                        
-                        if (urlParams.get('filter_tour_id')) {
-                            returnUrlParams.set('filter_tour_id', urlParams.get('filter_tour_id'));
-                        }
-                        if (urlParams.get('filter_tour_date_id')) {
-                            returnUrlParams.set('filter_tour_date_id', urlParams.get('filter_tour_date_id'));
-                        }
-                        if (urlParams.get('filter_status')) {
-                            returnUrlParams.set('filter_status', urlParams.get('filter_status'));
-                        }
-                        if (urlParams.get('filter_search')) {
-                            returnUrlParams.set('filter_search', urlParams.get('filter_search'));
-                        }
-                        
-                        // Add success message
-                        returnUrlParams.set('booking_created', '1');
-                        returnUrlParams.set('booking_type', bookingType);
-                        
-                        // Properly construct the final URL
-                        returnUrl += '?' + returnUrlParams.toString();
-                        
-                        window.location.href = returnUrl;
+                    var returnUrl = '<?php echo admin_url('admin.php'); ?>';
+                    var urlParams = new URLSearchParams(window.location.search);
+                    var returnUrlParams = new URLSearchParams();
+                    returnUrlParams.set('page', 'bst-tour-bookings');
+                    if (urlParams.get('filter_tour_id')) {
+                        returnUrlParams.set('filter_tour_id', urlParams.get('filter_tour_id'));
                     }
+                    if (urlParams.get('filter_tour_date_id')) {
+                        returnUrlParams.set('filter_tour_date_id', urlParams.get('filter_tour_date_id'));
+                    }
+                    if (urlParams.get('filter_status')) {
+                        returnUrlParams.set('filter_status', urlParams.get('filter_status'));
+                    }
+                    if (urlParams.get('filter_search')) {
+                        returnUrlParams.set('filter_search', urlParams.get('filter_search'));
+                    }
+                    returnUrlParams.set('booking_created', '1');
+                    returnUrlParams.set('booking_type', bookingType);
+                    returnUrl += '?' + returnUrlParams.toString();
+                    window.location.href = returnUrl;
                 } else {
                     showMessage('Error creating booking: ' + (response.data || 'Unknown error'), 'error');
                 }

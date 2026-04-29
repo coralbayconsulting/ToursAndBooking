@@ -318,8 +318,8 @@ function bst_export_commission_bookings_xlsx_handler() {
     $xlsx_data[] = $grand_total_row;
     
     // Add legend entries
-    $xlsx_data[] = array('', '<style font-size="10">Bill Paper Booking: those bookings sent to Bill on paper that I enter manually</style>', '', '', '', '', '', '', '', '', '', '', '', '', '');
-    $xlsx_data[] = array('', '<style font-size="10">Bill Customer: those existing customers from Claudio\'s "All Customers" list that I imported, or booked a previous tour credited to Bill (Paper, How Heard, Source)</style>', '', '', '', '', '', '', '', '', '', '', '', '', '');
+    $xlsx_data[] = array('', '<style font-size="10">Bill Booking: offline or admin-entered bookings credited to Bill</style>', '', '', '', '', '', '', '', '', '', '', '', '', '');
+    $xlsx_data[] = array('', '<style font-size="10">Bill Customer: those existing customers from Claudio\'s "All Customers" list that I imported, or booked a previous tour credited to Bill (How Heard, Source)</style>', '', '', '', '', '', '', '', '', '', '', '', '', '');
     $xlsx_data[] = array('', '<style font-size="10">Claudio Customer: existing customer that booked a previous tour credited to Claudio (How Heard, Source)</style>', '', '', '', '', '', '', '', '', '', '', '', '', '');
     $xlsx_data[] = array('', '<style font-size="10">Wayne Customer: existing customer that booked a previous tour credited to Wayne (How Heard, Source)</style>', '', '', '', '', '', '', '', '', '', '', '', '', '');
     $xlsx_data[] = array('', '<style font-size="10">How Heard: New Web Customer credited to Bill, Claudio or Wayne based on the How Heard Field on the booking form</style>', '', '', '', '', '', '', '', '', '', '', '', '', '');

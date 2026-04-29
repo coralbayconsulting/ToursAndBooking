@@ -1,7 +1,58 @@
 <?php
 
 /**
- * Add vehicle1_id / vehicle2_id if missing, placed immediately before vehicle1 / vehicle2 (same order as CREATE TABLE in create_tour_booking_tables()).
+ * Drop one-time migration snapshot columns from bst_tour_booking once (ids + live CPT data only).
+ *
+ * Runs on plugins_loaded; safe to omit if manual SQL already dropped them.
+ *
+ * @return void
+ */
+function bst_drop_deprecated_booking_snapshot_columns_maybe() {
+	global $wpdb;
+
+	if ( (int) get_option( 'bst_booking_denormalized_snapshots_removed', 0 ) === 1 ) {
+		return;
+	}
+
+	$table = $wpdb->prefix . 'bst_tour_booking';
+	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+	if ( ! $found ) {
+		return;
+	}
+
+	$cols = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
+	if ( ! is_array( $cols ) ) {
+		return;
+	}
+
+	$want_drop = array(
+		'tour_text',
+		'tour_date_text',
+		'tour_package_text',
+		'vehicle1',
+		'vehicle2',
+		'tour_extension_text',
+		'tour_extension_date_text',
+	);
+	$to_drop = array_values( array_intersect( $want_drop, $cols ) );
+	if ( empty( $to_drop ) ) {
+		update_option( 'bst_booking_denormalized_snapshots_removed', 1, false );
+		return;
+	}
+
+	foreach ( $to_drop as $col ) {
+		$ok = $wpdb->query( "ALTER TABLE `{$table}` DROP COLUMN `{$col}`" );
+		if ( false === $ok ) {
+			error_log( 'BST Plugin: bst_drop_deprecated_booking_snapshot_columns_maybe failed dropping `' . $col . '`: ' . $wpdb->last_error );
+			return;
+		}
+	}
+
+	update_option( 'bst_booking_denormalized_snapshots_removed', 1, false );
+}
+
+/**
+ * Add vehicle1_id / vehicle2_id if missing (after tour_package_id when present).
  *
  * @return bool True if table exists and both columns are present afterward.
  */
@@ -31,9 +82,7 @@ function bst_ensure_tour_booking_vehicle_id_columns() {
 	}
 
 	$anchor = null;
-	if ( in_array( 'tour_package_text', $cols, true ) ) {
-		$anchor = 'tour_package_text';
-	} elseif ( in_array( 'tour_package_id', $cols, true ) ) {
+	if ( in_array( 'tour_package_id', $cols, true ) ) {
 		$anchor = 'tour_package_id';
 	}
 
@@ -104,7 +153,7 @@ function create_tour_booking_tables() {
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
     dbDelta($sql);
 
-    // Now create the tour booking table (vehicle1_id / vehicle2_id immediately before vehicle1 / vehicle2 text).
+    // Tour booking table: vehicle CPT ids live in vehicle1_id / vehicle2_id only (snapshot text columns removed).
     $tour_booking_table = $wpdb->prefix . "bst_tour_booking";
 
     $sql = "
@@ -160,18 +209,11 @@ function create_tour_booking_tables() {
             guest2_emergency_contact_phone VARCHAR(20),
             guest2_emergency_contact_email VARCHAR(100),
             tour_id BIGINT(20) UNSIGNED,
-            tour_text VARCHAR(100),
             tour_date_id BIGINT(20) UNSIGNED,
-            tour_date_text VARCHAR(40),
             tour_package_id BIGINT(20) UNSIGNED,
-            tour_package_text VARCHAR(20),
             vehicle1_id BIGINT(20) UNSIGNED,
             vehicle2_id BIGINT(20) UNSIGNED,
-            vehicle1 VARCHAR(100),
-            vehicle2 VARCHAR(100),
             tour_extension_added BOOLEAN DEFAULT FALSE,
-            tour_extension_text VARCHAR(100),
-            tour_extension_date_text VARCHAR(100),
             participant_sex VARCHAR(10),
             sharing_preference VARCHAR(20),
             bed_preference VARCHAR(20),
@@ -357,6 +399,9 @@ add_action(
 	static function () {
 		if ( function_exists( 'bst_ensure_tour_booking_vehicle_id_columns' ) ) {
 			bst_ensure_tour_booking_vehicle_id_columns();
+		}
+		if ( function_exists( 'bst_drop_deprecated_booking_snapshot_columns_maybe' ) ) {
+			bst_drop_deprecated_booking_snapshot_columns_maybe();
 		}
 	},
 	25

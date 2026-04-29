@@ -379,6 +379,45 @@ function bst_get_booking_details_data($booking, $entry) {
     );
 }
 
+/**
+ * Tour title for GF notification subjects — booking CPT first, else GF9 IDs 149/150/151 via {@see bst_gf9_entry_live_tour_parts()}.
+ * Does not use removed snapshot fields (137/141/138).
+ *
+ * @param object|null $booking   Booking row from bst_tour_booking.
+ * @param array|null  $gf_entry  Form 9 entry for ID-based live labels when booking absent.
+ * @return string
+ */
+function bst_merge_tag_subject_tour_title( $booking, $gf_entry ) {
+	if ( $booking && ! empty( $booking->tour_id ) && function_exists( 'bst_live_tour_title' ) ) {
+		$live = bst_live_tour_title( (int) $booking->tour_id );
+		if ( $live !== '' ) {
+			return $live;
+		}
+	}
+	if ( $gf_entry && is_array( $gf_entry ) && function_exists( 'bst_gf9_entry_live_tour_parts' ) ) {
+		$parts = bst_gf9_entry_live_tour_parts( $gf_entry );
+		return $parts['tour_text'] ?? '';
+	}
+	return '';
+}
+
+/**
+ * Extension checkbox for subjects — DB row or GF field 224 only (no extension text columns).
+ *
+ * @param object|null $booking
+ * @param array|null  $gf_entry
+ * @return int|string
+ */
+function bst_merge_tag_subject_extension_added( $booking, $gf_entry ) {
+	if ( $booking && isset( $booking->tour_extension_added ) && '' !== $booking->tour_extension_added && null !== $booking->tour_extension_added ) {
+		return (int) $booking->tour_extension_added;
+	}
+	if ( $gf_entry && is_array( $gf_entry ) ) {
+		return rgar( $gf_entry, '224' );
+	}
+	return '';
+}
+
 // Shared function to generate booking summary HTML from entry data
 // This is called by confirmation shortcode, customer merge tag, and admin merge tag
 // Pass in the entry_id and it handles all queries and HTML generation
@@ -518,27 +557,49 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
     $guest1_phone = rgar($entry, '34');
     $guest2_first = rgar($entry, '215.3');
     $guest2_last = rgar($entry, '215.6');
-    $tour_text = rgar($entry, '137');
-    $tour_date_text = rgar($entry, '141');
-    $tour_package_text = rgar($entry, '138');
-    $extension_added = rgar($entry, '224');
+    $tour_text = '';
+    $tour_date_text = '';
+    $tour_package_text = '';
+    $extension_added = '';
     $tour_currency = rgar($entry, '223');
-    
-    // If tour fields are empty (GF10 uses different field numbers), get from booking
-    if (empty($tour_text) && $booking) {
-        $tour_text = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
-        $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
-        $tour_package_text = function_exists('bst_live_package_name') ? bst_live_package_name($booking->tour_package_id ?? 0) : '';
-        $extension_added = !empty($booking->tour_extension_added) ? $booking->tour_extension_added : '';
-        $tour_currency = $booking->tour_currency;
+
+    // Tour / package / extension: CPT + booking IDs only (GF 137/138/141/225/226 removed).
+    if ( $booking ) {
+        if ( ! empty( $booking->tour_id ) && function_exists( 'bst_live_tour_title' ) ) {
+            $tour_text = bst_live_tour_title( (int) $booking->tour_id );
+        }
+        $raw_td   = isset( $booking->tour_date_id ) ? $booking->tour_date_id : '';
+        $td_first = (int) trim( explode( '|', (string) $raw_td )[0] );
+        if ( $td_first > 0 && function_exists( 'bst_live_tour_date_text' ) ) {
+            $tour_date_text = bst_live_tour_date_text( $td_first );
+        }
+        if ( ! empty( $booking->tour_package_id ) && function_exists( 'bst_live_package_name' ) ) {
+            $tour_package_text = bst_live_package_name( (int) $booking->tour_package_id );
+        }
+        if ( isset( $booking->tour_extension_added ) ) {
+            $extension_added = $booking->tour_extension_added;
+        }
+        if ( ! empty( $booking->tour_currency ) ) {
+            $tour_currency = $booking->tour_currency;
+        }
+    } elseif ( (int) rgar( $entry, 'form_id' ) === 9 && function_exists( 'bst_gf9_entry_live_tour_parts' ) ) {
+        $live              = bst_gf9_entry_live_tour_parts( $entry );
+        $tour_text         = $live['tour_text'] ?? '';
+        $tour_date_text    = $live['tour_date_text'] ?? '';
+        $tour_package_text = $live['tour_package_text'] ?? '';
+        $extension_added   = rgar( $entry, '224' );
     }
 
-    // Vehicles: only from booking Vehicle CPT ids (never GF snapshot text).
+    // Vehicles: Vehicle CPT ids only (236/237 on GF9), never vehicle1text/vehicle2text snapshots.
     $vehicle1 = '';
     $vehicle2 = '';
     if ( $booking ) {
         $vehicle1 = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 1 ) : '';
         $vehicle2 = function_exists( 'bst_booking_vehicle_display_text' ) ? bst_booking_vehicle_display_text( $booking, 2 ) : '';
+    } elseif ( function_exists( 'bst_gf9_entry_vehicle_ids_from_fields' ) && function_exists( 'bst_vehicle_label_for_gf_from_id' ) ) {
+        list( $v1i, $v2i ) = bst_gf9_entry_vehicle_ids_from_fields( $entry );
+        $vehicle1 = bst_vehicle_label_for_gf_from_id( $v1i );
+        $vehicle2 = bst_vehicle_label_for_gf_from_id( $v2i );
     }
     
     // Build guest name using helper
@@ -3742,17 +3803,29 @@ function bst_generate_bank_wire_instructions($region_code, $payment_type, $amoun
         $guest2_last = rgar($entry, '215.6');
         
         $guest_name = bst_format_guest_name($guest1_first, $guest1_last, $guest2_first, $guest2_last);
-        
-        // Get tour info - check form ID for correct fields
+
+        global $wpdb;
         $form_id = intval(rgar($entry, 'form_id'));
-        if ($form_id == 10) {
-            // GF10 (finalization form)
-            $tour_text = rgar($entry, '200');
-            $tour_date_text = rgar($entry, '201');
-        } else {
-            // GF9 (booking form)
-            $tour_text = rgar($entry, '137');
-            $tour_date_text = rgar($entry, '141');
+        if ($form_id === 10) {
+            $bid = intval(rgar($entry, '261'));
+            if ($bid > 0) {
+                $b = $wpdb->get_row($wpdb->prepare(
+                    "SELECT * FROM {$wpdb->prefix}bst_tour_booking WHERE id = %d",
+                    $bid
+                ));
+                if ($b) {
+                    $tour_text = function_exists('bst_live_tour_title') ? bst_live_tour_title((int)($b->tour_id ?? 0)) : $tour_text;
+                    $td_parts = explode('|', (string)($b->tour_date_id ?? ''));
+                    $td_int = isset($td_parts[0]) ? (int) trim($td_parts[0]) : 0;
+                    if ($td_int > 0 && function_exists('bst_live_tour_date_text')) {
+                        $tour_date_text = bst_live_tour_date_text($td_int);
+                    }
+                }
+            }
+        } elseif ($form_id === 9 && function_exists('bst_gf9_entry_live_tour_parts')) {
+            $live = bst_gf9_entry_live_tour_parts($entry);
+            $tour_text      = isset($live['tour_text']) ? $live['tour_text'] : $tour_text;
+            $tour_date_text = isset($live['tour_date_text']) ? $live['tour_date_text'] : $tour_date_text;
         }
     }
     
@@ -4596,7 +4669,7 @@ function bst_replace_booking_merge_tags($text, $form, $entry, $url_encode, $esc_
         $text = str_replace('{BstBookingSummary}', $bst_booking_summary, $text);
     }
     
-    // Generate BST booking subject (use entry data directly)
+    // Generate BST booking subject (CPT from booking or GF9 IDs — no snapshot text fields)
     if (strpos($text, '{BstBookingSubject}') !== false) {
         // Build guest name from entry using helper
         $guest1_first = rgar($entry, '31.3');
@@ -4605,25 +4678,16 @@ function bst_replace_booking_merge_tags($text, $form, $entry, $url_encode, $esc_
         $guest2_last = rgar($entry, '215.6');
         
         $guest_name = bst_format_guest_name($guest1_first, $guest1_last, $guest2_first, $guest2_last);
-        
-        // Get tour info - for form 10, get from original form 9 entry; for form 9, from current entry
-        if ($form['id'] == 10 && $booking) {
-            // Get the original form 9 entry
-            $original_entry = GFAPI::get_entry($booking->booking_entry_id);
-            if ($original_entry && is_array($original_entry)) {
-                $tour_text = rgar($original_entry, '137');
-                $tour_date_text = rgar($original_entry, '141');
-                $extension_added = rgar($original_entry, '224');
-            } else {
-                $tour_text = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
-                $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
-                $extension_added = '';
+
+        $fallback_entry_for_tour = $entry;
+        if ($booking && !empty($booking->booking_entry_id) && intval($form['id']) === 10) {
+            $oe = GFAPI::get_entry(intval($booking->booking_entry_id));
+            if (is_array($oe)) {
+                $fallback_entry_for_tour = $oe;
             }
-        } else {
-            $tour_text = rgar($entry, '137');
-            $tour_date_text = rgar($entry, '141');
-            $extension_added = rgar($entry, '224');
         }
+        $tour_text       = bst_merge_tag_subject_tour_title( $booking, $fallback_entry_for_tour );
+        $extension_added = bst_merge_tag_subject_extension_added( $booking, $fallback_entry_for_tour );
         
         // Determine if this is a booking (form 9) or finalization (form 10)
         $action_word = (intval($form['id']) == 10) ? 'finalized' : 'booked';
@@ -4651,25 +4715,17 @@ function bst_replace_booking_merge_tags($text, $form, $entry, $url_encode, $esc_
         $text = str_replace('{ConfirmationQueryString}', $query_string, $text);
     }
     
-    // Generate customer booking subject (use entry data directly)
+    // Generate customer booking subject (CPT from booking or GF9 IDs — no snapshot text fields)
     if (strpos($text, '{CustBookingSubject}') !== false) {
-        // For form 10, get from original form 9 entry
-        if ($form['id'] == 10 && $booking) {
-            $original_entry = GFAPI::get_entry($booking->booking_entry_id);
-            if ($original_entry && is_array($original_entry)) {
-                $tour_text = rgar($original_entry, '137');
-                $tour_date_text = rgar($original_entry, '141');
-                $extension_added = rgar($original_entry, '224');
-            } else {
-                $tour_text = function_exists('bst_live_tour_title') ? bst_live_tour_title($booking->tour_id ?? 0) : '';
-                $tour_date_text = function_exists('bst_live_tour_date_text') ? bst_live_tour_date_text($booking->tour_date_id ?? 0) : '';
-                $extension_added = '';
+        $fallback_entry_for_tour = $entry;
+        if ($booking && !empty($booking->booking_entry_id) && intval($form['id']) === 10) {
+            $oe = GFAPI::get_entry(intval($booking->booking_entry_id));
+            if (is_array($oe)) {
+                $fallback_entry_for_tour = $oe;
             }
-        } else {
-            $tour_text = rgar($entry, '137');  // Tour name
-            $tour_date_text = rgar($entry, '141');  // Tour dates
-            $extension_added = rgar($entry, '224');  // Extension field
         }
+        $tour_text       = bst_merge_tag_subject_tour_title( $booking, $fallback_entry_for_tour );
+        $extension_added = bst_merge_tag_subject_extension_added( $booking, $fallback_entry_for_tour );
         
         // Determine if this is a booking (form 9) or finalization (form 10)
         $action_word = (intval($form['id']) == 10) ? 'finalized' : 'booked';
@@ -5221,9 +5277,14 @@ function bst_generate_entry_summary_table($entry_id, $include_admin_links = fals
     // For GF9: Get tour/pricing from entry
     // For GF10: Get tour/pricing from booking record
     if ($form_id == 9) {
-        $tour_text = rgar($entry, '137');
-        $tour_date_text = rgar($entry, '141');
-        $tour_package_text = rgar($entry, '138');
+        $gf9_live           = function_exists( 'bst_gf9_entry_live_tour_parts' ) ? bst_gf9_entry_live_tour_parts( $entry ) : array(
+            'tour_text'         => '',
+            'tour_date_text'    => '',
+            'tour_package_text' => '',
+        );
+        $tour_text          = $gf9_live['tour_text'] ?? '';
+        $tour_date_text     = $gf9_live['tour_date_text'] ?? '';
+        $tour_package_text  = $gf9_live['tour_package_text'] ?? '';
         $tour_currency = rgar($entry, '223');
         $payment_amount = floatval(preg_replace('/[^0-9.]/', '', rgar($entry, '177'))); // Deposit amount
         $payment_label = 'Deposit Paid:';

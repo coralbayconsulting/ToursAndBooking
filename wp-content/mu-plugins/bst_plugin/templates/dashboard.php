@@ -1050,7 +1050,7 @@ if (!empty($waiting_list_bookings)) {
                     $group_count = count($group['bookings']);
                     
                     // Get total: those needing finalization + those who already finalized
-                    // Include ALL booking methods (Web and Paper) since paper bookings also need finalization
+                    // Include ALL booking methods (Web and offline/admin) since they still need finalization
                     $total_bookings = $wpdb->get_var($wpdb->prepare(
                         "SELECT COUNT(*) FROM {$wpdb->prefix}bst_tour_booking
                         WHERE tour_date_id = %d

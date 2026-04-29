@@ -13,9 +13,6 @@
         <?php 
         $booking_type = isset($_GET['booking_type']) ? $_GET['booking_type'] : 'booking';
         switch($booking_type) {
-            case 'paper':
-                echo 'Paper booking created successfully and is ready for editing.';
-                break;
             case 'waiting_list':
                 echo 'Booking added to waiting list successfully.';
                 break;
@@ -92,64 +89,6 @@
 <?php if (isset($_GET['gf10_import']) && $_GET['gf10_import'] === 'error') : ?>
     <div class="notice notice-error is-dismissible">
         <p><?php echo bst_get_import_error_message('gf10', isset($_GET['message']) ? $_GET['message'] : 'unknown'); ?></p>
-    </div>
-<?php endif; ?>
-
-<?php if (isset($_GET['paper_import']) && $_GET['paper_import'] === 'done') : ?>
-    <div class="notice notice-success is-dismissible">
-        <p>Paper booking import completed. 
-        <?php if (isset($_GET['imported'])) echo intval($_GET['imported']) . ' bookings imported. '; ?>
-        <?php if (isset($_GET['errors'])) echo intval($_GET['errors']) . ' errors encountered.'; ?>
-        </p>
-        <?php if (isset($_GET['has_details']) && $_GET['has_details'] === '1') : ?>
-            <?php 
-            $error_details = get_transient('bst_import_errors');
-            if ($error_details && is_array($error_details)) : ?>
-                <details style="margin-top: 10px;">
-                    <summary style="cursor: pointer; font-weight: bold;">Show Error Details</summary>
-                    <ul style="margin-top: 10px; padding-left: 20px;">
-                        <?php foreach ($error_details as $error) : ?>
-                            <li style="font-family: monospace; font-size: 12px; margin: 5px 0;"><?php echo esc_html($error); ?></li>
-                        <?php endforeach; ?>
-                    </ul>
-                </details>
-                <?php 
-                // Clear the transient after displaying
-                delete_transient('bst_import_errors');
-                ?>
-            <?php endif; ?>
-        <?php endif; ?>
-    </div>
-<?php endif; ?>
-
-<?php if (isset($_GET['paper_import']) && $_GET['paper_import'] === 'error') : ?>
-    <div class="notice notice-error is-dismissible">
-        <p>Error importing paper bookings: 
-        <?php 
-        $message = isset($_GET['message']) ? $_GET['message'] : 'unknown error';
-        switch($message) {
-            case 'file_upload_failed':
-                echo 'File upload failed.';
-                break;
-            case 'file_read_failed':
-                echo 'Could not read uploaded file.';
-                break;
-            case 'no_data':
-                echo 'No data found in file.';
-                break;
-            default:
-                echo 'Unknown error occurred.';
-        }
-        ?>
-        </p>
-    </div>
-<?php endif; ?>
-
-<?php if (isset($_GET['paper_delete']) && $_GET['paper_delete'] === 'done') : ?>
-    <div class="notice notice-success is-dismissible">
-        <p>Paper booking deletion completed. 
-        <?php if (isset($_GET['deleted'])) echo intval($_GET['deleted']) . ' bookings deleted.'; ?>
-        </p>
     </div>
 <?php endif; ?>
 
@@ -694,7 +633,7 @@ function updateBookingActions() {
     const dateId = document.getElementById('filter_tour_date_id').value;
     const actionsDiv = document.getElementById('booking-actions');
     
-    // Update booking actions (paper bookings, etc.)
+    // Update booking actions (waiting list / reservation create links)
     if (actionsDiv) {
         if (tourId > 0 && dateId > 0) {
             // Show actions and update URLs
@@ -703,12 +642,9 @@ function updateBookingActions() {
             const baseUrl = '<?php echo admin_url('admin.php?page=bst-tour-bookings&action=new'); ?>';
             const urlParams = '&filter_tour_id=' + tourId + '&filter_tour_date_id=' + dateId;
             
-            // Update button URLs
-            const paperBtn = actionsDiv.querySelector('a[href*="type=paper"]');
             const waitingBtn = actionsDiv.querySelector('a[href*="type=waiting_list"]');
             const reservationBtn = actionsDiv.querySelector('a[href*="type=reservation"]');
             
-            if (paperBtn) paperBtn.href = baseUrl + '&type=paper' + urlParams;
             if (waitingBtn) waitingBtn.href = baseUrl + '&type=waiting_list' + urlParams;
             if (reservationBtn) reservationBtn.href = baseUrl + '&type=reservation' + urlParams;
             

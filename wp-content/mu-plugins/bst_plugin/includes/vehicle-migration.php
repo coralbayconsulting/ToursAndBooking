@@ -1071,70 +1071,77 @@ function bst_migrate_vehicle_cpt_links( $force_reset = false, $repair_repeater_l
 			$results[] = 'No nested vehicle rows found under vehicle_pricing (unexpected). Check ACF field names/sync.';
 		}
 
-		// Booking vehicle ids: whenever legacy label text is non-empty, resolve find-or-create from that string
-		// (canonical key + Vehicle CPT). Re-runs replace wrong non-zero ids so migration does not depend on a
-		// separate remap pass for bookings that already had stale ids. Empty label + force_reset clears id.
-		$table     = $wpdb->prefix . 'bst_tour_booking';
-		$bookings  = $wpdb->get_results( "SELECT id, tour_id, vehicle1, vehicle2, vehicle1_id, vehicle2_id FROM {$table}", ARRAY_A );
-		$b_updated = 0;
+		// Booking vehicle ids: whenever legacy snapshot label text columns exist and are non-empty, resolve find-or-create from that string
+		// (canonical key + Vehicle CPT). Skipped entirely after DROP COLUMN vehicle1/vehicle2.
+		$table              = $wpdb->prefix . 'bst_tour_booking';
+		$table_cols         = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
+		$has_legacy_vtext = is_array( $table_cols ) && in_array( 'vehicle1', $table_cols, true );
 
-		foreach ( $bookings as $b ) {
-			$bid     = (int) $b['id'];
-			$tour_id = (int) $b['tour_id'];
-			$u       = array();
+		if ( ! $has_legacy_vtext ) {
+			$results[] = 'Booking vehicle text snapshot columns absent; skipped legacy vehicle text → id pass.';
+			$b_updated = 0;
+		} else {
+			$bookings  = $wpdb->get_results( "SELECT id, tour_id, vehicle1, vehicle2, vehicle1_id, vehicle2_id FROM {$table}", ARRAY_A );
+			$b_updated = 0;
 
-			$v1 = isset( $b['vehicle1'] ) ? (string) $b['vehicle1'] : '';
-			$v2 = isset( $b['vehicle2'] ) ? (string) $b['vehicle2'] : '';
+			foreach ( $bookings as $b ) {
+				$bid     = (int) $b['id'];
+				$tour_id = (int) $b['tour_id'];
+				$u       = array();
 
-			$old1 = isset( $b['vehicle1_id'] ) ? (int) $b['vehicle1_id'] : 0;
-			$old2 = isset( $b['vehicle2_id'] ) ? (int) $b['vehicle2_id'] : 0;
+				$v1 = isset( $b['vehicle1'] ) ? (string) $b['vehicle1'] : '';
+				$v2 = isset( $b['vehicle2'] ) ? (string) $b['vehicle2'] : '';
 
-			$fill1 = $force_reset || ( $v1 !== '' );
-			if ( $fill1 ) {
-				if ( $v1 !== '' ) {
-					$base = function_exists( 'bst_vehicle_exact_text_key' ) ? bst_vehicle_exact_text_key( $v1 ) : trim( (string) $v1 );
-					$vid  = bst_vehicle_migration_find_existing_id( $base, $norm_to_id, $vehicles_by_id );
-					if ( $vid <= 0 && $base !== '' ) {
-						$vid = bst_vehicle_migration_create_vehicle( $base, $tour_id > 0 ? $tour_id : 0, $norm_to_id, $vehicles_by_id );
+				$old1 = isset( $b['vehicle1_id'] ) ? (int) $b['vehicle1_id'] : 0;
+				$old2 = isset( $b['vehicle2_id'] ) ? (int) $b['vehicle2_id'] : 0;
+
+				$fill1 = $force_reset || ( $v1 !== '' );
+				if ( $fill1 ) {
+					if ( $v1 !== '' ) {
+						$base = function_exists( 'bst_vehicle_exact_text_key' ) ? bst_vehicle_exact_text_key( $v1 ) : trim( (string) $v1 );
+						$vid  = bst_vehicle_migration_find_existing_id( $base, $norm_to_id, $vehicles_by_id );
+						if ( $vid <= 0 && $base !== '' ) {
+							$vid = bst_vehicle_migration_create_vehicle( $base, $tour_id > 0 ? $tour_id : 0, $norm_to_id, $vehicles_by_id );
+						}
+						$new1 = $vid > 0 ? $vid : 0;
+						if ( $new1 !== $old1 ) {
+							$u['vehicle1_id'] = $new1;
+						}
+					} elseif ( $force_reset && $old1 !== 0 ) {
+						$u['vehicle1_id'] = 0;
 					}
-					$new1 = $vid > 0 ? $vid : 0;
-					if ( $new1 !== $old1 ) {
-						$u['vehicle1_id'] = $new1;
+				}
+
+				$fill2 = $force_reset || ( $v2 !== '' );
+				if ( $fill2 ) {
+					if ( $v2 !== '' ) {
+						$base = function_exists( 'bst_vehicle_exact_text_key' ) ? bst_vehicle_exact_text_key( $v2 ) : trim( (string) $v2 );
+						$vid  = bst_vehicle_migration_find_existing_id( $base, $norm_to_id, $vehicles_by_id );
+						if ( $vid <= 0 && $base !== '' ) {
+							$vid = bst_vehicle_migration_create_vehicle( $base, $tour_id > 0 ? $tour_id : 0, $norm_to_id, $vehicles_by_id );
+						}
+						$new2 = $vid > 0 ? $vid : 0;
+						if ( $new2 !== $old2 ) {
+							$u['vehicle2_id'] = $new2;
+						}
+					} elseif ( $force_reset && $old2 !== 0 ) {
+						$u['vehicle2_id'] = 0;
 					}
-				} elseif ( $force_reset && $old1 !== 0 ) {
-					$u['vehicle1_id'] = 0;
+				}
+
+				if ( ! empty( $u ) ) {
+					$formats = array_fill( 0, count( $u ), '%d' );
+					$wpdb->update( $table, $u, array( 'id' => $bid ), $formats, array( '%d' ) );
+					++$b_updated;
 				}
 			}
 
-			$fill2 = $force_reset || ( $v2 !== '' );
-			if ( $fill2 ) {
-				if ( $v2 !== '' ) {
-					$base = function_exists( 'bst_vehicle_exact_text_key' ) ? bst_vehicle_exact_text_key( $v2 ) : trim( (string) $v2 );
-					$vid  = bst_vehicle_migration_find_existing_id( $base, $norm_to_id, $vehicles_by_id );
-					if ( $vid <= 0 && $base !== '' ) {
-						$vid = bst_vehicle_migration_create_vehicle( $base, $tour_id > 0 ? $tour_id : 0, $norm_to_id, $vehicles_by_id );
-					}
-					$new2 = $vid > 0 ? $vid : 0;
-					if ( $new2 !== $old2 ) {
-						$u['vehicle2_id'] = $new2;
-					}
-				} elseif ( $force_reset && $old2 !== 0 ) {
-					$u['vehicle2_id'] = 0;
-				}
-			}
-
-			if ( ! empty( $u ) ) {
-				$formats = array_fill( 0, count( $u ), '%d' );
-				$wpdb->update( $table, $u, array( 'id' => $bid ), $formats, array( '%d' ) );
-				++$b_updated;
-			}
+			$results[] = sprintf( 'Bookings updated with vehicle IDs (migration pass): %d', $b_updated );
 		}
-
-		$results[] = sprintf( 'Bookings updated with vehicle IDs (migration pass): %d', $b_updated );
 
 		// Force reset: second pass matches every booking’s vehicle1/vehicle2 *text* to current Vehicle CPT ids (same logic as Tools → remap).
 		// Catches stale non-zero ids and any edge case the loop above missed after CPT ids change.
-		if ( $force_reset && ! $repair_repeater_links_from_text && function_exists( 'bst_remap_booking_vehicle_ids_from_legacy_text' ) ) {
+		if ( $has_legacy_vtext && $force_reset && ! $repair_repeater_links_from_text && function_exists( 'bst_remap_booking_vehicle_ids_from_legacy_text' ) ) {
 			$results[] = 'Force reset: running booking text → Vehicle CPT alignment (full remap pass).';
 			foreach ( bst_remap_booking_vehicle_ids_from_legacy_text() as $remap_line ) {
 				$results[] = $remap_line;

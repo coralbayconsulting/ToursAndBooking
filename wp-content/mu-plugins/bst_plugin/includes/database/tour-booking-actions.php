@@ -287,34 +287,6 @@ function bst_convert_empty_to_null($data) {
 }
 
 /**
- * Remove denormalized snapshot columns from booking insert/update payloads.
- * UI and exports must resolve labels from tour_id, tour_date_id, tour_package_id,
- * vehicle*_id, tour_extension_added, etc. These DB columns are legacy; a future
- * release will drop them after migration is verified.
- *
- * @param array $data Booking row data.
- * @return array
- */
-function bst_booking_strip_denormalized_snapshot_fields( $data ) {
-    if ( ! is_array( $data ) ) {
-        return $data;
-    }
-    $keys = array(
-        'tour_text',
-        'tour_date_text',
-        'tour_package_text',
-        'vehicle1',
-        'vehicle2',
-        'tour_extension_text',
-        'tour_extension_date_text',
-    );
-    foreach ( $keys as $key ) {
-        unset( $data[ $key ] );
-    }
-    return $data;
-}
-
-/**
  * Centralized function to create a new tour booking
  * 
  * @param array $data Booking data to insert
@@ -334,7 +306,6 @@ function bst_create_tour_booking($data, $context = 'manual') {
     try {
         // Add creation audit fields using shared utility
         $data = bst_add_audit_fields_create($data);
-        $data = bst_booking_strip_denormalized_snapshot_fields($data);
         
         // Insert the booking
         $insert_result = $wpdb->insert($booking_table, $data);
@@ -431,48 +402,6 @@ function bst_create_tour_booking($data, $context = 'manual') {
 }
 
 /**
- * Create a tour booking with custom audit date (for paper bookings with deposit date)
- * This bypasses the standard audit field creation to use a custom create date
- */
-function bst_create_tour_booking_with_custom_date($data, $context = 'manual') {
-    global $wpdb;
-    $booking_table = $wpdb->prefix . 'bst_tour_booking';
-    
-    $result = array(
-        'success' => false,
-        'booking_id' => 0,
-        'error' => ''
-    );
-    
-    try {
-        // Don't add audit fields - they're already in $data with custom date
-        $data = bst_booking_strip_denormalized_snapshot_fields($data);
-        
-        // Insert the booking
-        $insert_result = $wpdb->insert($booking_table, $data);
-        
-        if ($insert_result !== false) {
-            $booking_id = $wpdb->insert_id;
-            $result['success'] = true;
-            $result['booking_id'] = $booking_id;
-            
-            // Trigger auto-sync if tour_date_id is present
-            if (!empty($data['tour_date_id'])) {
-                do_action('bst_booking_saved', $data['tour_date_id'], $context);
-            }
-        } else {
-            $result['error'] = 'Database insert failed: ' . $wpdb->last_error;
-        }
-        
-    } catch (Exception $e) {
-        $result['error'] = 'Exception: ' . $e->getMessage();
-        error_log('BST Create Booking Exception: ' . $e->getMessage());
-    }
-    
-    return $result;
-}
-
-/**
  * Centralized function to update an existing tour booking
  * 
  * @param int $booking_id The booking ID to update
@@ -532,7 +461,6 @@ function bst_update_tour_booking($booking_id, $data, $context = 'manual') {
         
         // Add update audit fields using shared utility
         $data = bst_add_audit_fields_update($data);
-        $data = bst_booking_strip_denormalized_snapshot_fields($data);
         
         // Update the booking
         $update_result = $wpdb->update($booking_table, $data, array('id' => $booking_id));
@@ -1360,60 +1288,23 @@ function bst_create_booking() {
     // Notes
     $booking_data['notes'] = sanitize_textarea_field($_POST['notes'] ?? '');
     
-    // Administrative defaults based on booking type
-    $booking_type = sanitize_text_field($_POST['booking_type'] ?? 'paper');
+    // Administrative defaults — staff "new booking" form is waiting list or reservation only
+    $booking_type = sanitize_text_field($_POST['booking_type'] ?? '' );
+    if (!in_array($booking_type, ['waiting_list', 'reservation'], true)) {
+        wp_send_json_error('Invalid booking type');
+        return;
+    }
+
     $booking_data['booking_method'] = sanitize_text_field($_POST['booking_method'] ?? '');
     $booking_data['booking_status'] = sanitize_text_field($_POST['booking_status'] ?? '');
     $booking_data['booking_commission_percent'] = floatval($_POST['booking_commission_percent'] ?? 0);
     $booking_data['booking_commission_reason'] = sanitize_text_field($_POST['booking_commission_reason'] ?? '');
-    
-    // Set data source based on booking status
+
     $data_source = sanitize_text_field($_POST['data_source'] ?? '');
     if (empty($data_source)) {
-        // Auto-set data source based on booking status
-        if ($booking_data['booking_status'] === 'waitlist') {
-            $data_source = 'Waiting List';
-        } elseif ($booking_data['booking_status'] === 'reservation') {
-            $data_source = 'Reservation';
-        } else {
-            $data_source = 'Bill Booking';
-        }
+        $data_source = ('reservation' === $booking_type) ? 'Reservation' : 'Waiting List';
     }
     $booking_data['data_source'] = $data_source;
-    
-    // Get tour and date text for display (only if not already provided)
-    if (empty($booking_data['tour_text'])) {
-        $tour_post = get_post($booking_data['tour_id']);
-        $booking_data['tour_text'] = $tour_post ? $tour_post->post_title : '';
-    }
-    
-    if (empty($booking_data['tour_date_text'])) {
-        $tour_date_post = get_post($booking_data['tour_date_id']);
-        if ($tour_date_post) {
-            // Use the standardized tour date title directly - it's already in format "Tour Name (Date Range)"
-            // Extract just the date range part from within the parentheses
-            if (preg_match('/\(([^)]+)\)$/', $tour_date_post->post_title, $matches)) {
-                $booking_data['tour_date_text'] = $matches[1];
-            } else {
-                // Fallback to full title if format doesn't match expected pattern
-                $booking_data['tour_date_text'] = $tour_date_post->post_title;
-            }
-        }
-    }
-
-    // Get package text if package selected and not already provided
-    if ($booking_data['tour_package_id'] > 0 && empty($booking_data['tour_package_text'])) {
-        $packages = get_field('packages', $booking_data['tour_id']);
-        if ($packages && is_array($packages)) {
-            foreach ($packages as $index => $pkg) {
-                $pkg_id = isset($pkg['package_id']) ? $pkg['package_id'] : ($index + 1);
-                if ($pkg_id == $booking_data['tour_package_id']) {
-                    $booking_data['tour_package_text'] = $pkg['package_name'] ?? '';
-                    break;
-                }
-            }
-        }
-    }
     
     // Calculate customer ID and commission based on email address (unless already provided)
     $customer_id_provided = !empty($_POST['customer_id']) ? intval($_POST['customer_id']) : null;
@@ -1460,45 +1351,21 @@ function bst_create_booking() {
         error_log('BST Plugin: Calculated commission for new booking: ' . ($booking_commission_percent * 100) . '% (' . $booking_commission_reason . ') - Customer ID: ' . ($customer_id ?? 'none'));
     }
     
-    // Set financial defaults for reservation and waitlist bookings
-    if (in_array($booking_data['booking_status'], ['reservation', 'waitlist'])) {
-        // Force payment amounts to 0 for reservations and waitlists
+    // Force payment amounts to 0 for reservations and waiting list (no deposit on create)
+    if (in_array($booking_type, ['waiting_list', 'reservation'], true)) {
         $booking_data['deposit_payment_amount'] = 0;
         $booking_data['balance_payment_amount'] = 0;
         $booking_data['additional_payment_amount'] = 0;
         $booking_data['refund_payment_amount'] = 0;
-        
-        // Calculate total paid and balance due (Total Paid = 0, Balance Due = Tour Price)
-        $total_paid = 0;
-        $balance_due = floatval($booking_data['tour_price'] ?? 0);
-        
-        $booking_data['total_paid'] = $total_paid;
-        $booking_data['balance_due'] = $balance_due;
+
+        $booking_data['total_paid'] = 0;
+        $booking_data['balance_due'] = floatval($booking_data['tour_price'] ?? 0);
     }
-    
+
     // Convert empty strings to null for consistent database storage
     $booking_data = bst_convert_empty_to_null($booking_data);
-    
-    // For paper bookings with deposit payment date, use that as the create date
-    if ($booking_type === 'paper' && !empty($booking_data['deposit_payment_date'])) {
-        // Override the standard audit field creation to use deposit date
-        $user_identifier = bst_get_current_user_identifier();
-        $deposit_date = $booking_data['deposit_payment_date'];
-        
-        // Convert date format from Y-m-d to Y-m-d H:i:s (use current time for time part)
-        $create_date = $deposit_date . ' ' . date('H:i:s');
-        
-        $booking_data['created_by'] = $user_identifier;
-        $booking_data['created_date'] = $create_date;
-        $booking_data['updated_by'] = $user_identifier;
-        $booking_data['updated_date'] = current_time('mysql');
-        
-        // Create the booking without adding standard audit fields
-        $result = bst_create_tour_booking_with_custom_date($booking_data, 'manual_creation');
-    } else {
-        // Create the booking using the standard function
-        $result = bst_create_tour_booking($booking_data, 'manual_creation');
-    }
+
+    $result = bst_create_tour_booking($booking_data, 'manual_creation');
     
     if ($result['success']) {
         wp_send_json_success(array(
@@ -1675,23 +1542,6 @@ function bst_create_waiting_list_booking() {
     $booking_data['additional_charge'] = 0;
     $booking_data['balance_due'] = $booking_data['tour_price'];
     $booking_data['deposit_payment_amount'] = 0;
-    
-    // Get tour text
-    $tour_post = get_post($booking_data['tour_id']);
-    $booking_data['tour_text'] = $tour_post ? $tour_post->post_title : '';
-    
-    // Get tour date text
-    $tour_date_post = get_post($booking_data['tour_date_id']);
-    if ($tour_date_post) {
-        // Use the standardized tour date title directly - it's already in format "Tour Name (Date Range)"
-        // Extract just the date range part from within the parentheses
-        if (preg_match('/\(([^)]+)\)$/', $tour_date_post->post_title, $matches)) {
-            $booking_data['tour_date_text'] = $matches[1];
-        } else {
-            // Fallback to full title if format doesn't match expected pattern
-            $booking_data['tour_date_text'] = $tour_date_post->post_title;
-        }
-    }
     
     // Get package details from ACF for people/rooms/vehicles only
     if ($booking_data['tour_package_id'] > 0) {

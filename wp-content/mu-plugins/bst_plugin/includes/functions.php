@@ -1455,17 +1455,39 @@ function bst_customize_stripe_description($description, $strings_array, $entry, 
     $tour_date = '';
     
     if ($form_id == 9) {
-        // Booking form - Field 31 is name field with subfields
+        // Booking form — tour labels from canonical IDs via gravity-forms helpers (not GF text columns).
         $first_name = rgar($entry, '31.3');
         $last_name = rgar($entry, '31.6');
-        $tour = rgar($entry, '137'); // Tour text field
-        $tour_date = rgar($entry, '141'); // Tour date text field
+        $tour = '';
+        $tour_date = '';
+        if ( function_exists( 'bst_gf9_entry_live_tour_parts' ) ) {
+            $parts      = bst_gf9_entry_live_tour_parts( $entry );
+            $tour       = $parts['tour_text'] ?? '';
+            $tour_date = $parts['tour_date_text'] ?? '';
+        }
     } elseif ($form_id == 10) {
-        // Finalization form - use field IDs only
         $first_name = rgar($entry, '31.3');
         $last_name = rgar($entry, '31.6');
-        $tour = rgar($entry, '200');
-        $tour_date = rgar($entry, '201');
+        $tour = '';
+        $tour_date = '';
+        global $wpdb;
+        $bid = (int) rgar($entry, '261');
+        if ( $bid > 0 && $wpdb ) {
+            $b = $wpdb->get_row( $wpdb->prepare(
+                "SELECT tour_id, tour_date_id FROM {$wpdb->prefix}bst_tour_booking WHERE id = %d",
+                $bid
+            ) );
+            if ( $b ) {
+                if ( function_exists( 'bst_live_tour_title' ) ) {
+                    $tour = bst_live_tour_title( (int) ( $b->tour_id ?? 0 ) );
+                }
+                if ( function_exists( 'bst_live_tour_date_text' ) ) {
+                    $td_raw = explode( '|', (string) ( $b->tour_date_id ?? '' ) );
+                    $tid    = isset( $td_raw[0] ) ? (int) trim( $td_raw[0] ) : 0;
+                    $tour_date = $tid > 0 ? bst_live_tour_date_text( $tid ) : '';
+                }
+            }
+        }
     } else {
         // Other forms - return default description
         return $description;
