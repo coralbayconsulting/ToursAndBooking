@@ -51,14 +51,29 @@ if (!session_id() && !headers_sent()) {
 /**
  * Check whether a cron hook currently has a scheduled event.
  *
+ * Uses the cron option directly so we still detect events registered with
+ * non-default $args (wp_next_scheduled / wp_get_scheduled_event only match
+ * the args you pass, which can cause duplicate scheduling attempts and
+ * wp_schedule_event returning false when the row already exists).
+ *
  * @param string $hook Cron hook name.
  * @return bool
  */
 function bst_is_cron_hook_scheduled($hook) {
-    if (function_exists('wp_get_scheduled_event')) {
-        return (bool) wp_get_scheduled_event($hook);
+    $crons = _get_cron_array();
+    if (empty($crons) || !is_array($crons)) {
+        return false;
     }
-    return (bool) wp_next_scheduled($hook);
+    foreach ($crons as $timestamp => $cron) {
+        if (!is_numeric($timestamp)) {
+            continue;
+        }
+        if (!is_array($cron) || empty($cron[$hook]) || !is_array($cron[$hook])) {
+            continue;
+        }
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -76,9 +91,9 @@ function bst_schedule_cron_event_once($hook, $timestamp, $recurrence, $label, $l
         return true;
     }
 
-    $scheduled = wp_schedule_event($timestamp, $recurrence, $hook);
+    $scheduled = wp_schedule_event($timestamp, $recurrence, $hook, array(), true);
 
-    if ($scheduled === true || $scheduled === null) {
+    if ($scheduled === true) {
         if ($log_success) {
             error_log('BST Cron: Scheduled ' . $label . ' (' . $hook . ') with recurrence "' . $recurrence . '".');
         }
@@ -86,12 +101,17 @@ function bst_schedule_cron_event_once($hook, $timestamp, $recurrence, $label, $l
     }
 
     if (is_wp_error($scheduled)) {
-        error_log('BST Cron: Failed to schedule ' . $label . ' (' . $hook . '). Error: ' . $scheduled->get_error_message());
+        error_log(
+            'BST Cron: Failed to schedule ' . $label . ' (' . $hook . '). ' .
+            $scheduled->get_error_code() . ': ' . $scheduled->get_error_message()
+        );
+        if (bst_is_cron_hook_scheduled($hook)) {
+            return true;
+        }
         return false;
     }
 
     if (bst_is_cron_hook_scheduled($hook)) {
-        error_log('BST Cron: ' . $label . ' (' . $hook . ') was already scheduled by another request.');
         return true;
     }
 
