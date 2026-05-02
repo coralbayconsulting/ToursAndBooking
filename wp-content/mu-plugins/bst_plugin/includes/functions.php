@@ -77,28 +77,47 @@ function bst_is_cron_hook_scheduled($hook) {
 }
 
 /**
- * Schedule a cron hook only when not already scheduled, with consistent logging.
+ * True if cron already defines this hook (any args or recurrence).
+ * Bootstrap code uses this so we never call wp_schedule_event() when Tools (or WordPress)
+ * already registered the task — avoids no-op saves, bogus errors, and overwriting a
+ * recurrence you chose in the BST Tools UI.
+ *
+ * Pair with {@see wp_cache_delete} for `alloptions` on Redis/Memcached when you need the
+ * freshest view right before scheduling; {@see bst_schedule_cron_event_once} handles that.
+ *
+ * @param string $hook Cron hook name.
+ * @return bool
+ */
+function bst_wp_cron_hook_is_registered($hook) {
+    if (bst_is_cron_hook_scheduled($hook)) {
+        return true;
+    }
+    return function_exists('wp_next_scheduled') && (bool) wp_next_scheduled($hook);
+}
+
+/**
+ * First-time cron registration only: if the hook already exists, returns immediately — no writes.
+ * Frequency or next-run changes use the BST Tools page (clear + reschedule), not this bootstrap.
  *
  * @param string $hook         Cron hook name.
  * @param int    $timestamp    First run timestamp.
  * @param string $recurrence   Cron recurrence key (daily, hourly, etc).
  * @param string $label        Human-friendly label for logs.
  * @param bool   $log_success  Whether to log successful scheduling.
- * @return bool True when scheduled or already scheduled; false only on hard failure.
+ * @return bool True when scheduled or already registered; false only on hard failure.
  */
 function bst_schedule_cron_event_once($hook, $timestamp, $recurrence, $label, $log_success = true) {
-    if (bst_is_cron_hook_scheduled($hook)) {
+    if (bst_wp_cron_hook_is_registered($hook)) {
         return true;
     }
 
     // `cron` is autoloaded; a stale `alloptions` cache entry (common with Redis/Memcached)
-    // makes scheduled hooks invisible here and causes repeat wp_schedule_event calls that
-    // return false when nothing actually changed in the DB.
+    // makes registered hooks invisible and would cause duplicate wp_schedule_event calls below.
     if (function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache() && function_exists('wp_cache_delete')) {
         wp_cache_delete('alloptions', 'options');
     }
 
-    if (bst_is_cron_hook_scheduled($hook)) {
+    if (bst_wp_cron_hook_is_registered($hook)) {
         return true;
     }
 
@@ -112,14 +131,21 @@ function bst_schedule_cron_event_once($hook, $timestamp, $recurrence, $label, $l
     }
 
     if (is_wp_error($scheduled)) {
+        if (function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache() && function_exists('wp_cache_delete')) {
+            wp_cache_delete('alloptions', 'options');
+        }
+        $has_hook = bst_wp_cron_hook_is_registered($hook);
+        $err_code = $scheduled->get_error_code();
+        // Core: identical serialized `cron` array makes update_option() return false; core maps that to
+        // could_not_set. That is routine when the hook is already persisted — never treat as fatal.
+        if ('could_not_set' === $err_code && $has_hook) {
+            return true;
+        }
         error_log(
             'BST Cron: Failed to schedule ' . $label . ' (' . $hook . '). ' .
             $scheduled->get_error_code() . ': ' . $scheduled->get_error_message()
         );
-        if (function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache() && function_exists('wp_cache_delete')) {
-            wp_cache_delete('alloptions', 'options');
-        }
-        if (bst_is_cron_hook_scheduled($hook)) {
+        if ($has_hook) {
             return true;
         }
         return false;
@@ -128,7 +154,7 @@ function bst_schedule_cron_event_once($hook, $timestamp, $recurrence, $label, $l
     if (function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache() && function_exists('wp_cache_delete')) {
         wp_cache_delete('alloptions', 'options');
     }
-    if (bst_is_cron_hook_scheduled($hook)) {
+    if (bst_wp_cron_hook_is_registered($hook)) {
         return true;
     }
 

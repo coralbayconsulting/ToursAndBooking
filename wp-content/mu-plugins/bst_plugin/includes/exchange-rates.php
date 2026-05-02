@@ -191,7 +191,7 @@ add_action('bst_fetch_exchange_rates_event', 'bst_fetch_exchange_rates');
 // Schedule the cron event to run daily after midnight
 function bst_schedule_exchange_rates_cron() {
     // If the event is scheduled, nothing to do
-    if (bst_is_cron_hook_scheduled('bst_fetch_exchange_rates_event')) {
+    if (bst_wp_cron_hook_is_registered('bst_fetch_exchange_rates_event')) {
         return;
     }
 
