@@ -91,6 +91,17 @@ function bst_schedule_cron_event_once($hook, $timestamp, $recurrence, $label, $l
         return true;
     }
 
+    // `cron` is autoloaded; a stale `alloptions` cache entry (common with Redis/Memcached)
+    // makes scheduled hooks invisible here and causes repeat wp_schedule_event calls that
+    // return false when nothing actually changed in the DB.
+    if (function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache() && function_exists('wp_cache_delete')) {
+        wp_cache_delete('alloptions', 'options');
+    }
+
+    if (bst_is_cron_hook_scheduled($hook)) {
+        return true;
+    }
+
     $scheduled = wp_schedule_event($timestamp, $recurrence, $hook, array(), true);
 
     if ($scheduled === true) {
@@ -105,17 +116,27 @@ function bst_schedule_cron_event_once($hook, $timestamp, $recurrence, $label, $l
             'BST Cron: Failed to schedule ' . $label . ' (' . $hook . '). ' .
             $scheduled->get_error_code() . ': ' . $scheduled->get_error_message()
         );
+        if (function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache() && function_exists('wp_cache_delete')) {
+            wp_cache_delete('alloptions', 'options');
+        }
         if (bst_is_cron_hook_scheduled($hook)) {
             return true;
         }
         return false;
     }
 
+    if (function_exists('wp_using_ext_object_cache') && wp_using_ext_object_cache() && function_exists('wp_cache_delete')) {
+        wp_cache_delete('alloptions', 'options');
+    }
     if (bst_is_cron_hook_scheduled($hook)) {
         return true;
     }
 
-    error_log('BST Cron: Failed to schedule ' . $label . ' (' . $hook . '). wp_schedule_event returned: ' . var_export($scheduled, true));
+    error_log(
+        'BST Cron: Failed to schedule ' . $label . ' (' . $hook . '). ' .
+        'wp_schedule_event returned: ' . var_export($scheduled, true) .
+        '; wp_next_scheduled: ' . var_export(function_exists('wp_next_scheduled') ? wp_next_scheduled($hook) : null, true)
+    );
     return false;
 }
 
