@@ -262,7 +262,7 @@ $current_time = time();
                     </button>
                 </form>
 
-                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="bst-tools-commission-form-row" style="margin:0;">
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="bst-tools-commission-form-row" style="margin:0; flex-wrap:wrap; gap:12px;">
                     <input type="hidden" name="action" value="bst_export_annual_commission">
                     <?php wp_nonce_field('bst_export_annual_commission', 'annual_export_nonce'); ?>
                     <label for="commission_year">Year:</label>
@@ -271,6 +271,10 @@ $current_time = time();
                             <option value="<?php echo (int) $year; ?>" <?php selected($current_year, (string) $year); ?>><?php echo (int) $year; ?></option>
                         <?php endfor; ?>
                     </select>
+                    <label title="Separate CSV rows label actual pipeline vs modeled fill from spare capacity." style="display:inline-flex; align-items:center; gap:6px;">
+                        <input type="checkbox" name="annual_include_projection" id="annual_include_projection" value="1">
+                        Include capacity projection row
+                    </label>
                     <button type="submit" class="button button-secondary" title="Export annual commission summary by month and group">
                         Export Annual Commission Summary
                     </button>
