@@ -1153,6 +1153,19 @@ function bst_limited_vehicle_dashboard_oversold_rows() {
 		return $cached;
 	}
 
+	$tour_dates = array_values(
+		array_filter(
+			array_map( 'intval', $tour_dates ),
+			static function ( $tid ) {
+				return $tid > 0 && ! bst_tour_date_has_started_for_dashboard( $tid );
+			}
+		)
+	);
+	if ( empty( $tour_dates ) ) {
+		$cached = $out;
+		return $cached;
+	}
+
 	// Batch: one query for all sold counts across every tour date.
 	global $wpdb;
 	$statuses  = bst_booking_statuses_for_limited_vehicle_usage();

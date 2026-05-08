@@ -271,6 +271,67 @@ function bst_live_tour_title( $tour_id ) {
     return ( $p && 'tour' === $p->post_type ) ? (string) $p->post_title : '';
 }
 
+/**
+ * Whether a tour-date's calendar start date is today or earlier (site timezone).
+ * Used to hide overslot / limited-vehicle oversold dashboard warnings once the departure day has begun.
+ *
+ * @param int $tour_date_id Tour date post ID.
+ * @return bool True after the tour has started; false if unknown/invalid date (warnings stay visible).
+ */
+function bst_tour_date_has_started_for_dashboard( $tour_date_id ) {
+    $tour_date_id = (int) $tour_date_id;
+    if ( $tour_date_id <= 0 ) {
+        return false;
+    }
+    $p = get_post( $tour_date_id );
+    if ( ! $p || 'tour-date' !== $p->post_type ) {
+        return false;
+    }
+    $start_raw = get_post_meta( $tour_date_id, 'start_date', true );
+    if ( ( $start_raw === '' || null === $start_raw ) && function_exists( 'get_field' ) ) {
+        $acf = get_field( 'start_date', $tour_date_id );
+        $start_raw = ( is_scalar( $acf ) && '' !== $acf ) ? (string) $acf : '';
+    }
+    if ( '' === $start_raw ) {
+        return false;
+    }
+    $start_raw = trim( (string) $start_raw );
+    $start_ymd = '';
+
+    if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $start_raw, $parts ) ) {
+        if ( checkdate( (int) $parts[2], (int) $parts[3], (int) $parts[1] ) ) {
+            $start_ymd = $start_raw;
+        }
+    } elseif ( preg_match( '/^\d{8}$/', $start_raw ) ) {
+        $yy = substr( $start_raw, 0, 4 );
+        $mo = substr( $start_raw, 4, 2 );
+        $dd = substr( $start_raw, 6, 2 );
+        if ( checkdate( (int) $mo, (int) $dd, (int) $yy ) ) {
+            $start_ymd = $yy . '-' . $mo . '-' . $dd;
+        }
+    }
+
+    if ( '' === $start_ymd ) {
+        $parsed = DateTime::createFromFormat( 'm/d/Y', $start_raw );
+        if ( $parsed instanceof DateTime ) {
+            $start_ymd = $parsed->format( 'Y-m-d' );
+        }
+    }
+
+    if ( '' === $start_ymd ) {
+        $start_ts = strtotime( $start_raw );
+        if ( false !== $start_ts ) {
+            $start_ymd = wp_date( 'Y-m-d', $start_ts );
+        }
+    }
+
+    if ( '' === $start_ymd ) {
+        return false;
+    }
+
+    return strcmp( current_time( 'Y-m-d' ), $start_ymd ) >= 0;
+}
+
 function bst_live_tour_date_text( $tour_date_id ) {
     $tour_date_id = (int) $tour_date_id;
     if ( $tour_date_id <= 0 ) {

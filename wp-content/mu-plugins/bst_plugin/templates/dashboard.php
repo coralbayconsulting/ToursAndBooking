@@ -98,6 +98,9 @@ function get_overbooked_tour_dates_for_dashboard() {
     $overbooked_dates = array();
     
     foreach ($tour_dates as $tour_date) {
+        if ( function_exists( 'bst_tour_date_has_started_for_dashboard' ) && bst_tour_date_has_started_for_dashboard( (int) $tour_date->ID ) ) {
+            continue;
+        }
         $max_slots = intval(get_post_meta($tour_date->ID, 'max_slots', true));
         $sold_slots = intval(get_post_meta($tour_date->ID, 'sold_slots', true));
         $offline_sold = intval(get_post_meta($tour_date->ID, 'offline_sold_slots', true));
