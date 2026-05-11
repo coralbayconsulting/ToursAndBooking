@@ -13,8 +13,8 @@ if (function_exists('bst_get_tour_type_for_tour')) {
     $tour_type_slug  = $tour_type_info['slug'];
 }
 
-// SEO Meta Tags for single tour pages
-if (is_singular('tour')) {
+// SEO Meta Tags for single tour pages (only when Yoast is not active — Yoast outputs these in wp_head).
+if (is_singular('tour') && !defined('WPSEO_VERSION')) {
     $tour_title = get_the_title();
     $short_description = get_field('short_description');
     $banner_image = get_field('detail_banner_image');

@@ -358,6 +358,31 @@ add_filter('wpseo_twitter_title', 'bst_apply_wpseo_title_hybrid', 999);
 add_filter('wpseo_metadesc', 'bst_apply_wpseo_metadesc_tour_type_archive', 999);
 
 /**
+ * Ensure Organization schema logo URLs are absolute (Yoast sometimes emits root-relative paths).
+ *
+ * @param array $piece Organization graph piece.
+ * @param mixed $context Yoast meta context (unused).
+ * @return array
+ */
+function bst_yoast_schema_organization_absolutize_logo_urls($piece, $context = null) {
+    unset($context);
+    if (!is_array($piece) || empty($piece['logo']) || !is_array($piece['logo'])) {
+        return $piece;
+    }
+    foreach (array('url', 'contentUrl') as $key) {
+        if (empty($piece['logo'][$key]) || !is_string($piece['logo'][$key])) {
+            continue;
+        }
+        $url = $piece['logo'][$key];
+        if ($url !== '' && $url[0] === '/') {
+            $piece['logo'][$key] = home_url($url);
+        }
+    }
+    return $piece;
+}
+add_filter('wpseo_schema_organization', 'bst_yoast_schema_organization_absolutize_logo_urls', 11, 2);
+
+/**
  * Normalize ACF / mixed values to plain text for Yoast content analysis (single tour).
  *
  * @param mixed $value Raw field value.
@@ -609,6 +634,10 @@ add_filter('wpseo_pre_analysis_post_content', 'bst_wpseo_pre_analysis_post_conte
 
 // Add SEO meta descriptions for tour pages
 function add_tour_seo_meta() {
+    // Yoast already outputs description + Open Graph; duplicating tags hurts SEO/social parsers.
+    if (defined('WPSEO_VERSION')) {
+        return;
+    }
     if (is_singular('tour')) {
         $tour_id = get_the_ID();
         $tour_title = get_the_title();
