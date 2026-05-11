@@ -357,6 +357,280 @@ add_filter('wpseo_opengraph_title', 'bst_apply_wpseo_title_hybrid', 999);
 add_filter('wpseo_twitter_title', 'bst_apply_wpseo_title_hybrid', 999);
 add_filter('wpseo_metadesc', 'bst_apply_wpseo_metadesc_tour_type_archive', 999);
 
+/**
+ * Normalize ACF / mixed values to plain text for Yoast content analysis (single tour).
+ *
+ * @param mixed $value Raw field value.
+ *
+ * @return string
+ */
+function bst_yoast_analysis_flatten_text($value) {
+    if ($value === null || $value === false || $value === '') {
+        return '';
+    }
+    if ($value instanceof WP_Term) {
+        $parts = array_filter(array($value->name, isset($value->description) ? $value->description : ''));
+        $value   = implode(' ', $parts);
+    } elseif (is_object($value)) {
+        if (isset($value->post_title)) {
+            $value = (string) $value->post_title;
+        } elseif (isset($value->name)) {
+            $value = (string) $value->name;
+        } else {
+            return '';
+        }
+    } elseif (is_array($value)) {
+        $pieces = array();
+        foreach ($value as $item) {
+            $t = bst_yoast_analysis_flatten_text($item);
+            if ($t !== '') {
+                $pieces[] = $t;
+            }
+        }
+        return implode(' ', $pieces);
+    }
+    $text = wp_strip_all_tags((string) $value, true);
+    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $text = preg_replace('/\s+/u', ' ', $text);
+
+    return trim($text);
+}
+
+/**
+ * Merge Yoast analysis base content with extra plain text.
+ *
+ * @param string $content Original post_content passed to Yoast.
+ * @param string $extra     Additional text (ACF-derived).
+ *
+ * @return string
+ */
+function bst_wpseo_merge_pre_analysis_content($content, $extra) {
+    $extra = is_string($extra) ? trim($extra) : '';
+    if ($extra === '') {
+        return is_string($content) ? $content : '';
+    }
+    $base = is_string($content) ? trim(wp_strip_all_tags($content)) : '';
+    if ($base === '') {
+        return $extra;
+    }
+
+    return $content . "\n\n" . $extra;
+}
+
+/**
+ * Text for Yoast when editing a tour-type CPT row (archive-tour-type.php cards: title, listing blurb, linked tours/dates).
+ *
+ * @param int $post_id tour-type post ID.
+ *
+ * @return string
+ */
+function bst_build_yoast_pre_analysis_tour_type_cpt_content($post_id) {
+    $post_id = (int) $post_id;
+    if ($post_id <= 0 || !function_exists('get_field')) {
+        return '';
+    }
+
+    $sections = array();
+    $title     = get_the_title($post_id);
+    if ($title !== '') {
+        $sections[] = $title;
+    }
+
+    $listing = bst_yoast_analysis_flatten_text(get_field('listing_description', $post_id));
+    if ($listing !== '') {
+        $sections[] = $listing;
+    }
+
+    $type_code = get_field('type_code', $post_id);
+    $term_id   = 0;
+    if ($type_code instanceof WP_Term) {
+        $term_id = (int) $type_code->term_id;
+        $td      = bst_yoast_analysis_flatten_text($type_code->name . ' ' . (isset($type_code->description) ? $type_code->description : ''));
+        if ($td !== '') {
+            $sections[] = $td;
+        }
+    }
+
+    if ($term_id && function_exists('bst_get_tours_by_year_for_tour_type')) {
+        $by_year = bst_get_tours_by_year_for_tour_type($term_id);
+        if (!empty($by_year)) {
+            ksort($by_year, SORT_NATURAL);
+            $lines = array();
+            $cap   = 0;
+            foreach ($by_year as $year => $tours) {
+                foreach ($tours as $t) {
+                    if ($cap++ >= 100) {
+                        break 2;
+                    }
+                    $piece = trim(
+                        (string) $year . ' '
+                        . (isset($t['date_text']) ? $t['date_text'] : '') . ' '
+                        . (isset($t['title']) ? $t['title'] : '')
+                    );
+                    if ($piece !== '') {
+                        $lines[] = $piece;
+                    }
+                }
+            }
+            if (!empty($lines)) {
+                $sections[] = 'Tour dates ' . implode('. ', $lines);
+            }
+        }
+    }
+
+    $blob = implode("\n\n", array_filter($sections));
+    $blob = apply_filters('bst_yoast_pre_analysis_tour_type_cpt_text', $blob, $post_id);
+
+    return is_string($blob) ? trim($blob) : '';
+}
+
+/**
+ * Text sent to Yoast for tour posts: mirrors main copy blocks from single-tour.php (ACF).
+ * Tour dates list is dynamic/JS-heavy; add via filter bst_yoast_pre_analysis_tour_append if needed.
+ *
+ * @param int $post_id Tour post ID.
+ *
+ * @return string
+ */
+function bst_build_yoast_pre_analysis_tour_content($post_id) {
+    $post_id = (int) $post_id;
+    if ($post_id <= 0 || !function_exists('get_field')) {
+        return '';
+    }
+
+    $sections = array();
+
+    $title = get_the_title($post_id);
+    if ($title !== '') {
+        $sections[] = $title;
+    }
+
+    $what = bst_yoast_analysis_flatten_text(get_field('short_description', $post_id));
+    if ($what !== '') {
+        $sections[] = 'What ' . $what;
+    }
+
+    $starting = bst_yoast_analysis_flatten_text(get_field('starting_from', $post_id));
+    $airport    = bst_yoast_analysis_flatten_text(get_field('airport', $post_id));
+    if ($starting !== '' || $airport !== '') {
+        $sections[] = 'Starting From ' . trim($starting . ' ' . $airport);
+    }
+
+    $ending = bst_yoast_analysis_flatten_text(get_field('ending_at', $post_id));
+    if ($ending !== '') {
+        $airport2 = bst_yoast_analysis_flatten_text(get_field('airport_2', $post_id));
+        $sections[] = 'Ending At ' . trim($ending . ' ' . $airport2);
+    }
+
+    $blocks = array(
+        'Hospitality'      => 'hospitality',
+        'Roads'            => 'roads',
+        'About the Tour'   => 'about',
+        'Schedule'         => 'schedule',
+        'What is Included' => 'included',
+        'What You Provide' => 'not_included',
+    );
+    foreach ($blocks as $label => $field_key) {
+        $txt = bst_yoast_analysis_flatten_text(get_field($field_key, $post_id));
+        if ($txt !== '') {
+            $sections[] = $label . ' ' . $txt;
+        }
+    }
+
+    $ext = bst_yoast_analysis_flatten_text(get_field('extension_title', $post_id));
+    if ($ext !== '') {
+        $sections[] = 'Extension ' . $ext;
+    }
+
+    if (get_option('bst_enable_tour_rating', false)) {
+        $rating = get_field('tour_rating', $post_id);
+        $rtext  = bst_yoast_analysis_flatten_text($rating);
+        if ($rtext !== '') {
+            $sections[] = 'Tour Class ' . $rtext;
+        }
+    }
+
+    $blob = implode("\n\n", array_filter($sections));
+    $blob = apply_filters('bst_yoast_pre_analysis_tour_text', $blob, $post_id);
+
+    return is_string($blob) ? trim($blob) : '';
+}
+
+/**
+ * Yoast SEO: feed ACF-driven copy into the analyzer when post_content is empty (tour + tour-type CPT).
+ * The block editor often ignores this filter; see bst_enqueue_yoast_cpt_analysis_script() + bst-yoast-cpt-analysis.js.
+ *
+ * @param string       $content       Existing post_content.
+ * @param WP_Post|null $post          Post being analyzed.
+ * @param mixed        $unused_fields Optional third arg from Yoast (legacy custom fields list).
+ *
+ * @return string
+ */
+function bst_wpseo_pre_analysis_post_content_bst($content, $post, $unused_fields = null) {
+    unset($unused_fields);
+    if (!defined('WPSEO_VERSION') || !$post instanceof WP_Post) {
+        return $content;
+    }
+
+    if ($post->post_type === 'tour') {
+        $extra = bst_build_yoast_pre_analysis_tour_content((int) $post->ID);
+        return bst_wpseo_merge_pre_analysis_content($content, $extra);
+    }
+
+    if ($post->post_type === 'tour-type') {
+        $extra = bst_build_yoast_pre_analysis_tour_type_cpt_content((int) $post->ID);
+        return bst_wpseo_merge_pre_analysis_content($content, $extra);
+    }
+
+    return $content;
+}
+
+add_filter('wpseo_pre_analysis_post_content', 'bst_wpseo_pre_analysis_post_content_bst', 10, 3);
+
+/**
+ * Enqueue Yoast content modification for tour and tour-type post edit screens (Gutenberg / live analysis).
+ */
+function bst_enqueue_yoast_cpt_analysis_script($hook) {
+    if (!in_array($hook, array('post.php', 'post-new.php'), true) || !defined('WPSEO_VERSION')) {
+        return;
+    }
+    global $post;
+    if (!$post instanceof WP_Post || !in_array($post->post_type, array('tour', 'tour-type'), true)) {
+        return;
+    }
+
+    $extra = $post->post_type === 'tour'
+        ? bst_build_yoast_pre_analysis_tour_content((int) $post->ID)
+        : bst_build_yoast_pre_analysis_tour_type_cpt_content((int) $post->ID);
+    if ($extra === '') {
+        return;
+    }
+
+    $handle = 'bst-yoast-cpt-analysis';
+    $deps   = array('jquery');
+    if (wp_script_is('yoast-seo-post-edit', 'registered')) {
+        $deps[] = 'yoast-seo-post-edit';
+    } elseif (wp_script_is('yoast-seo-editor-modules', 'registered')) {
+        $deps[] = 'yoast-seo-editor-modules';
+    }
+
+    wp_enqueue_script(
+        $handle,
+        get_stylesheet_directory_uri() . '/js/bst-yoast-cpt-analysis.js',
+        $deps,
+        '1.0.0',
+        true
+    );
+    wp_localize_script(
+        $handle,
+        'bstYoastCptAnalysis',
+        array(
+            'extra' => $extra,
+        )
+    );
+}
+add_action('admin_enqueue_scripts', 'bst_enqueue_yoast_cpt_analysis_script', 25);
+
 // Add SEO meta descriptions for tour pages
 function add_tour_seo_meta() {
     if (is_singular('tour')) {
