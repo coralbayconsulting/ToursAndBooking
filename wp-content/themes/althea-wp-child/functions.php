@@ -397,6 +397,25 @@ function bst_yoast_analysis_flatten_text($value) {
 }
 
 /**
+ * Yoast may embed analysis text inside HTML &lt;script&gt; tags. Literal "&lt;/script&gt;" in ACF/WYSIWYG
+ * (even as plain text) terminates the tag early → "Unexpected end of input" and a broken SEO metabox.
+ *
+ * @param string $text Analysis-bound string.
+ *
+ * @return string
+ */
+function bst_yoast_sanitize_analysis_payload($text) {
+    $text = is_string($text) ? $text : '';
+    $text = preg_replace('/<\/script\b[^>]*>/iu', ' ', $text);
+    $text = preg_replace('/<script\b[^>]*>/iu', ' ', $text);
+    $text = wp_check_invalid_utf8($text, true);
+    if (strlen($text) > 500000) {
+        $text = substr($text, 0, 500000) . ' …';
+    }
+    return $text;
+}
+
+/**
  * Merge Yoast analysis base content with extra plain text.
  *
  * @param string $content Original post_content passed to Yoast.
@@ -407,14 +426,14 @@ function bst_yoast_analysis_flatten_text($value) {
 function bst_wpseo_merge_pre_analysis_content($content, $extra) {
     $extra = is_string($extra) ? trim($extra) : '';
     if ($extra === '') {
-        return is_string($content) ? $content : '';
+        return bst_yoast_sanitize_analysis_payload(is_string($content) ? $content : '');
     }
     $base = is_string($content) ? trim(wp_strip_all_tags($content)) : '';
     if ($base === '') {
-        return $extra;
+        return bst_yoast_sanitize_analysis_payload($extra);
     }
 
-    return $content . "\n\n" . $extra;
+    return bst_yoast_sanitize_analysis_payload($content . "\n\n" . $extra);
 }
 
 /**
@@ -558,7 +577,8 @@ function bst_build_yoast_pre_analysis_tour_content($post_id) {
 
 /**
  * Yoast SEO: feed ACF-driven copy into the analyzer when post_content is empty (tour + tour-type CPT).
- * The block editor often ignores this filter; see bst_enqueue_yoast_cpt_analysis_script() + bst-yoast-cpt-analysis.js.
+ * Yoast Premium’s block editor UI does not use this for the sidebar scores in all versions; avoid legacy
+ * YoastSEO.app.registerModification scripts here—they can blank the React metabox.
  *
  * @param string       $content       Existing post_content.
  * @param WP_Post|null $post          Post being analyzed.
@@ -586,50 +606,6 @@ function bst_wpseo_pre_analysis_post_content_bst($content, $post, $unused_fields
 }
 
 add_filter('wpseo_pre_analysis_post_content', 'bst_wpseo_pre_analysis_post_content_bst', 10, 3);
-
-/**
- * Enqueue Yoast content modification for tour and tour-type post edit screens (Gutenberg / live analysis).
- */
-function bst_enqueue_yoast_cpt_analysis_script($hook) {
-    if (!in_array($hook, array('post.php', 'post-new.php'), true) || !defined('WPSEO_VERSION')) {
-        return;
-    }
-    global $post;
-    if (!$post instanceof WP_Post || !in_array($post->post_type, array('tour', 'tour-type'), true)) {
-        return;
-    }
-
-    $extra = $post->post_type === 'tour'
-        ? bst_build_yoast_pre_analysis_tour_content((int) $post->ID)
-        : bst_build_yoast_pre_analysis_tour_type_cpt_content((int) $post->ID);
-    if ($extra === '') {
-        return;
-    }
-
-    $handle = 'bst-yoast-cpt-analysis';
-    $deps   = array('jquery');
-    if (wp_script_is('yoast-seo-post-edit', 'registered')) {
-        $deps[] = 'yoast-seo-post-edit';
-    } elseif (wp_script_is('yoast-seo-editor-modules', 'registered')) {
-        $deps[] = 'yoast-seo-editor-modules';
-    }
-
-    wp_enqueue_script(
-        $handle,
-        get_stylesheet_directory_uri() . '/js/bst-yoast-cpt-analysis.js',
-        $deps,
-        '1.0.0',
-        true
-    );
-    wp_localize_script(
-        $handle,
-        'bstYoastCptAnalysis',
-        array(
-            'extra' => $extra,
-        )
-    );
-}
-add_action('admin_enqueue_scripts', 'bst_enqueue_yoast_cpt_analysis_script', 25);
 
 // Add SEO meta descriptions for tour pages
 function add_tour_seo_meta() {
