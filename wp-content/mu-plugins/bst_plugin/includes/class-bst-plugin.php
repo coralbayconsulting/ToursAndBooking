@@ -263,17 +263,6 @@ class BST_Plugin {
             'menu_icon' => 'dashicons-calendar-alt'
         ));
 
-        // Register custom "cancelled" status for tour-date posts
-        register_post_status('cancelled', array(
-            'label' => 'Cancelled',
-            'public' => false,
-            'exclude_from_search' => true,
-            'show_in_admin_all_list' => true,
-            'show_in_admin_status_list' => true,
-            'label_count' => _n_noop('Cancelled <span class="count">(%s)</span>', 'Cancelled <span class="count">(%s)</span>'),
-            'post_type' => array('tour-date')
-        ));
-
         // Tour Type Post Type
         register_post_type('tour-type', array(
             'labels' => array(
@@ -1069,6 +1058,15 @@ class BST_Plugin {
                 'nonce' => wp_create_nonce('bst_admin_nonce'),
                 'regenerate_nonce' => wp_create_nonce('bst_regenerate_titles')
             ));
+            if ( 'tour' === $screen_post_type ) {
+                wp_localize_script(
+                    'bst-admin-script',
+                    'bstTourDatesEmbedded',
+                    array(
+                        'todayYmd' => current_time( 'Y-m-d' ),
+                    )
+                );
+            }
         }
 
         // Enqueue scripts for Tour Bookings admin page
@@ -1119,8 +1117,23 @@ class BST_Plugin {
             'posts_per_page' => -1,
             'orderby' => 'title',
             'order' => 'ASC',
-            'post_status' => array('publish', 'draft', 'pending', 'private') // Include all statuses
+            'post_status' => array('publish', 'draft', 'pending', 'private', 'cancelled'), // Include all editable statuses
         ));
+
+        // Sort embedded grid by Start date ascending (acf/meta normalizer).
+        if ( ! empty( $tour_dates ) && function_exists( 'bst_tour_date_acf_date_meta_to_ymd' ) ) {
+            usort(
+                $tour_dates,
+                function ( $a, $b ) {
+                    $sa = bst_tour_date_acf_date_meta_to_ymd( (string) get_field( 'start_date', $a->ID ) );
+                    $sb = bst_tour_date_acf_date_meta_to_ymd( (string) get_field( 'start_date', $b->ID ) );
+                    $sa = '' !== $sa ? $sa : '9999-12-31';
+                    $sb = '' !== $sb ? $sb : '9999-12-31';
+                    return strcmp( $sa, $sb );
+                }
+            );
+        }
+
         echo '<div id="message-area"></div>';
         echo '<div style="background: #f9f9f9; border: 1px solid #ddd; padding: 12px; margin-bottom: 15px; border-radius: 4px;">';
         echo '<h4 style="margin: 0 0 8px 0; color: #23282d;">📊 Tour Dates Management</h4>';
@@ -1130,6 +1143,13 @@ class BST_Plugin {
         echo '<strong>Sold/Reserved/Available</strong> are calculated from booking records and updated when you save.';
         echo '</p>';
         echo '</div>';
+
+        echo '<p class="bst-tour-dates-display-prefs" style="margin: 0 0 12px 0; padding: 8px 12px; background: #eef6fc; border: 1px solid #c8e0f5; border-radius: 4px;">';
+        echo '<label style="font-weight: 600;">';
+        echo '<input type="checkbox" id="bst-hide-past-embedded-tour-dates" autocomplete="off" checked="checked" /> ';
+        esc_html_e( 'Hide past and cancelled tour dates', 'bst-plugin' );
+        echo '</label>';
+        echo '</p>';
         echo '<div id="tour-dates-container">';
         echo '<table class="widefat fixed" cellspacing="0">';
         echo '<thead>';
@@ -1197,7 +1217,7 @@ class BST_Plugin {
             // Check if this tour date has any bookings
             $has_bookings = $this->tour_date_has_bookings($tour_date->ID);
     
-            echo '<tr class="tour-date-item" data-id="' . $tour_date->ID . '">';
+            echo '<tr class="tour-date-item" data-id="' . intval( $tour_date->ID ) . '" data-start-ymd="' . esc_attr( $start_date_formatted ) . '">';
             echo '<td class="id-column"><input type="text" name="tour_date_id" value="' . esc_attr($tour_date->ID) . '" readonly class="small-input">
                     <a href="' . admin_url('post.php?post=' . $tour_date->ID . '&action=edit') . '" target="_blank" class="edit-tour-date button">
                       <i class="fas fa-edit"></i>
@@ -1283,7 +1303,7 @@ class BST_Plugin {
             $available_slots = intval(get_field('available_slots', $tour_date->ID));
             $extension_offered = get_field('extension_offered', $tour_date->ID);
             
-            echo '<div class="tour-date-card" data-id="' . $tour_date->ID . '">';
+            echo '<div class="tour-date-card" data-id="' . intval( $tour_date->ID ) . '" data-start-ymd="' . esc_attr( $start_date_formatted ) . '">';
             
             // Hidden ID field for form functionality
             echo '<input type="hidden" name="tour_date_id" value="' . esc_attr($tour_date->ID) . '">';
@@ -1337,7 +1357,9 @@ class BST_Plugin {
             echo '<select name="status" class="tour-date-status">';
             echo '<option value="publish"' . selected($status, 'publish', false) . '>Published</option>';
             echo '<option value="draft"' . selected($status, 'draft', false) . '>Draft</option>';
+            echo '<option value="pending"' . selected($status, 'pending', false) . '>Pending review</option>';
             echo '<option value="private"' . selected($status, 'private', false) . '>Private</option>';
+            echo '<option value="cancelled"' . selected($status, 'cancelled', false) . '>Cancelled</option>';
             echo '</select>';
             echo '</div>';
             echo '</div>';
@@ -1357,7 +1379,7 @@ class BST_Plugin {
             // Disable delete button if there are any sold, offline, or reserved slots
             $has_activity = ($sold_slots > 0 || $offline_sold_slots > 0 || $reserved_slots > 0);
             $delete_button_disabled = $has_activity ? ' disabled' : '';
-            $delete_button_title = $has_activity ? 'Cannot delete tour date with sold, offline, or reserved slots' : 'Delete this tour date';
+            $delete_button_title = $has_activity ? 'Cannot delete tour date with sold, offline, or reserved slots. Change status to Cancelled instead.' : 'Delete this tour date';
             
             echo '<button class="button button-link-delete delete-tour-date"' . $delete_button_disabled . ' title="' . esc_attr($delete_button_title) . '">Delete</button>';
             echo '</div>';
@@ -1416,6 +1438,10 @@ class BST_Plugin {
         $availability = max(0, $availability); // Ensure it's never negative
         
         $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : 'publish';
+        $allowed_statuses = array( 'publish', 'draft', 'pending', 'private', 'cancelled' );
+        if ( ! in_array( $status, $allowed_statuses, true ) ) {
+            $status = 'publish';
+        }
     
         if ($tour_date_id) {
             // Update existing tour date
@@ -2193,13 +2219,16 @@ class BST_Plugin {
      * Register custom post statuses
      */
     public function register_custom_post_statuses() {
-        register_post_status('cancelled', array(
-            'label' => 'Cancelled',
-            'public' => false,
-            'show_in_admin_all_list' => true,
+        $args = array(
+            'label'                     => _x( 'Cancelled', 'post status', 'bst-plugin' ),
+            'public'                    => false,
+            'exclude_from_search'       => true,
+            'show_in_admin_all_list'    => true,
             'show_in_admin_status_list' => true,
-            'label_count' => _n_noop('Cancelled <span class="count">(%s)</span>', 'Cancelled <span class="count">(%s)</span>'),
-        ));
+            'label_count'               => _n_noop( 'Cancelled <span class="count">(%s)</span>', 'Cancelled <span class="count">(%s)</span>', 'bst-plugin' ),
+            'show_in_rest'              => true,
+        );
+        register_post_status( 'cancelled', $args );
     }
 
     /**
@@ -2406,6 +2435,11 @@ class BST_Plugin {
 
         $dates = [];
         foreach ($tour_dates as $date) {
+            $start_meta = get_post_meta( $date->ID, 'start_date', true );
+            if ( function_exists( 'bst_tour_date_show_on_public_schedule' )
+                && ! bst_tour_date_show_on_public_schedule( $start_meta, $tour_id ) ) {
+                continue;
+            }
             // Use standardized tour date title - extract date range from parentheses
             $date_text = $date->post_title; // fallback to full title
             if (preg_match('/\((.*)\)$/', $date->post_title, $matches)) {
@@ -3676,6 +3710,10 @@ class BST_Plugin {
             $tour_date_post = get_post($tour_date_id);
             if (!$tour_date_post || $tour_date_post->post_type !== 'tour-date') {
                 wp_send_json_error('Tour date not found');
+                return;
+            }
+            if ( 'publish' !== $tour_date_post->post_status ) {
+                wp_send_json_error( 'This tour date is not available for booking' );
                 return;
             }
 

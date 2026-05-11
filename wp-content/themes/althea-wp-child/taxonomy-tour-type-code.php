@@ -5,31 +5,9 @@
         <!-- Altered Content Start -->
         <div class="translucent-overlay">
             <?php
-                // Get the current taxonomy term object
-                $term = get_queried_object();
-                $banner_text = $term && isset($term->name) ? $term->name : 'No Tour Type Provided';
-                $banner_image = '/wp-content/uploads/default-banner.jpg';
-
-                // Try to get the matching tour-type post by ACF field 'type_code' (which stores the taxonomy term ID)
-                if ($term && isset($term->term_id)) {
-                    $tour_type_query = new WP_Query(array(
-                        'post_type' => 'tour-type',
-                        'posts_per_page' => 1,
-                        'meta_query' => array(
-                            array(
-                                'key' => 'type_code',
-                                'value' => $term->term_id,
-                                'compare' => '='
-                            )
-                        )
-                    ));
-                    if ($tour_type_query->have_posts()) {
-                        $tour_type_query->the_post();
-                        $banner_text = get_the_title();
-                        $banner_image = get_field('banner_image') ?: $banner_image;
-                        wp_reset_postdata();
-                    }
-                }
+                $bst_banner   = bst_get_queried_tour_type_code_banner_data();
+                $banner_text  = $bst_banner['heading'];
+                $banner_image = $bst_banner['image'];
             ?>
 
             <!-- TOP BANNER -->
@@ -495,17 +473,35 @@
                                         if ($tour_date_query->have_posts()) {
                                             while ($tour_date_query->have_posts()) {
                                                 $tour_date_query->the_post();
-                                                $start_date = get_post_meta(get_the_ID(), 'start_date', true);
-                                                $end_date = get_post_meta(get_the_ID(), 'end_date', true);
-                                                $year = date('Y', strtotime($start_date));
+                                                $start_date_raw = get_post_meta(get_the_ID(), 'start_date', true);
+                                                $end_date_raw   = get_post_meta(get_the_ID(), 'end_date', true);
+                                                if ( function_exists( 'bst_tour_date_show_on_public_schedule' )
+                                                    && ! bst_tour_date_show_on_public_schedule( $start_date_raw, (int) $tourid ) ) {
+                                                    continue;
+                                                }
+                                                $year = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+                                                    ? (int) substr( (string) bst_tour_date_acf_date_meta_to_ymd( $start_date_raw ), 0, 4 )
+                                                    : (int) date( 'Y', strtotime( $start_date_raw ) );
+                                                if ( $year <= 0 ) {
+                                                    continue;
+                                                }
+                                                $start_date_for_row = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+                                                    ? bst_tour_date_acf_date_meta_to_ymd( $start_date_raw )
+                                                    : $start_date_raw;
+                                                $end_date_for_row = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+                                                    ? bst_tour_date_acf_date_meta_to_ymd( $end_date_raw )
+                                                    : $end_date_raw;
+                                                if ( $start_date_for_row === '' || $end_date_for_row === '' ) {
+                                                    continue;
+                                                }
                                                 if (!isset($tour_dates[$year])) {
                                                     $tour_dates[$year] = array();
                                                 }
                                                 $tour_dates[$year][] = array(
                                                     'id' => get_the_ID(),
                                                     'title' => get_the_title(),
-                                                    'start_date' => $start_date,
-                                                    'end_date' => $end_date,
+                                                    'start_date' => $start_date_for_row,
+                                                    'end_date' => $end_date_for_row,
                                                     'availability' => get_post_meta(get_the_ID(), 'available_slots', true)
                                                 );
                                             }

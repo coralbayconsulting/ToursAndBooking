@@ -60,18 +60,28 @@ function bst_get_tour_dates_grouped_by_year($tour_id) {
         while ($tour_date_query->have_posts()) {
             $tour_date_query->the_post();
 
-            $start_date = get_post_meta(get_the_ID(), 'start_date', true);
-            $end_date   = get_post_meta(get_the_ID(), 'end_date', true);
+            $start_date_raw = get_post_meta(get_the_ID(), 'start_date', true);
+            $end_date_raw   = get_post_meta(get_the_ID(), 'end_date', true);
 
-            if (empty($start_date) || empty($end_date)) {
+            if (empty($start_date_raw) || empty($end_date_raw)) {
                 continue;
             }
 
-            // Convert dates from YYYY-MM-DD to YYYYMMDD format for JavaScript
-            $start_date_js = str_replace('-', '', $start_date);
-            $end_date_js   = str_replace('-', '', $end_date);
+            $start_ymd = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+                ? bst_tour_date_acf_date_meta_to_ymd( $start_date_raw )
+                : '';
+            $end_ymd   = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+                ? bst_tour_date_acf_date_meta_to_ymd( $end_date_raw )
+                : '';
+            if ( $start_ymd === '' || $end_ymd === '' ) {
+                continue;
+            }
 
-            $year = date('Y', strtotime($start_date));
+            // YYYYMMDD for JavaScript (single-tour.js)
+            $start_date_js = str_replace('-', '', $start_ymd);
+            $end_date_js   = str_replace('-', '', $end_ymd);
+
+            $year = (int) substr( $start_ymd, 0, 4 );
             if (!isset($tour_dates[$year])) {
                 $tour_dates[$year] = array();
             }

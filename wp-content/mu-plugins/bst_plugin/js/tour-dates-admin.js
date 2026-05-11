@@ -2,6 +2,51 @@ jQuery(document).ready(function($) {
     // Debug logging to console - can be removed after debugging
     console.log('tour-dates-admin.js loaded');
     console.log('bstAdmin object:', typeof bstAdmin !== 'undefined' ? bstAdmin : 'undefined');
+
+    // Tour edit screen — Related Tour Dates meta box: hide past and/or cancelled rows (display only).
+    if (typeof bstTourDatesEmbedded !== 'undefined' && $('#bst-hide-past-embedded-tour-dates').length && $('#tour-dates-container').length) {
+        function bstEmbeddedStartYmd($container) {
+            var $inp = $container.find('input[name="start_date"]').first();
+            var v = ($inp.val() || '').trim();
+            return v ? v : (($container.attr('data-start-ymd') || '').trim());
+        }
+
+        function bstEmbeddedRowStatus($container) {
+            var $sel = $container.find('select[name="status"]').first();
+            return ($sel.val() || '').trim();
+        }
+
+        function bstApplyEmbeddedPastFilter() {
+            var hide = $('#bst-hide-past-embedded-tour-dates').prop('checked');
+            var today = (bstTourDatesEmbedded.todayYmd || '').trim();
+
+            $('#tour-dates-container tbody tr.tour-date-item').each(function () {
+                var $row = $(this);
+                var ymd = bstEmbeddedStartYmd($row);
+                var past = !!(ymd && today && ymd < today);
+                var cancelled = bstEmbeddedRowStatus($row) === 'cancelled';
+                var hideRow = hide && (past || cancelled);
+                $row.toggle(!hideRow);
+            });
+            $('#tour-dates-container .mobile-cards .tour-date-card').each(function () {
+                var $card = $(this);
+                var ymd = bstEmbeddedStartYmd($card);
+                var past = !!(ymd && today && ymd < today);
+                var cancelled = bstEmbeddedRowStatus($card) === 'cancelled';
+                var hideCard = hide && (past || cancelled);
+                $card.toggle(!hideCard);
+            });
+        }
+
+        $('#bst-hide-past-embedded-tour-dates').on('change', bstApplyEmbeddedPastFilter);
+        $(document).on('change input', '#tour-dates-container input[name="start_date"]', function () {
+            var $el = $(this).closest('.tour-date-item, .tour-date-card');
+            $el.attr('data-start-ymd', ($(this).val() || '').trim());
+            bstApplyEmbeddedPastFilter();
+        });
+        $(document).on('change', '#tour-dates-container select[name="status"]', bstApplyEmbeddedPastFilter);
+        bstApplyEmbeddedPastFilter();
+    }
     
     function showMessage(message, type) {
         var messageArea = $('#message-area');
@@ -357,7 +402,7 @@ jQuery(document).ready(function($) {
         e.preventDefault();
 
         var newRow = `
-            <tr class="tour-date-item">
+            <tr class="tour-date-item" data-start-ymd="">
                 <td class="id-column"><input type="text" name="tour_date_id" value="" readonly class="small-input"></td>
                 <td class="date-column"><input type="date" name="start_date" value="" min="${new Date().toISOString().split('T')[0]}"></td>
                 <td class="date-column"><input type="date" name="end_date" value=""></td>
@@ -374,6 +419,7 @@ jQuery(document).ready(function($) {
                         <option value="publish">Publish</option>
                         <option value="pending">Pending</option>
                         <option value="private">Private</option>
+                        <option value="cancelled">Cancelled</option>
                     </select>
                 </td>
                 <td class="ext-column">

@@ -94,6 +94,138 @@ function enqueue_single_tour_script() {
 }
 add_action('wp_enqueue_scripts', 'enqueue_single_tour_script');
 
+/**
+ * True when viewing a frontend tour-type-code term archive (/tours/{slug}/).
+ */
+function bst_is_queried_tour_type_code_term_archive() {
+    if (!function_exists('get_queried_object')) {
+        return false;
+    }
+    $obj = get_queried_object();
+    return $obj instanceof WP_Term && isset($obj->taxonomy) && $obj->taxonomy === 'tour-type-code';
+}
+
+/**
+ * Tour-type CPT archive (/tour-types/) matches archive-tour-type.php banner H1.
+ */
+function bst_is_tour_type_post_type_archive() {
+    return is_post_type_archive('tour-type');
+}
+
+/**
+ * Banner/main heading shown on tour-type CPT archive only.
+ *
+ * Filter: bst_tour_type_post_type_archive_display_title
+ */
+function bst_get_tour_type_post_type_archive_display_title() {
+    return apply_filters('bst_tour_type_post_type_archive_display_title', 'Our Tours');
+}
+
+/**
+ * Browser/tab title string: heading + optional page + site (same layout as WP core defaults).
+ *
+ * @param string $heading Main title segment (banner H1 text).
+ *
+ * @return string
+ */
+function bst_build_document_title_for_heading($heading) {
+    global $page, $paged;
+
+    $sep   = apply_filters('document_title_separator', '-');
+    $parts = array((string) $heading);
+    $page  = (int) $page;
+    $paged = (int) $paged;
+    if (($paged >= 2 || $page >= 2) && !is_404()) {
+        /* translators: %s: Page number */
+        $parts[] = sprintf(__('Page %s'), max($paged, $page));
+    }
+    $parts[] = get_bloginfo('name', 'display');
+    $parts   = array_filter(array_map('trim', $parts));
+
+    return implode(' ' . trim($sep) . ' ', $parts);
+}
+
+/**
+ * @return string
+ */
+function bst_build_tour_type_code_document_title() {
+    return bst_build_document_title_for_heading(bst_get_queried_tour_type_code_heading());
+}
+
+/**
+ * @param string $title Previous title from WP or Yoast filters.
+ *
+ * @return string
+ */
+function bst_apply_archive_display_title_document_filter($title) {
+    if (bst_is_queried_tour_type_code_term_archive()) {
+        return bst_build_tour_type_code_document_title();
+    }
+    if (bst_is_tour_type_post_type_archive()) {
+        return bst_build_document_title_for_heading(bst_get_tour_type_post_type_archive_display_title());
+    }
+    return $title;
+}
+
+/**
+ * Banner heading + image for the current tour-type-code taxonomy (single tour-type CPT lookup).
+ *
+ * @return array{heading: string, image: string}
+ */
+function bst_get_queried_tour_type_code_banner_data() {
+    $default_image = '/wp-content/uploads/default-banner.jpg';
+    $term          = get_queried_object();
+    if (!($term instanceof WP_Term) || $term->taxonomy !== 'tour-type-code' || !isset($term->name)) {
+        return array(
+            'heading' => 'No Tour Type Provided',
+            'image'   => $default_image,
+        );
+    }
+    $heading = $term->name;
+    $image   = $default_image;
+    if (isset($term->term_id)) {
+        $tour_type_query = new WP_Query(array(
+            'post_type'      => 'tour-type',
+            'posts_per_page' => 1,
+            'meta_query'     => array(
+                array(
+                    'key'     => 'type_code',
+                    'value'   => $term->term_id,
+                    'compare' => '=',
+                ),
+            ),
+        ));
+        if ($tour_type_query->have_posts()) {
+            $tour_type_query->the_post();
+            $heading     = get_the_title();
+            $acf_banner = get_field('banner_image');
+            if ($acf_banner) {
+                $image = $acf_banner;
+            }
+            wp_reset_postdata();
+        }
+    }
+    return array(
+        'heading' => $heading,
+        'image'   => $image,
+    );
+}
+
+/**
+ * Display title for taxonomy-tour-type-code (browser tab matches banner H1).
+ */
+function bst_get_queried_tour_type_code_heading() {
+    return bst_get_queried_tour_type_code_banner_data()['heading'];
+}
+
+// Tab/SERP titles: taxonomy term archives (/tours/{slug}/) and tour-type CPT archive (/tour-types/).
+add_filter('pre_get_document_title', 'bst_apply_archive_display_title_document_filter', 100001);
+add_filter('document_title', 'bst_apply_archive_display_title_document_filter', 100001);
+
+add_filter('wpseo_title', 'bst_apply_archive_display_title_document_filter', 999);
+add_filter('wpseo_opengraph_title', 'bst_apply_archive_display_title_document_filter', 999);
+add_filter('wpseo_twitter_title', 'bst_apply_archive_display_title_document_filter', 999);
+
 // Add SEO meta descriptions for tour pages
 function add_tour_seo_meta() {
     if (is_singular('tour')) {
@@ -124,16 +256,20 @@ function add_tour_seo_meta() {
         if ($banner_image) {
             echo '<meta property="og:image" content="' . esc_url($banner_image) . '">' . "\n";
         }
-    } elseif (is_tax('tour-type-code')) {
-        $term = get_queried_object();
-        $meta_description = 'Explore our ' . $term->name . ' tours and adventures. Book your perfect travel experience today!';
+    } elseif (bst_is_queried_tour_type_code_term_archive()) {
+        $term             = get_queried_object();
+        $taxonomy_heading = bst_get_queried_tour_type_code_heading();
+        $meta_description = isset($term->name)
+            ? 'Explore our ' . $term->name . ' tours and adventures. Book your perfect travel experience today!'
+            : 'Explore our guided tours and adventures. Book your perfect travel experience today!';
         echo '<meta name="description" content="' . esc_attr($meta_description) . '">' . "\n";
-        echo '<meta property="og:title" content="' . esc_attr($term->name . ' Tours') . '">' . "\n";
+        echo '<meta property="og:title" content="' . esc_attr($taxonomy_heading) . '">' . "\n";
         echo '<meta property="og:description" content="' . esc_attr($meta_description) . '">' . "\n";
-    } elseif (is_post_type_archive('tour-type')) {
+    } elseif (bst_is_tour_type_post_type_archive()) {
+        $archive_title    = bst_build_document_title_for_heading(bst_get_tour_type_post_type_archive_display_title());
         $meta_description = 'Discover our collection of guided tours and travel adventures. From cultural experiences to outdoor activities, find your perfect tour today!';
         echo '<meta name="description" content="' . esc_attr($meta_description) . '">' . "\n";
-        echo '<meta property="og:title" content="Our Tours - Blue Strada Tours">' . "\n";
+        echo '<meta property="og:title" content="' . esc_attr($archive_title) . '">' . "\n";
         echo '<meta property="og:description" content="' . esc_attr($meta_description) . '">' . "\n";
     }
 }

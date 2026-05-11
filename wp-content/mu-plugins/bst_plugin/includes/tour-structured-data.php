@@ -37,13 +37,28 @@ function bst_output_tour_json_ld($tour_id, $tour_type_id, $tour_title, $short_de
         }
 
         usort($all_dates_flat, function ($a, $b) {
-            return strtotime($a['start_date']) - strtotime($b['start_date']);
+            $as = function_exists('bst_tour_date_acf_date_meta_to_ymd')
+                ? bst_tour_date_acf_date_meta_to_ymd($a['start_date'])
+                : '';
+            $bs = function_exists('bst_tour_date_acf_date_meta_to_ymd')
+                ? bst_tour_date_acf_date_meta_to_ymd($b['start_date'])
+                : '';
+            if ($as === '') {
+                $as = '9999-12-31';
+            }
+            if ($bs === '') {
+                $bs = '9999-12-31';
+            }
+            return strcmp($as, $bs);
         });
 
-        $current_date = date('Y-m-d');
+        $current_date = current_time('Y-m-d');
         foreach ($all_dates_flat as $date) {
-            if (date('Y-m-d', strtotime($date['start_date'])) > $current_date) {
-                $next_start_date = $date['start_date'];
+            $ymd = function_exists('bst_tour_date_acf_date_meta_to_ymd')
+                ? bst_tour_date_acf_date_meta_to_ymd($date['start_date'])
+                : '';
+            if ($ymd !== '' && strcmp($ymd, $current_date) > 0) {
+                $next_start_date = $ymd;
                 break;
             }
         }
@@ -77,7 +92,7 @@ function bst_output_tour_json_ld($tour_id, $tour_type_id, $tour_title, $short_de
             "@type": "ItemList",
             "description": "<?php echo esc_js(wp_strip_all_tags($schedule)); ?>"
         }<?php if ($next_start_date) : ?>,
-        "startDate": "<?php echo esc_js(date('Y-m-d', strtotime($next_start_date))); ?>"<?php endif; ?>,
+        "startDate": "<?php echo esc_js($next_start_date); ?>"<?php endif; ?>,
         "location": {
             "@type": "Place",
             "name": "<?php echo esc_js($starting_from); ?>",

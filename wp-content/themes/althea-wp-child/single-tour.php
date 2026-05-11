@@ -262,24 +262,16 @@ if (is_singular('tour')) {
                         <div>
                             <?php
                             if (count($tour_dates) > 0) {
-                                // Loop through each year
+                                ksort($tour_dates, SORT_NATURAL);
                                 foreach ($tour_dates as $year => $dates) {
-                                    // Sort dates by start_date within this year
                                     usort($dates, function($a, $b) {
-                                        return strtotime($a['start_date']) - strtotime($b['start_date']);
+                                        return strcmp((string) $a['start_date'], (string) $b['start_date']);
                                     });
-                                    
+
                                     echo '<h2>' . $year . ' Tour Dates</h2>';
                                     echo '<div class="date-container">';
                                     echo '<ul class="date-list date-list--blue">';
-                                    // Loop through tour dates for the current year
                                     foreach ($dates as $tour_date) {
-                                        $current_date = date('Y-m-d'); // Get today's date in Ymd format
-                                        $start_date = date('Y-m-d', strtotime($tour_date['start_date']));
-                                        $end_date = date('Y-m-d', strtotime($tour_date['end_date']));
-                                        $available_slots = intval($tour_date['availability']); // Get pre-calculated availability
-
-                                        // Get display information using centralized function
                                         $display_info = bst_get_tour_date_display_info(
                                             $tour_date['start_date'],
                                             $tour_date['end_date'],
@@ -289,7 +281,7 @@ if (is_singular('tour')) {
                                             $extension_days
                                         );
                                         ?>
-                                        <li> 
+                                        <li>
                                             <span class="date-content"><?php echo $display_info['date_text']; ?></span>
                                             <?php if ($display_info['badge_text']) : ?>
                                                 <span class="badge <?php echo $display_info['badge_class']; ?>"><?php echo $display_info['badge_text']; ?></span>
@@ -306,7 +298,7 @@ if (is_singular('tour')) {
                                 echo '<p>No tour dates available.</p>';
                             }
                             ?>
-                        </div>   
+                        </div>
 
                         <h2>Starting From</h2>
                         <p><?php echo $starting_from.' - '.$airport; ?></p>
@@ -381,7 +373,7 @@ if (is_singular('tour')) {
                                         }
                                         // Sort all dates by start_date
                                         usort($all_dates, function($a, $b) {
-                                            return strtotime($a['start_date']) - strtotime($b['start_date']);
+                                            return strcmp((string) $a['start_date'], (string) $b['start_date']);
                                         });
                                         
                                         $dropdown_options_added = 0;

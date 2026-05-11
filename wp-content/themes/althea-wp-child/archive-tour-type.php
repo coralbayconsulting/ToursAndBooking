@@ -8,8 +8,9 @@
 
             <!-- TOP BANNER -->
             <div class="top-banner-container">
-                <img class="top-banner" src="<?php echo esc_url(get_option('bst_banner_image')); ?>" alt="Our Tours - Banner Image">
-                <h1 class="banner-text">Our Tours</h1>
+                <?php $bst_archive_title = bst_get_tour_type_post_type_archive_display_title(); ?>
+                <img class="top-banner" src="<?php echo esc_url(get_option('bst_banner_image')); ?>" alt="<?php echo esc_attr($bst_archive_title); ?> - Banner Image">
+                <h1 class="banner-text"><?php echo esc_html($bst_archive_title); ?></h1>
             </div>
         </div>
         

@@ -272,6 +272,59 @@ function bst_live_tour_title( $tour_id ) {
 }
 
 /**
+ * Normalize a tour-date ACF/meta date string to Y-m-d (site calendar day where possible).
+ *
+ * @param string $raw start_date or end_date meta / ACF value.
+ * @return string Y-m-d or empty if not parseable.
+ */
+function bst_tour_date_acf_date_meta_to_ymd( $raw ) {
+    $raw = trim( (string) $raw );
+    if ( '' === $raw ) {
+        return '';
+    }
+    if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $raw, $parts ) ) {
+        if ( checkdate( (int) $parts[2], (int) $parts[3], (int) $parts[1] ) ) {
+            return $raw;
+        }
+        return '';
+    }
+    if ( preg_match( '/^\d{8}$/', $raw ) ) {
+        $yy = substr( $raw, 0, 4 );
+        $mo = substr( $raw, 4, 2 );
+        $dd = substr( $raw, 6, 2 );
+        if ( checkdate( (int) $mo, (int) $dd, (int) $yy ) ) {
+            return $yy . '-' . $mo . '-' . $dd;
+        }
+        return '';
+    }
+    $parsed = DateTime::createFromFormat( 'm/d/Y', $raw );
+    if ( $parsed instanceof DateTime ) {
+        return $parsed->format( 'Y-m-d' );
+    }
+    $start_ts = strtotime( $raw );
+    if ( false !== $start_ts ) {
+        return wp_date( 'Y-m-d', $start_ts );
+    }
+    return '';
+}
+
+/**
+ * Whether a tour date should appear on public schedule UIs.
+ * Hides tour dates that start in calendar years before the current calendar year.
+ *
+ * @param string $start_raw Raw start_date from meta or ACF.
+ * @param int    $tour_id   (unused) Parent tour post ID (kept for backward compatibility with call sites).
+ * @return bool
+ */
+function bst_tour_date_show_on_public_schedule( $start_raw, $tour_id = 0 ) {
+    $ymd = bst_tour_date_acf_date_meta_to_ymd( $start_raw );
+    if ( '' === $ymd ) {
+        return false;
+    }
+    return (int) substr( $ymd, 0, 4 ) >= (int) current_time( 'Y' );
+}
+
+/**
  * Whether a tour-date's calendar start date is today or earlier (site timezone).
  * Used to hide overslot / limited-vehicle oversold dashboard warnings once the departure day has begun.
  *
@@ -292,39 +345,7 @@ function bst_tour_date_has_started_for_dashboard( $tour_date_id ) {
         $acf = get_field( 'start_date', $tour_date_id );
         $start_raw = ( is_scalar( $acf ) && '' !== $acf ) ? (string) $acf : '';
     }
-    if ( '' === $start_raw ) {
-        return false;
-    }
-    $start_raw = trim( (string) $start_raw );
-    $start_ymd = '';
-
-    if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})$/', $start_raw, $parts ) ) {
-        if ( checkdate( (int) $parts[2], (int) $parts[3], (int) $parts[1] ) ) {
-            $start_ymd = $start_raw;
-        }
-    } elseif ( preg_match( '/^\d{8}$/', $start_raw ) ) {
-        $yy = substr( $start_raw, 0, 4 );
-        $mo = substr( $start_raw, 4, 2 );
-        $dd = substr( $start_raw, 6, 2 );
-        if ( checkdate( (int) $mo, (int) $dd, (int) $yy ) ) {
-            $start_ymd = $yy . '-' . $mo . '-' . $dd;
-        }
-    }
-
-    if ( '' === $start_ymd ) {
-        $parsed = DateTime::createFromFormat( 'm/d/Y', $start_raw );
-        if ( $parsed instanceof DateTime ) {
-            $start_ymd = $parsed->format( 'Y-m-d' );
-        }
-    }
-
-    if ( '' === $start_ymd ) {
-        $start_ts = strtotime( $start_raw );
-        if ( false !== $start_ts ) {
-            $start_ymd = wp_date( 'Y-m-d', $start_ts );
-        }
-    }
-
+    $start_ymd = bst_tour_date_acf_date_meta_to_ymd( $start_raw );
     if ( '' === $start_ymd ) {
         return false;
     }

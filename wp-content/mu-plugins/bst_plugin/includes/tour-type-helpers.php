@@ -106,6 +106,14 @@ function bst_get_tours_by_year_for_tour_type($tour_type_term_id) {
             $tour       = get_field('tour');
             $tour_name  = $tour ? str_replace(array('Motorcycle ', 'Miata ', 'Jeep '), '', get_the_title($tour)) : '';
             $tour_link  = $tour ? get_permalink($tour) : '';
+            $tour_pid   = 0;
+            if ( $tour ) {
+                if ( is_object( $tour ) && isset( $tour->ID ) ) {
+                    $tour_pid = (int) $tour->ID;
+                } elseif ( is_numeric( $tour ) ) {
+                    $tour_pid = (int) $tour;
+                }
+            }
 
             $start_raw = get_field('start_date');
             $end_raw   = get_field('end_date');
@@ -113,8 +121,16 @@ function bst_get_tours_by_year_for_tour_type($tour_type_term_id) {
                 continue;
             }
 
-            $start_date = date('Y-m-d', strtotime($start_raw));
-            $end_date   = date('Y-m-d', strtotime($end_raw));
+            if ( function_exists( 'bst_tour_date_show_on_public_schedule' )
+                && ! bst_tour_date_show_on_public_schedule( $start_raw, $tour_pid ) ) {
+                continue;
+            }
+
+            $start_date = bst_tour_date_acf_date_meta_to_ymd( $start_raw );
+            $end_date   = bst_tour_date_acf_date_meta_to_ymd( $end_raw );
+            if ( $start_date === '' || $end_date === '' ) {
+                continue;
+            }
 
             $availability = intval(get_field('available_slots'));
 
