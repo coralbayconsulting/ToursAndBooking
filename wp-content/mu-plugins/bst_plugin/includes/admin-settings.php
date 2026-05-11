@@ -8,6 +8,8 @@ function bst_register_settings() {
     register_setting('bst_settings_group', 'bst_vat_rate', array('default' => 22.0)); // VAT rate as decimal (e.g., 22.0 for 22%)
     register_setting('bst_settings_group', 'bst_bank_wire_discount', array('default' => 2.5)); // Bank wire discount as decimal (e.g., 2.5 for 2.5%)
     register_setting('bst_settings_group', 'bst_banner_image');
+    register_setting('bst_settings_group', 'bst_ptarchive_tour_type_page_title');
+    register_setting('bst_settings_group', 'bst_ptarchive_tour_type_meta_description');
     register_setting('bst_settings_group', 'bst_enable_tour_rating', array('default' => false));
     register_setting('bst_settings_group', 'bst_low_availability_threshold'); // Low availability threshold setting
     register_setting('bst_settings_group', 'bst_auto_refresh_interval', array('default' => 15)); // Auto-refresh interval in minutes
@@ -193,6 +195,22 @@ function bst_register_settings() {
         'bst_banner_image',
         'Our Tours Banner Image',
         'bst_banner_image_callback',
+        'bst_settings_page',
+        'bst_settings_section'
+    );
+
+    add_settings_field(
+        'bst_ptarchive_tour_type_page_title',
+        'Our Tours archive page title (H1 & browser tab)',
+        'bst_ptarchive_tour_type_page_title_callback',
+        'bst_settings_page',
+        'bst_settings_section'
+    );
+
+    add_settings_field(
+        'bst_ptarchive_tour_type_meta_description',
+        'Our Tours archive meta description',
+        'bst_ptarchive_tour_type_meta_description_callback',
         'bst_settings_page',
         'bst_settings_section'
     );
@@ -385,6 +403,18 @@ function bst_banner_image_callback() {
     echo '<input type="text" id="bst_banner_image" name="bst_banner_image" value="' . esc_attr($banner_image) . '" style="display:none;" />';
     echo '<input type="button" id="upload_image_button" class="button" value="Upload Image" />';
     echo '<p class="description">Use the upload button to select an image from the media library.</p>';
+}
+
+function bst_ptarchive_tour_type_page_title_callback() {
+    $val = get_option('bst_ptarchive_tour_type_page_title', '');
+    echo '<input type="text" id="bst_ptarchive_tour_type_page_title" name="bst_ptarchive_tour_type_page_title" value="' . esc_attr($val) . '" style="width: 100%; max-width: 560px;" maxlength="120" />';
+    echo '<p class="description">Shown as the main heading on <code>/tour-types/</code> and as the first part of the page title (site name is added automatically). Leave empty to use the default <strong>Our Tours</strong>. Yoast does not provide a per-page SEO box for this archive URL.</p>';
+}
+
+function bst_ptarchive_tour_type_meta_description_callback() {
+    $val = get_option('bst_ptarchive_tour_type_meta_description', '');
+    echo '<textarea id="bst_ptarchive_tour_type_meta_description" name="bst_ptarchive_tour_type_meta_description" rows="3" style="width: 100%; max-width: 560px;" maxlength="320">' . esc_textarea($val) . '</textarea>';
+    echo '<p class="description">Optional meta description for <code>/tour-types/</code> (search engines and Open Graph). If empty, a generic description is used.</p>';
 }
 
 function bst_low_availability_threshold_callback() {

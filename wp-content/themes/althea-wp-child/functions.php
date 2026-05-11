@@ -115,10 +115,16 @@ function bst_is_tour_type_post_type_archive() {
 /**
  * Banner/main heading shown on tour-type CPT archive only.
  *
+ * Optional override: BST Settings → "Our Tours archive page title" (`bst_ptarchive_tour_type_page_title`).
  * Filter: bst_tour_type_post_type_archive_display_title
  */
 function bst_get_tour_type_post_type_archive_display_title() {
-    return apply_filters('bst_tour_type_post_type_archive_display_title', 'Our Tours');
+    $default = 'Our Tours';
+    $from_opt  = trim((string) get_option('bst_ptarchive_tour_type_page_title', ''));
+    if ($from_opt !== '') {
+        $default = $from_opt;
+    }
+    return apply_filters('bst_tour_type_post_type_archive_display_title', $default);
 }
 
 /**
@@ -162,7 +168,7 @@ function bst_is_managed_title_context() {
 }
 
 /**
- * Whether Yoast has a custom SEO title for this URL (post meta, term meta, or CPT archive template differs from Yoast defaults).
+ * Whether Yoast has a custom SEO title for this URL (post or term SEO fields only; not CPT archives).
  */
 function bst_yoast_has_custom_seo_title_for_current_page() {
     if (!defined('WPSEO_VERSION')) {
@@ -185,42 +191,7 @@ function bst_yoast_has_custom_seo_title_for_current_page() {
         }
         return false;
     }
-    if (bst_is_tour_type_post_type_archive()) {
-        return apply_filters(
-            'bst_yoast_tour_type_archive_has_custom_seo_title',
-            bst_yoast_tour_type_archive_title_template_is_non_default()
-        );
-    }
     return false;
-}
-
-/**
- * CPT archive: Yoast Search Appearance title template — treat bundled “Archives” defaults as non-custom so we can use “Our Tours”.
- *
- * @return bool
- */
-function bst_yoast_tour_type_archive_title_template_is_non_default() {
-    if (!class_exists('WPSEO_Options')) {
-        return false;
-    }
-    $key     = 'title-ptarchive-tour-type';
-    $current = WPSEO_Options::get($key, '');
-    if (!is_string($current) || trim($current) === '') {
-        return false;
-    }
-    $current = trim($current);
-    $defaults = array(
-        '%%pt_plural%% Archives %%page%% %%sep%% %%sitename%%',
-        '%%pt_plural%% Archives %%sep%% %%sitename%%',
-        '%%pt_plural%% %%page%% %%sep%% %%sitename%%',
-        '%%title%% %%page%% %%sep%% %%sitename%%',
-    );
-    foreach ($defaults as $def) {
-        if ($current === $def) {
-            return false;
-        }
-    }
-    return true;
 }
 
 /**
@@ -276,11 +247,33 @@ function bst_apply_wpseo_title_hybrid($title) {
     if (!bst_is_managed_title_context()) {
         return $title;
     }
+    // CPT archive: no reliable Yoast "per URL" SEO title; always use BST heading (+ site name). Optional heading in BST Settings.
+    if (bst_is_tour_type_post_type_archive()) {
+        return bst_get_programmatic_document_title_for_current_page();
+    }
     if (bst_yoast_has_custom_seo_title_for_current_page()) {
         return $title;
     }
 
     return bst_get_programmatic_document_title_for_current_page();
+}
+
+/**
+ * Yoast: optional meta description for /tour-types/ from BST Settings (Yoast has no archive metabox for this URL).
+ *
+ * @param string $desc Yoast-assembled description.
+ *
+ * @return string
+ */
+function bst_apply_wpseo_metadesc_tour_type_archive($desc) {
+    if (!bst_is_tour_type_post_type_archive()) {
+        return $desc;
+    }
+    $custom = trim((string) get_option('bst_ptarchive_tour_type_meta_description', ''));
+    if ($custom !== '') {
+        return $custom;
+    }
+    return $desc;
 }
 
 /**
@@ -362,6 +355,7 @@ add_filter('document_title', 'bst_apply_document_title_programmatic', 100001);
 add_filter('wpseo_title', 'bst_apply_wpseo_title_hybrid', 999);
 add_filter('wpseo_opengraph_title', 'bst_apply_wpseo_title_hybrid', 999);
 add_filter('wpseo_twitter_title', 'bst_apply_wpseo_title_hybrid', 999);
+add_filter('wpseo_metadesc', 'bst_apply_wpseo_metadesc_tour_type_archive', 999);
 
 // Add SEO meta descriptions for tour pages
 function add_tour_seo_meta() {
@@ -403,8 +397,11 @@ function add_tour_seo_meta() {
         echo '<meta property="og:title" content="' . esc_attr($taxonomy_heading) . '">' . "\n";
         echo '<meta property="og:description" content="' . esc_attr($meta_description) . '">' . "\n";
     } elseif (bst_is_tour_type_post_type_archive()) {
-        $archive_title    = bst_build_document_title_for_heading(bst_get_tour_type_post_type_archive_display_title());
-        $meta_description = 'Discover our collection of guided tours and travel adventures. From cultural experiences to outdoor activities, find your perfect tour today!';
+        $archive_title = bst_build_document_title_for_heading(bst_get_tour_type_post_type_archive_display_title());
+        $meta_custom   = trim((string) get_option('bst_ptarchive_tour_type_meta_description', ''));
+        $meta_description = $meta_custom !== ''
+            ? $meta_custom
+            : 'Discover our collection of guided tours and travel adventures. From cultural experiences to outdoor activities, find your perfect tour today!';
         echo '<meta name="description" content="' . esc_attr($meta_description) . '">' . "\n";
         echo '<meta property="og:title" content="' . esc_attr($archive_title) . '">' . "\n";
         echo '<meta property="og:description" content="' . esc_attr($meta_description) . '">' . "\n";
