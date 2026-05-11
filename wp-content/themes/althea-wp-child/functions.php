@@ -153,18 +153,134 @@ function bst_build_tour_type_code_document_title() {
 }
 
 /**
- * @param string $title Previous title from WP or Yoast filters.
+ * Single tour, tour-type-code taxonomy, or tour-type post type archive.
+ */
+function bst_is_managed_title_context() {
+    return bst_is_queried_tour_type_code_term_archive()
+        || bst_is_tour_type_post_type_archive()
+        || is_singular('tour');
+}
+
+/**
+ * Whether Yoast has a custom SEO title for this URL (post meta, term meta, or CPT archive template differs from Yoast defaults).
+ */
+function bst_yoast_has_custom_seo_title_for_current_page() {
+    if (!defined('WPSEO_VERSION')) {
+        return false;
+    }
+    if (is_singular('tour')) {
+        $v = get_post_meta(get_queried_object_id(), '_yoast_wpseo_title', true);
+        return is_string($v) && trim($v) !== '';
+    }
+    if (bst_is_queried_tour_type_code_term_archive()) {
+        $term = get_queried_object();
+        if (!($term instanceof WP_Term)) {
+            return false;
+        }
+        foreach (array('wpseo_title', '_wpseo_title') as $key) {
+            $v = get_term_meta($term->term_id, $key, true);
+            if (is_string($v) && trim($v) !== '') {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (bst_is_tour_type_post_type_archive()) {
+        return apply_filters(
+            'bst_yoast_tour_type_archive_has_custom_seo_title',
+            bst_yoast_tour_type_archive_title_template_is_non_default()
+        );
+    }
+    return false;
+}
+
+/**
+ * CPT archive: Yoast Search Appearance title template — treat bundled “Archives” defaults as non-custom so we can use “Our Tours”.
+ *
+ * @return bool
+ */
+function bst_yoast_tour_type_archive_title_template_is_non_default() {
+    if (!class_exists('WPSEO_Options')) {
+        return false;
+    }
+    $key     = 'title-ptarchive-tour-type';
+    $current = WPSEO_Options::get($key, '');
+    if (!is_string($current) || trim($current) === '') {
+        return false;
+    }
+    $current = trim($current);
+    $defaults = array(
+        '%%pt_plural%% Archives %%page%% %%sep%% %%sitename%%',
+        '%%pt_plural%% Archives %%sep%% %%sitename%%',
+        '%%pt_plural%% %%page%% %%sep%% %%sitename%%',
+        '%%title%% %%page%% %%sep%% %%sitename%%',
+    );
+    foreach ($defaults as $def) {
+        if ($current === $def) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Short programmatic tab/SERP title when Yoast has no custom SEO title for this page.
  *
  * @return string
  */
-function bst_apply_archive_display_title_document_filter($title) {
+function bst_get_programmatic_document_title_for_current_page() {
     if (bst_is_queried_tour_type_code_term_archive()) {
         return bst_build_tour_type_code_document_title();
     }
     if (bst_is_tour_type_post_type_archive()) {
         return bst_build_document_title_for_heading(bst_get_tour_type_post_type_archive_display_title());
     }
-    return $title;
+    if (is_singular('tour')) {
+        $tid     = get_queried_object_id();
+        $heading = apply_filters('bst_singular_tour_document_title_heading', get_the_title($tid), $tid);
+
+        return bst_build_document_title_for_heading((string) $heading);
+    }
+    return '';
+}
+
+/**
+ * WordPress core title tag when Yoast is not active (or unmanaged pages).
+ *
+ * @param string $title Previous value.
+ *
+ * @return string
+ */
+function bst_apply_pre_get_document_title_programmatic($title) {
+    if (!bst_is_managed_title_context()) {
+        return $title;
+    }
+    if (defined('WPSEO_VERSION')) {
+        return $title;
+    }
+    if (bst_yoast_has_custom_seo_title_for_current_page()) {
+        return $title;
+    }
+
+    return bst_get_programmatic_document_title_for_current_page();
+}
+
+/**
+ * Yoast: use editor SEO title when set; otherwise keep short programmatic titles.
+ *
+ * @param string $title Assembled by Yoast (variables resolved).
+ *
+ * @return string
+ */
+function bst_apply_wpseo_title_hybrid($title) {
+    if (!bst_is_managed_title_context()) {
+        return $title;
+    }
+    if (bst_yoast_has_custom_seo_title_for_current_page()) {
+        return $title;
+    }
+
+    return bst_get_programmatic_document_title_for_current_page();
 }
 
 /**
@@ -218,13 +334,34 @@ function bst_get_queried_tour_type_code_heading() {
     return bst_get_queried_tour_type_code_banner_data()['heading'];
 }
 
-// Tab/SERP titles: taxonomy term archives (/tours/{slug}/) and tour-type CPT archive (/tour-types/).
-add_filter('pre_get_document_title', 'bst_apply_archive_display_title_document_filter', 100001);
-add_filter('document_title', 'bst_apply_archive_display_title_document_filter', 100001);
+/**
+ * Final document_title filter when Yoast is off (pre_get may already have short-circuited).
+ *
+ * @param string $title Full title from core.
+ *
+ * @return string
+ */
+function bst_apply_document_title_programmatic($title) {
+    if (defined('WPSEO_VERSION')) {
+        return $title;
+    }
+    if (!bst_is_managed_title_context()) {
+        return $title;
+    }
+    if (bst_yoast_has_custom_seo_title_for_current_page()) {
+        return $title;
+    }
 
-add_filter('wpseo_title', 'bst_apply_archive_display_title_document_filter', 999);
-add_filter('wpseo_opengraph_title', 'bst_apply_archive_display_title_document_filter', 999);
-add_filter('wpseo_twitter_title', 'bst_apply_archive_display_title_document_filter', 999);
+    return bst_get_programmatic_document_title_for_current_page();
+}
+
+// Without Yoast: core <title> only. With Yoast: use bst_apply_wpseo_title_hybrid so custom SEO titles in Yoast win.
+add_filter('pre_get_document_title', 'bst_apply_pre_get_document_title_programmatic', 100001);
+add_filter('document_title', 'bst_apply_document_title_programmatic', 100001);
+
+add_filter('wpseo_title', 'bst_apply_wpseo_title_hybrid', 999);
+add_filter('wpseo_opengraph_title', 'bst_apply_wpseo_title_hybrid', 999);
+add_filter('wpseo_twitter_title', 'bst_apply_wpseo_title_hybrid', 999);
 
 // Add SEO meta descriptions for tour pages
 function add_tour_seo_meta() {

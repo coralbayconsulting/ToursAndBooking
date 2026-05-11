@@ -28,14 +28,14 @@ if (is_singular('tour')) {
     echo '<meta name="description" content="' . esc_attr($meta_description) . '">' . "\n";
     echo '<meta name="robots" content="index, follow">' . "\n";
     echo '<link rel="canonical" href="' . esc_url(get_permalink()) . '">' . "\n";
-    echo '<meta property="og:title" content="' . esc_attr($tour_title . ' - ' . $tour_type_title) . '">' . "\n";
+    echo '<meta property="og:title" content="' . esc_attr($tour_title) . '">' . "\n";
     echo '<meta property="og:description" content="' . esc_attr($meta_description) . '">' . "\n";
     echo '<meta property="og:image" content="' . esc_url($banner_image) . '">' . "\n";
     echo '<meta property="og:url" content="' . esc_url(get_permalink()) . '">' . "\n";
     echo '<meta property="og:type" content="website">' . "\n";
     echo '<meta property="og:site_name" content="Blue Strada Tours">' . "\n";
     echo '<meta name="twitter:card" content="summary_large_image">' . "\n";
-    echo '<meta name="twitter:title" content="' . esc_attr($tour_title . ' - ' . $tour_type_title) . '">' . "\n";
+    echo '<meta name="twitter:title" content="' . esc_attr($tour_title) . '">' . "\n";
     echo '<meta name="twitter:description" content="' . esc_attr($meta_description) . '">' . "\n";
     echo '<meta name="twitter:image" content="' . esc_url($banner_image) . '">' . "\n";
 }
