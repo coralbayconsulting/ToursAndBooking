@@ -190,7 +190,7 @@ class BST_Plugin {
                 'show_ui'           => true,
                 'show_admin_column' => true,
                 'hierarchical'      => false,
-                'rewrite'           => array('slug' => 'tours'), // Pretty URLs: /tours/miata/
+                'rewrite'           => array('slug' => 'tours'), // Pretty URLs: /tours/{term-slug}/ (e.g. /tours/driving/)
                 'show_in_rest'      => true,
             )
         );
