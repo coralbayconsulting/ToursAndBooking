@@ -29,7 +29,7 @@ if (!defined('ABSPATH')) {
  * ]
  *
  * @param int $tour_id Tour post ID.
- * @return array
+ * @return array Excludes dates before the current calendar year (see bst_tour_date_show_on_public_schedule).
  */
 function bst_get_tour_dates_grouped_by_year($tour_id) {
     $tour_dates = array();
@@ -64,6 +64,11 @@ function bst_get_tour_dates_grouped_by_year($tour_id) {
             $end_date_raw   = get_post_meta(get_the_ID(), 'end_date', true);
 
             if (empty($start_date_raw) || empty($end_date_raw)) {
+                continue;
+            }
+
+            if (function_exists('bst_tour_date_show_on_public_schedule')
+                && ! bst_tour_date_show_on_public_schedule($start_date_raw, (int) $tour_id)) {
                 continue;
             }
 
