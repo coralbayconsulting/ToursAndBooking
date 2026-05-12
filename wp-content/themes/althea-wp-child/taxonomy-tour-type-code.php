@@ -1,5 +1,138 @@
 <?php get_header(); ?>
 
+<?php
+// =============================================================================
+// BST Filter Pre-Pass
+// -----------------------------------------------------------------------------
+// Compute the set of tour-dates (grouped by year) for every tour in the current
+// taxonomy term, and the list of distinct years that have at least one
+// publicly-visible tour-date. This data is used to (a) populate the "Filter by
+// year" dropdown rendered in the breadcrumb/mobile filter blocks below and
+// (b) avoid re-querying tour-date posts inside the main rendering loop.
+//
+// Notes:
+//  - The pre-pass intentionally ignores the rating filter so that the year
+//    dropdown is stable as the rating selection changes.
+//  - Visibility is governed by bst_tour_date_show_on_public_schedule(), so past
+//    or hidden dates are excluded just like the existing rendering logic.
+// =============================================================================
+
+$bst_selected_year = isset( $_GET['tour_year'] ) && $_GET['tour_year'] !== ''
+    ? (int) sanitize_text_field( wp_unslash( $_GET['tour_year'] ) )
+    : 0;
+
+$bst_term_obj         = get_queried_object();
+$bst_tour_dates_by_id = array();
+$bst_available_years  = array();
+
+if ( $bst_term_obj && isset( $bst_term_obj->taxonomy, $bst_term_obj->term_id ) ) {
+    $bst_pre_pass_query = new WP_Query( array(
+        'post_type'      => 'tour',
+        'posts_per_page' => -1,
+        'fields'         => 'ids',
+        'tax_query'      => array(
+            array(
+                'taxonomy' => $bst_term_obj->taxonomy,
+                'field'    => 'term_id',
+                'terms'    => $bst_term_obj->term_id,
+            ),
+        ),
+        'meta_query'     => array(
+            array(
+                'key'     => 'private',
+                'value'   => 1,
+                'compare' => '!=',
+                'type'    => 'NUMERIC',
+            ),
+        ),
+    ) );
+
+    if ( $bst_pre_pass_query->have_posts() ) {
+        foreach ( $bst_pre_pass_query->posts as $bst_pre_tour_id ) {
+            $bst_dates       = array();
+            $bst_dates_query = new WP_Query( array(
+                'post_type'      => 'tour-date',
+                'post_status'    => 'publish',
+                'meta_query'     => array(
+                    array(
+                        'key'     => 'tour',
+                        'value'   => $bst_pre_tour_id,
+                        'compare' => '=',
+                    ),
+                ),
+                'posts_per_page' => -1,
+                'orderby'        => 'meta_value',
+                'meta_key'       => 'start_date',
+                'order'          => 'ASC',
+            ) );
+
+            if ( $bst_dates_query->have_posts() ) {
+                while ( $bst_dates_query->have_posts() ) {
+                    $bst_dates_query->the_post();
+                    $bst_start_raw = get_post_meta( get_the_ID(), 'start_date', true );
+                    $bst_end_raw   = get_post_meta( get_the_ID(), 'end_date', true );
+                    if ( function_exists( 'bst_tour_date_show_on_public_schedule' )
+                        && ! bst_tour_date_show_on_public_schedule( $bst_start_raw, (int) $bst_pre_tour_id ) ) {
+                        continue;
+                    }
+                    $bst_year = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+                        ? (int) substr( (string) bst_tour_date_acf_date_meta_to_ymd( $bst_start_raw ), 0, 4 )
+                        : (int) date( 'Y', strtotime( $bst_start_raw ) );
+                    if ( $bst_year <= 0 ) {
+                        continue;
+                    }
+                    $bst_start_ymd = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+                        ? bst_tour_date_acf_date_meta_to_ymd( $bst_start_raw )
+                        : $bst_start_raw;
+                    $bst_end_ymd = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+                        ? bst_tour_date_acf_date_meta_to_ymd( $bst_end_raw )
+                        : $bst_end_raw;
+                    if ( $bst_start_ymd === '' || $bst_end_ymd === '' ) {
+                        continue;
+                    }
+                    if ( ! isset( $bst_dates[ $bst_year ] ) ) {
+                        $bst_dates[ $bst_year ] = array();
+                    }
+                    $bst_dates[ $bst_year ][] = array(
+                        'id'           => get_the_ID(),
+                        'title'        => get_the_title(),
+                        'start_date'   => $bst_start_ymd,
+                        'end_date'     => $bst_end_ymd,
+                        'availability' => get_post_meta( get_the_ID(), 'available_slots', true ),
+                    );
+                    if ( ! in_array( $bst_year, $bst_available_years, true ) ) {
+                        $bst_available_years[] = $bst_year;
+                    }
+                }
+                wp_reset_postdata();
+            }
+
+            if ( ! empty( $bst_dates ) ) {
+                foreach ( $bst_dates as $bst_y => &$bst_year_dates ) {
+                    usort( $bst_year_dates, function ( $a, $b ) {
+                        return strtotime( $a['start_date'] ) - strtotime( $b['start_date'] );
+                    } );
+                }
+                unset( $bst_year_dates );
+                ksort( $bst_dates );
+            }
+
+            $bst_tour_dates_by_id[ $bst_pre_tour_id ] = $bst_dates;
+        }
+        wp_reset_postdata();
+    }
+}
+
+sort( $bst_available_years );
+$bst_available_years = array_values( array_unique( $bst_available_years ) );
+
+// Drop a stale selection if the year is no longer available (e.g. all dates in
+// that year were unpublished or the user is viewing a different term).
+if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years, true ) ) {
+    $bst_selected_year = 0;
+}
+?>
+
 <div class="page-content">
     <div id="content" class="content">
         <!-- Altered Content Start -->
@@ -25,8 +158,10 @@
                 } ?>
                 
                 <!-- DESKTOP FILTERS - inline with breadcrumbs -->
-                <?php 
-                // Check if tour rating is enabled in settings
+                <?php
+                // Check if tour rating is enabled in settings (kept gated so the
+                // rating dropdown only appears when the option is on; the year
+                // dropdown is always available when there are public dates).
                 $enable_tour_rating = get_option('bst_enable_tour_rating', false);
                 $current_term       = get_queried_object();
                 $rating_terms       = array();
@@ -35,30 +170,45 @@
                     $rating_terms = bst_get_tour_type_rating_terms($current_term);
                 }
 
-                if ($enable_tour_rating && !empty($rating_terms)) :
+                $selected_rating  = isset($_GET['tour_rating']) ? sanitize_text_field( wp_unslash( $_GET['tour_rating'] ) ) : '';
+                $bst_show_rating  = $enable_tour_rating && ! empty( $rating_terms ) && ! is_wp_error( $rating_terms );
+                $bst_show_years   = ! empty( $bst_available_years );
+                $bst_show_filter  = $bst_show_years || $bst_show_rating;
+                $bst_filter_label = ( $bst_show_years && ! $bst_show_rating ) ? 'Filter by Year' : 'Filter';
+
+                if ( $bst_show_filter ) :
                 ?>
                 <div class="breadcrumb-filters">
                     <form method="GET" class="breadcrumb-filter-form">
-                        <?php
-                        // Get current filter values
-                        $selected_rating = isset($_GET['tour_rating']) ? sanitize_text_field($_GET['tour_rating']) : '';
-                        
-                        if (!empty($rating_terms) && !is_wp_error($rating_terms)) :
-                        ?>
-                            <label for="tour_rating_desktop" class="breadcrumb-filter-label" style="text-transform: uppercase; font-weight: 600; color: #666; display: inline-block; font-size: 14px; letter-spacing: 1.0px; margin-right: 0;">Tour Class Filter</label>
-                            <select name="tour_rating" id="tour_rating_desktop" class="breadcrumb-filter-select" onchange="this.form.submit()">
+                        <label class="breadcrumb-filter-label" style="text-transform: uppercase; font-weight: 600; color: #666; display: inline-block; font-size: 14px; letter-spacing: 1.0px; margin-right: 0;"><?php echo esc_html( $bst_filter_label ); ?></label>
+
+                        <?php if ( $bst_show_years ) : ?>
+                            <select name="tour_year" id="tour_year_desktop" class="breadcrumb-filter-select" aria-label="Filter by year">
+                                <option value="">All Years</option>
+                                <?php foreach ( $bst_available_years as $bst_y ) : ?>
+                                    <option value="<?php echo esc_attr( $bst_y ); ?>" <?php selected( $bst_selected_year, $bst_y ); ?>>
+                                        <?php echo esc_html( $bst_y ); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php endif; ?>
+
+                        <?php if ( $bst_show_rating ) : ?>
+                            <select name="tour_rating" id="tour_rating_desktop" class="breadcrumb-filter-select" aria-label="Filter by tour class">
                                 <option value="">All Classes</option>
-                                <?php foreach ($rating_terms as $term) : ?>
-                                    <option value="<?php echo esc_attr($term->slug); ?>" <?php selected($selected_rating, $term->slug); ?>>
-                                        <?php echo esc_html($term->name); ?>
+                                <?php foreach ( $rating_terms as $term ) : ?>
+                                    <option value="<?php echo esc_attr( $term->slug ); ?>" <?php selected( $selected_rating, $term->slug ); ?>>
+                                        <?php echo esc_html( $term->name ); ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
                             <button type="button" class="rating-help-btn" id="rating-help-btn" title="Learn about our tour classification system">ℹ</button>
                         <?php endif; ?>
+
+                        <button type="submit" class="breadcrumb-filter-btn">Filter</button>
                     </form>
                 </div>
-                <?php endif; // Close enable_tour_rating && !empty(rating_terms) check ?>
+                <?php endif; // Close $bst_show_filter check ?>
                 
                 <!-- Share Buttons -->
                 <div class="bst-share-buttons">
@@ -97,9 +247,10 @@
         </div>
 
         <!-- MOBILE FILTERS - separate section for mobile -->
-        <?php 
-        // Reuse the same rating terms from above for mobile filters.
-        if ($enable_tour_rating && !empty($rating_terms)) :
+        <?php
+        // Reuse the same flags from the desktop block above; the mobile block
+        // mirrors that UI so both dropdowns submit together via a Filter button.
+        if ( $bst_show_filter ) :
         ?>
         <div class="mobile-filters" style="display: none; padding: 15px 20px; background: #f8f8f8; border-bottom: 1px solid #ddd;">
             <style>
@@ -120,25 +271,38 @@
                 }
             </style>
             <form method="GET" class="mobile-filter-form">
-                <?php
-                // Get current filter values
-                $selected_rating_mobile = isset($_GET['tour_rating']) ? sanitize_text_field($_GET['tour_rating']) : '';
-                
-                if (!empty($rating_terms) && !is_wp_error($rating_terms)) :
-                ?>
-                    <label for="tour_rating_mobile" style="display: block; margin-bottom: 8px; font-weight: 600; color: #666; font-size: 14px; text-transform: uppercase; letter-spacing: 1.0px;">Tour Class Filter</label>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <select name="tour_rating" id="tour_rating_mobile" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px;" onchange="this.form.submit()">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #666; font-size: 14px; text-transform: uppercase; letter-spacing: 1.0px;"><?php echo esc_html( $bst_filter_label ); ?></label>
+
+                <?php if ( $bst_show_years ) : ?>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <select name="tour_year" id="tour_year_mobile" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px;" aria-label="Filter by year">
+                            <option value="">All Years</option>
+                            <?php foreach ( $bst_available_years as $bst_y ) : ?>
+                                <option value="<?php echo esc_attr( $bst_y ); ?>" <?php selected( $bst_selected_year, $bst_y ); ?>>
+                                    <?php echo esc_html( $bst_y ); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ( $bst_show_rating ) : ?>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                        <select name="tour_rating" id="tour_rating_mobile" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px;" aria-label="Filter by tour class">
                             <option value="">All Classes</option>
-                            <?php foreach ($rating_terms as $term) : ?>
-                                <option value="<?php echo esc_attr($term->slug); ?>" <?php selected($selected_rating_mobile, $term->slug); ?>>
-                                    <?php echo esc_html($term->name); ?>
+                            <?php foreach ( $rating_terms as $term ) : ?>
+                                <option value="<?php echo esc_attr( $term->slug ); ?>" <?php selected( $selected_rating, $term->slug ); ?>>
+                                    <?php echo esc_html( $term->name ); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                         <button type="button" class="rating-help-btn" id="rating-help-btn-mobile" title="Learn about our rating system" style="background: none; color: #666; border: none; width: 32px; height: 32px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">ℹ</button>
                     </div>
                 <?php endif; ?>
+
+                <div style="text-align: center;">
+                    <button type="submit" class="breadcrumb-filter-btn" style="display: inline-flex; padding: 10px 28px;">Filter</button>
+                </div>
             </form>
         </div>
         <?php endif; ?>
@@ -388,15 +552,33 @@
                                 );
                             endwhile;
                             wp_reset_postdata();
-                            
+
+                            // Apply the year filter: drop any tour that has no
+                            // publicly-visible tour-date in the selected year.
+                            if ( $bst_selected_year ) {
+                                $tours = array_values( array_filter( $tours, function ( $t ) use ( $bst_tour_dates_by_id, $bst_selected_year ) {
+                                    return ! empty( $bst_tour_dates_by_id[ $t['ID'] ][ $bst_selected_year ] );
+                                } ) );
+                            }
+
                             // Sort by listing_sort_order
                             usort($tours, function($a, $b) {
                                 return intval($a['listing_sort_order']) - intval($b['listing_sort_order']);
                             });
-                            
+
                             foreach ($tours as $tour) :
                                 $tour_post = get_post($tour['ID']);
                                 $title = str_replace(array("Motorcycle ", "Miata ", "Jeep "), "", get_the_title($tour_post));
+                                // When filtering to a single year, drop a
+                                // trailing "(YYYY)" from the title since the
+                                // year is implied by the active filter.
+                                if ( $bst_selected_year ) {
+                                    $title = preg_replace(
+                                        '/\s*\(' . preg_quote( (string) $bst_selected_year, '/' ) . '\)\s*$/',
+                                        '',
+                                        $title
+                                    );
+                                }
                                 $description = get_field('listing_description', $tour_post->ID);
                                 $image = get_field('listing_image', $tour_post->ID);
                                 $new = get_field('new', $tour_post->ID);
@@ -453,69 +635,21 @@
                                     <div class="date-container">
                                         <?php
                                         $tourid = $tour['ID'];
-                                        $tour_dates = array();
-                                        $args = array(
-                                            'post_type' => 'tour-date',
-                                            'post_status' => 'publish',  // Only get published tour dates
-                                            'meta_query' => array(
-                                                array(
-                                                    'key' => 'tour',
-                                                    'value' => $tourid,
-                                                    'compare' => '='
-                                                )
-                                            ),
-                                            'posts_per_page' => -1,
-                                            'orderby' => 'meta_value',
-                                            'meta_key' => 'start_date',
-                                            'order' => 'ASC'
-                                        );
-                                        $tour_date_query = new WP_Query($args);
-                                        if ($tour_date_query->have_posts()) {
-                                            while ($tour_date_query->have_posts()) {
-                                                $tour_date_query->the_post();
-                                                $start_date_raw = get_post_meta(get_the_ID(), 'start_date', true);
-                                                $end_date_raw   = get_post_meta(get_the_ID(), 'end_date', true);
-                                                if ( function_exists( 'bst_tour_date_show_on_public_schedule' )
-                                                    && ! bst_tour_date_show_on_public_schedule( $start_date_raw, (int) $tourid ) ) {
-                                                    continue;
-                                                }
-                                                $year = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
-                                                    ? (int) substr( (string) bst_tour_date_acf_date_meta_to_ymd( $start_date_raw ), 0, 4 )
-                                                    : (int) date( 'Y', strtotime( $start_date_raw ) );
-                                                if ( $year <= 0 ) {
-                                                    continue;
-                                                }
-                                                $start_date_for_row = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
-                                                    ? bst_tour_date_acf_date_meta_to_ymd( $start_date_raw )
-                                                    : $start_date_raw;
-                                                $end_date_for_row = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
-                                                    ? bst_tour_date_acf_date_meta_to_ymd( $end_date_raw )
-                                                    : $end_date_raw;
-                                                if ( $start_date_for_row === '' || $end_date_for_row === '' ) {
-                                                    continue;
-                                                }
-                                                if (!isset($tour_dates[$year])) {
-                                                    $tour_dates[$year] = array();
-                                                }
-                                                $tour_dates[$year][] = array(
-                                                    'id' => get_the_ID(),
-                                                    'title' => get_the_title(),
-                                                    'start_date' => $start_date_for_row,
-                                                    'end_date' => $end_date_for_row,
-                                                    'availability' => get_post_meta(get_the_ID(), 'available_slots', true)
-                                                );
-                                            }
-                                            wp_reset_postdata();
+
+                                        // Use the dates we already gathered in
+                                        // the pre-pass at the top of the file.
+                                        $tour_dates = isset( $bst_tour_dates_by_id[ $tourid ] )
+                                            ? $bst_tour_dates_by_id[ $tourid ]
+                                            : array();
+
+                                        // When a year filter is active, only
+                                        // render that year's date list.
+                                        if ( $bst_selected_year ) {
+                                            $tour_dates = isset( $tour_dates[ $bst_selected_year ] )
+                                                ? array( $bst_selected_year => $tour_dates[ $bst_selected_year ] )
+                                                : array();
                                         }
-                                        // Sort tour dates by start_date within each year
-                                        if (!empty($tour_dates)) {
-                                            foreach ($tour_dates as $year => &$tours_in_year) {
-                                                usort($tours_in_year, function($a, $b) {
-                                                    return strtotime($a['start_date']) - strtotime($b['start_date']);
-                                                });
-                                            }
-                                            unset($tours_in_year); // Break the reference
-                                        }
+
                                         if (!empty($tour_dates)) {
                                             foreach ($tour_dates as $year => $tours_in_year) {
                                                 echo '<div class="date-list">';

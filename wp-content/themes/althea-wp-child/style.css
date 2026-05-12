@@ -2097,10 +2097,16 @@ body.single-tour .bst-breadcrumb-section {
     box-shadow: 0 0 0 3px rgba(249, 205, 2, 0.2);
 }
 
+/* Year dropdown is narrower than the generic filter select since its options
+   are just 4-digit years (or "All Years"). */
+.breadcrumb-filter-select[name="tour_year"] {
+    min-width: 110px;
+}
+
 .breadcrumb-filter-btn {
     padding: 8px 20px;
-    background: linear-gradient(135deg, var(--yellow) 0%, #f0c000 100%); /* Changed back to yellow */
-    color: rgb(102, 102, 102); /* Gray text to match breadcrumbs */
+    background: var(--blue);
+    color: #fff;
     border: none;
     border-radius: 6px;
     font-size: 14px;
@@ -2118,7 +2124,7 @@ body.single-tour .bst-breadcrumb-section {
 }
 
 .breadcrumb-filter-btn:hover {
-    background: linear-gradient(135deg, var(--orange) 0%, #e65a00 100%); /* Orange hover to match original yellow button behavior */
+    background: var(--darkblue);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
