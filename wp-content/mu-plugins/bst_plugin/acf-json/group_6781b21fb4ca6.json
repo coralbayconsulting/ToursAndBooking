@@ -1060,6 +1060,70 @@
             "delay": 0
         },
         {
+            "key": "field_68c4f30a01001",
+            "label": "Related Links",
+            "name": "related_links",
+            "aria-label": "",
+            "type": "repeater",
+            "instructions": "Optional list of related links shown on the tour page directly above the 'How Much It Costs' section. If left empty, the section is hidden on the front end.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "layout": "block",
+            "pagination": 0,
+            "min": 0,
+            "max": 0,
+            "collapsed": "",
+            "button_label": "Add Link",
+            "rows_per_page": 20,
+            "sub_fields": [
+                {
+                    "key": "field_68c4f30a01002",
+                    "label": "Link",
+                    "name": "link",
+                    "aria-label": "",
+                    "type": "link",
+                    "instructions": "",
+                    "required": 1,
+                    "conditional_logic": 0,
+                    "wrapper": {
+                        "width": "50",
+                        "class": "",
+                        "id": ""
+                    },
+                    "return_format": "array",
+                    "allow_in_bindings": 0,
+                    "parent_repeater": "field_68c4f30a01001"
+                },
+                {
+                    "key": "field_68c4f30a01003",
+                    "label": "Description",
+                    "name": "description",
+                    "aria-label": "",
+                    "type": "text",
+                    "instructions": "Optional short note shown next to the link.",
+                    "required": 0,
+                    "conditional_logic": 0,
+                    "wrapper": {
+                        "width": "50",
+                        "class": "",
+                        "id": ""
+                    },
+                    "default_value": "",
+                    "maxlength": "",
+                    "allow_in_bindings": 1,
+                    "placeholder": "",
+                    "prepend": "",
+                    "append": "",
+                    "parent_repeater": "field_68c4f30a01001"
+                }
+            ]
+        },
+        {
             "key": "field_6782be3e8b862",
             "label": "Image 1",
             "name": "image_1",
@@ -1432,5 +1496,7 @@
     "description": "",
     "show_in_rest": 1,
     "display_title": "",
-    "modified": 1776710194
+    "allow_ai_access": false,
+    "ai_description": "",
+    "modified": 1778621656
 }

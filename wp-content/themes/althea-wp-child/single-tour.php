@@ -317,6 +317,41 @@ if (is_singular('tour') && !defined('WPSEO_VERSION')) {
                         <h2>About the Tour</h2>
                         <?php echo $about; ?>
 
+                        <?php
+                        // Related Links section. Hidden entirely when the ACF
+                        // repeater is empty or every row is missing a URL.
+                        $related_links_rows = get_field('related_links');
+                        $related_links_valid = array();
+                        if ( is_array( $related_links_rows ) ) {
+                            foreach ( $related_links_rows as $rl_row ) {
+                                $rl_link = isset( $rl_row['link'] ) ? $rl_row['link'] : null;
+                                if ( is_array( $rl_link ) && ! empty( $rl_link['url'] ) ) {
+                                    $related_links_valid[] = array(
+                                        'url'         => $rl_link['url'],
+                                        'title'       => ! empty( $rl_link['title'] ) ? $rl_link['title'] : $rl_link['url'],
+                                        'target'      => ! empty( $rl_link['target'] ) ? $rl_link['target'] : '',
+                                        'description' => isset( $rl_row['description'] ) ? $rl_row['description'] : '',
+                                    );
+                                }
+                            }
+                        }
+                        if ( ! empty( $related_links_valid ) ) : ?>
+                            <h2>Related Links</h2>
+                            <ul class="related-links-list">
+                                <?php foreach ( $related_links_valid as $rl ) :
+                                    $rl_target_attr = $rl['target'] ? ' target="' . esc_attr( $rl['target'] ) . '"' : '';
+                                    $rl_rel_attr    = ( $rl['target'] === '_blank' ) ? ' rel="noopener noreferrer"' : '';
+                                ?>
+                                    <li class="related-links-item">
+                                        <a href="<?php echo esc_url( $rl['url'] ); ?>"<?php echo $rl_target_attr . $rl_rel_attr; ?>><?php echo esc_html( $rl['title'] ); ?></a>
+                                        <?php if ( ! empty( $rl['description'] ) ) : ?>
+                                            <span class="related-links-description"> &mdash; <?php echo esc_html( $rl['description'] ); ?></span>
+                                        <?php endif; ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+
                         <?php if (!empty($package_image)) : ?>
                         <h2>How Much It Costs</h2>
                         <p class="small-text">You can choose any of the following packages:</p>
