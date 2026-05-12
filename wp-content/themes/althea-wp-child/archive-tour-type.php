@@ -1,5 +1,55 @@
 <?php get_header(); ?>
 
+<?php
+// =============================================================================
+// BST Filter Pre-Pass (archive)
+// -----------------------------------------------------------------------------
+// Walks every tour-type post in the main query and resolves its associated
+// tours-by-year data. We use this to (a) populate the "Filter by Year"
+// dropdown rendered in the breadcrumb/mobile filter blocks below and (b) avoid
+// calling bst_get_tours_by_year_for_tour_type() a second time inside the main
+// rendering loop.
+// =============================================================================
+
+$bst_selected_year = isset( $_GET['tour_year'] ) && $_GET['tour_year'] !== ''
+    ? (int) sanitize_text_field( wp_unslash( $_GET['tour_year'] ) )
+    : 0;
+
+$bst_archive_data    = array(); // [tour-type post_id => $tours_by_year]
+$bst_available_years = array();
+
+if ( have_posts() ) {
+    global $wp_query;
+    if ( $wp_query && ! empty( $wp_query->posts ) ) {
+        foreach ( $wp_query->posts as $bst_pp_post ) {
+            $bst_pp_type_code = get_field( 'type_code', $bst_pp_post->ID );
+            $bst_pp_tby       = ( $bst_pp_type_code && function_exists( 'bst_get_tours_by_year_for_tour_type' ) )
+                ? bst_get_tours_by_year_for_tour_type( $bst_pp_type_code->term_id )
+                : array();
+            if ( ! empty( $bst_pp_tby ) ) {
+                $bst_archive_data[ $bst_pp_post->ID ] = $bst_pp_tby;
+                foreach ( array_keys( $bst_pp_tby ) as $bst_y ) {
+                    $bst_y_int = (int) $bst_y;
+                    if ( $bst_y_int > 0 && ! in_array( $bst_y_int, $bst_available_years, true ) ) {
+                        $bst_available_years[] = $bst_y_int;
+                    }
+                }
+            }
+        }
+    }
+}
+
+sort( $bst_available_years );
+$bst_available_years = array_values( array_unique( $bst_available_years ) );
+
+if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years, true ) ) {
+    $bst_selected_year = 0;
+}
+
+$bst_show_years  = ! empty( $bst_available_years );
+$bst_show_filter = $bst_show_years; // no rating filter on this archive
+?>
+
 <div class="page-content">
     <div id="content" class="content">
 
@@ -20,7 +70,25 @@
                 <?php if (function_exists('bst_render_tour_archive_breadcrumbs')) {
                     bst_render_tour_archive_breadcrumbs('');
                 } ?>
-                
+
+                <!-- DESKTOP FILTERS - inline with breadcrumbs -->
+                <?php if ( $bst_show_filter ) : ?>
+                <div class="breadcrumb-filters">
+                    <form method="GET" class="breadcrumb-filter-form">
+                        <label class="breadcrumb-filter-label" style="text-transform: uppercase; font-weight: 600; color: #666; display: inline-block; font-size: 14px; letter-spacing: 1.0px; margin-right: 0;">Filter by Year</label>
+                        <select name="tour_year" id="tour_year_desktop" class="breadcrumb-filter-select" aria-label="Filter by year">
+                            <option value="">All Years</option>
+                            <?php foreach ( $bst_available_years as $bst_y ) : ?>
+                                <option value="<?php echo esc_attr( $bst_y ); ?>" <?php selected( $bst_selected_year, $bst_y ); ?>>
+                                    <?php echo esc_html( $bst_y ); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button type="submit" class="breadcrumb-filter-btn">Filter</button>
+                    </form>
+                </div>
+                <?php endif; ?>
+
                 <!-- Share Buttons -->
                 <div class="bst-share-buttons">
                     <span class="bst-share-label">Share:</span>
@@ -56,6 +124,43 @@
             </div>
         </div>
 
+        <!-- MOBILE FILTERS - separate section for mobile -->
+        <?php if ( $bst_show_filter ) : ?>
+        <div class="mobile-filters" style="display: none; padding: 15px 20px; background: #f8f8f8; border-bottom: 1px solid #ddd;">
+            <style>
+                @media (max-width: 768px) {
+                    .mobile-filters {
+                        display: block !important;
+                    }
+                    .bst-breadcrumb-section {
+                        display: none !important;
+                    }
+                }
+                @media (min-width: 769px) {
+                    .mobile-filters {
+                        display: none !important;
+                    }
+                }
+            </style>
+            <form method="GET" class="mobile-filter-form">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #666; font-size: 14px; text-transform: uppercase; letter-spacing: 1.0px;">Filter by Year</label>
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <select name="tour_year" id="tour_year_mobile" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px;" aria-label="Filter by year">
+                        <option value="">All Years</option>
+                        <?php foreach ( $bst_available_years as $bst_y ) : ?>
+                            <option value="<?php echo esc_attr( $bst_y ); ?>" <?php selected( $bst_selected_year, $bst_y ); ?>>
+                                <?php echo esc_html( $bst_y ); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div style="text-align: center;">
+                    <button type="submit" class="breadcrumb-filter-btn" style="display: inline-flex; padding: 10px 28px;">Filter</button>
+                </div>
+            </form>
+        </div>
+        <?php endif; ?>
+
         <div class="translucent-overlay">
             
             <!-- TOUR LISTINGS -->
@@ -84,9 +189,20 @@
                                 error_log('No type_code ACF field found for post ID: ' . $id);
                             }
 
-                            $tours_by_year = $type_code_field
-                                ? bst_get_tours_by_year_for_tour_type( $type_code_field->term_id )
+                            // Pull dates from the pre-pass cache so we don't
+                            // re-query tours/tour-dates inside the loop.
+                            $tours_by_year = isset( $bst_archive_data[ $id ] )
+                                ? $bst_archive_data[ $id ]
                                 : array();
+
+                            // Apply year filter: if a year is selected, restrict
+                            // to that year and skip cards with no dates in it.
+                            if ( $bst_selected_year ) {
+                                $tours_by_year = isset( $tours_by_year[ $bst_selected_year ] )
+                                    ? array( $bst_selected_year => $tours_by_year[ $bst_selected_year ] )
+                                    : array();
+                            }
+
                             if ( empty( $tours_by_year ) ) {
                                 continue;
                             }
@@ -105,11 +221,30 @@
                                     <?php
                                     foreach ($tours_by_year as $year => $tours) {
                                         echo '<div class="date-list">';
-                                        echo '<h3>' . esc_html($year) . ' Tour Dates</h3>';
+                                        // Drop the year from the header when a
+                                        // year filter is active since the year
+                                        // is implied.
+                                        $bst_date_header = $bst_selected_year
+                                            ? 'Tour Dates'
+                                            : $year . ' Tour Dates';
+                                        echo '<h3>' . esc_html( $bst_date_header ) . '</h3>';
                                         echo '<ul class="date-list date-list--smallblue">';
                                         foreach ($tours as $tour) {
+                                            // Strip a trailing "(YYYY)" from the
+                                            // individual tour title when the
+                                            // page is filtered to that year, so
+                                            // the year isn't repeated next to
+                                            // every row.
+                                            $tour_label = $tour['title'];
+                                            if ( $bst_selected_year ) {
+                                                $tour_label = preg_replace(
+                                                    '/\s*\(' . preg_quote( (string) $bst_selected_year, '/' ) . '\)\s*$/',
+                                                    '',
+                                                    $tour_label
+                                                );
+                                            }
                                             echo '<li>';
-                                            echo '<span class="date-content">' . esc_html($tour['date_text']) . ': <a href="' . esc_url($tour['permalink']) . '">' . esc_html($tour['title']) . '</a></span>';
+                                            echo '<span class="date-content">' . esc_html($tour['date_text']) . ': <a href="' . esc_url($tour['permalink']) . '">' . esc_html($tour_label) . '</a></span>';
                                             if (!empty($tour['badge_class'])) {
                                                 echo '<span class="badge ' . esc_attr($tour['badge_class']) . '">' . esc_html($tour['badge_text']) . '</span>';
                                             } elseif (!empty($tour['status_badge_text'])) {
@@ -122,7 +257,6 @@
                                     }
                                     ?>
                                 </div>
-                                <br/>
                                 <a href="<?php echo esc_url($taxonomy_url); ?>" class="info-button">INFO</a>
                             </div>
                         <?php

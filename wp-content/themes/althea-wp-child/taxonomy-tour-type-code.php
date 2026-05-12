@@ -629,7 +629,7 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
                                         $symbol = ($tour_currency === 'USD') ? '$' : '€';
                                         $formatted_price = $symbol . number_format($rounded_price, 0);
                                         
-                                        echo '<p class="tour-pricing-info" style="margin: 5px 0; font-size: 14px; font-weight: 600; color: #2c5aa0; text-align: center;">Prices starting at ' . $formatted_price . ' per person</p>';
+                                        echo '<p class="tour-pricing-info" style="margin: -8px 0 10px; font-size: 14px; font-weight: 600; color: #2c5aa0; text-align: center;">Prices starting at ' . $formatted_price . ' per person</p>';
                                     }
                                     ?>
                                     <div class="date-container">
@@ -653,7 +653,13 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
                                         if (!empty($tour_dates)) {
                                             foreach ($tour_dates as $year => $tours_in_year) {
                                                 echo '<div class="date-list">';
-                                                echo '<h3>' . $year . ' Tour Dates</h3>';
+                                                // Drop the year from the header
+                                                // when a year filter is active
+                                                // since the year is implied.
+                                                $bst_date_header = $bst_selected_year
+                                                    ? 'Tour Dates'
+                                                    : $year . ' Tour Dates';
+                                                echo '<h3>' . esc_html( $bst_date_header ) . '</h3>';
                                                 echo '<ul class="date-list date-list--smallblue">';
                                                 foreach ($tours_in_year as $tour_date) {
                                                     $current_date = date('Y-m-d');
@@ -700,7 +706,6 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
                                         }
                                         ?>
                                     </div>
-                                    <br/>
                                     <a href="<?php echo get_permalink($tour_post->ID); ?>" class="info-button">INFO</a>
                                 </div>
                                 <?php

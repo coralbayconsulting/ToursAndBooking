@@ -311,6 +311,14 @@ body.archive .top-banner-container {
     position: relative; 
 }
 
+/* Visible buffer between the date list and the INFO button inside listing
+   cards. Scoped so single-tour and other contexts using .date-container are
+   unaffected. */
+.tour-box .date-container,
+.tour-type-box .date-container {
+    padding-bottom: 8px;
+}
+
 .date-container a.book-button {
     padding: 4px 8px; 
     font-size: 12px; 
@@ -951,6 +959,12 @@ body.archive .top-banner-container {
     margin: 0.83em 0 10px 0; /* Added more bottom margin for spacing */
     color: var(--darkgray);
     text-align: center; /* Centered the heading */
+}
+
+/* Tighter spacing above date headers inside listing cards. */
+.tour-box .date-list h3,
+.tour-type-box .date-list h3 {
+    margin-top: 0.35em;
 }
 
 /* Ensure consistency across tour pages */
