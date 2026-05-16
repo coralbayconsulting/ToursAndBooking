@@ -322,7 +322,8 @@ body.archive .top-banner-container {
 /* Related Links section on single-tour pages.
    Matches the .left-column p typography so the list reads as body copy with
    the same indent (margin-left: 2%) used by every other left-column section. */
-.related-links-list {
+.related-links-list,
+.documents-list {
     list-style: none;
     padding-left: 0;
     margin: 0 0 1% 2%;
@@ -331,17 +332,20 @@ body.archive .top-banner-container {
     line-height: 1.4;
 }
 
-.related-links-item {
+.related-links-item,
+.documents-item {
     margin-bottom: 1%;
 }
 
-.related-links-item a {
+.related-links-item a,
+.documents-item a {
     color: var(--blue);
     text-decoration: underline;
     font-weight: 600;
 }
 
-.related-links-item a:hover {
+.related-links-item a:hover,
+.documents-item a:hover {
     color: var(--darkblue);
 }
 

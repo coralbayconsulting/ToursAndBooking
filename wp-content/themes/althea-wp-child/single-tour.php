@@ -318,11 +318,69 @@ if (is_singular('tour') && !defined('WPSEO_VERSION')) {
                         <?php echo $about; ?>
 
                         <?php
+                        // Stable sort comparator: orders by `sort_order` ascending
+                        // and uses original row index as a tiebreaker so ties keep
+                        // the order they appear in the ACF repeater.
+                        $bst_sort_by_order = function ( $a, $b ) {
+                            $diff = $a['sort_order'] - $b['sort_order'];
+                            return ( $diff !== 0 ) ? $diff : ( $a['_index'] - $b['_index'] );
+                        };
+
+                        // Documents section. Hidden entirely when the ACF repeater
+                        // is empty or every row is missing a file.
+                        $documents_rows  = function_exists( 'get_field' ) ? get_field( 'documents', $tourid ) : null;
+                        $documents_valid = array();
+                        if ( is_array( $documents_rows ) ) {
+                            $doc_index = 0;
+                            foreach ( $documents_rows as $doc_row ) {
+                                if ( ! is_array( $doc_row ) ) {
+                                    continue;
+                                }
+                                $doc_file = function_exists( 'bst_normalize_acf_file_field' )
+                                    ? bst_normalize_acf_file_field( isset( $doc_row['file'] ) ? $doc_row['file'] : null )
+                                    : null;
+                                if ( $doc_file && ! empty( $doc_file['url'] ) ) {
+                                    $doc_desc  = isset( $doc_row['description'] ) ? trim( (string) $doc_row['description'] ) : '';
+                                    if ( $doc_desc !== '' ) {
+                                        $doc_title = $doc_desc;
+                                    } elseif ( ! empty( $doc_file['title'] ) ) {
+                                        $doc_title = $doc_file['title'];
+                                    } elseif ( ! empty( $doc_file['filename'] ) ) {
+                                        $doc_title = $doc_file['filename'];
+                                    } else {
+                                        $doc_title = $doc_file['url'];
+                                    }
+                                    $documents_valid[] = array(
+                                        'url'        => $doc_file['url'],
+                                        'title'      => $doc_title,
+                                        'sort_order' => ( isset( $doc_row['sort_order'] ) && $doc_row['sort_order'] !== '' ) ? (int) $doc_row['sort_order'] : 9999,
+                                        '_index'     => $doc_index,
+                                    );
+                                }
+                                $doc_index++;
+                            }
+                            if ( ! empty( $documents_valid ) ) {
+                                usort( $documents_valid, $bst_sort_by_order );
+                            }
+                        }
+                        if ( ! empty( $documents_valid ) ) : ?>
+                            <h2>Documents</h2>
+                            <ul class="documents-list">
+                                <?php foreach ( $documents_valid as $doc ) : ?>
+                                    <li class="documents-item">
+                                        <a href="<?php echo esc_url( $doc['url'] ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html( $doc['title'] ); ?></a>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        <?php endif; ?>
+
+                        <?php
                         // Related Links section. Hidden entirely when the ACF
                         // repeater is empty or every row is missing a URL.
-                        $related_links_rows = get_field('related_links');
+                        $related_links_rows  = function_exists( 'get_field' ) ? get_field( 'related_links', $tourid ) : null;
                         $related_links_valid = array();
                         if ( is_array( $related_links_rows ) ) {
+                            $rl_index = 0;
                             foreach ( $related_links_rows as $rl_row ) {
                                 $rl_link = isset( $rl_row['link'] ) ? $rl_row['link'] : null;
                                 if ( is_array( $rl_link ) && ! empty( $rl_link['url'] ) ) {
@@ -331,8 +389,14 @@ if (is_singular('tour') && !defined('WPSEO_VERSION')) {
                                         'title'       => ! empty( $rl_link['title'] ) ? $rl_link['title'] : $rl_link['url'],
                                         'target'      => ! empty( $rl_link['target'] ) ? $rl_link['target'] : '',
                                         'description' => isset( $rl_row['description'] ) ? $rl_row['description'] : '',
+                                        'sort_order'  => ( isset( $rl_row['sort_order'] ) && $rl_row['sort_order'] !== '' ) ? (int) $rl_row['sort_order'] : 9999,
+                                        '_index'      => $rl_index,
                                     );
                                 }
+                                $rl_index++;
+                            }
+                            if ( ! empty( $related_links_valid ) ) {
+                                usort( $related_links_valid, $bst_sort_by_order );
                             }
                         }
                         if ( ! empty( $related_links_valid ) ) : ?>

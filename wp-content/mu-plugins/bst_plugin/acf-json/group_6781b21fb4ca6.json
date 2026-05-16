@@ -1060,6 +1060,98 @@
             "delay": 0
         },
         {
+            "key": "field_68d4f30b00001",
+            "label": "Documents",
+            "name": "documents",
+            "aria-label": "",
+            "type": "repeater",
+            "instructions": "Optional list of files (PDFs, etc.) shown on the tour page directly above the 'Related Links' section. If left empty, the section is hidden on the front end.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": {
+                "width": "",
+                "class": "",
+                "id": ""
+            },
+            "layout": "block",
+            "pagination": 0,
+            "min": 0,
+            "max": 0,
+            "collapsed": "",
+            "button_label": "Add Document",
+            "rows_per_page": 20,
+            "sub_fields": [
+                {
+                    "key": "field_68d4f30b00002",
+                    "label": "File",
+                    "name": "file",
+                    "aria-label": "",
+                    "type": "file",
+                    "instructions": "",
+                    "required": 1,
+                    "conditional_logic": 0,
+                    "wrapper": {
+                        "width": "40",
+                        "class": "",
+                        "id": ""
+                    },
+                    "return_format": "array",
+                    "library": "all",
+                    "min_size": "",
+                    "max_size": "",
+                    "mime_types": "",
+                    "allow_in_bindings": 0,
+                    "parent_repeater": "field_68d4f30b00001"
+                },
+                {
+                    "key": "field_68d4f30b00003",
+                    "label": "Description",
+                    "name": "description",
+                    "aria-label": "",
+                    "type": "text",
+                    "instructions": "Optional label\/description shown as the link text. Falls back to the file's title or filename if blank.",
+                    "required": 0,
+                    "conditional_logic": 0,
+                    "wrapper": {
+                        "width": "40",
+                        "class": "",
+                        "id": ""
+                    },
+                    "default_value": "",
+                    "maxlength": "",
+                    "allow_in_bindings": 1,
+                    "placeholder": "",
+                    "prepend": "",
+                    "append": "",
+                    "parent_repeater": "field_68d4f30b00001"
+                },
+                {
+                    "key": "field_68d4f30b00004",
+                    "label": "Sort Order",
+                    "name": "sort_order",
+                    "aria-label": "",
+                    "type": "number",
+                    "instructions": "Lower numbers appear first. Leave blank to push to the end.",
+                    "required": 0,
+                    "conditional_logic": 0,
+                    "wrapper": {
+                        "width": "20",
+                        "class": "",
+                        "id": ""
+                    },
+                    "default_value": "",
+                    "min": "",
+                    "max": "",
+                    "allow_in_bindings": 1,
+                    "placeholder": "",
+                    "step": "",
+                    "prepend": "",
+                    "append": "",
+                    "parent_repeater": "field_68d4f30b00001"
+                }
+            ]
+        },
+        {
             "key": "field_68c4f30a01001",
             "label": "Related Links",
             "name": "related_links",
@@ -1091,7 +1183,7 @@
                     "required": 1,
                     "conditional_logic": 0,
                     "wrapper": {
-                        "width": "50",
+                        "width": "40",
                         "class": "",
                         "id": ""
                     },
@@ -1109,7 +1201,7 @@
                     "required": 0,
                     "conditional_logic": 0,
                     "wrapper": {
-                        "width": "50",
+                        "width": "40",
                         "class": "",
                         "id": ""
                     },
@@ -1117,6 +1209,30 @@
                     "maxlength": "",
                     "allow_in_bindings": 1,
                     "placeholder": "",
+                    "prepend": "",
+                    "append": "",
+                    "parent_repeater": "field_68c4f30a01001"
+                },
+                {
+                    "key": "field_68c4f30a01004",
+                    "label": "Sort Order",
+                    "name": "sort_order",
+                    "aria-label": "",
+                    "type": "number",
+                    "instructions": "Lower numbers appear first. Leave blank to push to the end.",
+                    "required": 0,
+                    "conditional_logic": 0,
+                    "wrapper": {
+                        "width": "20",
+                        "class": "",
+                        "id": ""
+                    },
+                    "default_value": "",
+                    "min": "",
+                    "max": "",
+                    "allow_in_bindings": 1,
+                    "placeholder": "",
+                    "step": "",
                     "prepend": "",
                     "append": "",
                     "parent_repeater": "field_68c4f30a01001"
@@ -1498,5 +1614,5 @@
     "display_title": "",
     "allow_ai_access": false,
     "ai_description": "",
-    "modified": 1778621656
+    "modified": 1778718758
 }

@@ -128,6 +128,58 @@ function bst_get_tour_type_post_type_archive_display_title() {
 }
 
 /**
+ * Normalize an ACF file field value to url/title/filename (array return, ID, or URL).
+ *
+ * @param mixed $file ACF file sub-field value.
+ * @return array{url:string,title:string,filename:string}|null
+ */
+function bst_normalize_acf_file_field( $file ) {
+    if ( empty( $file ) ) {
+        return null;
+    }
+
+    if ( is_array( $file ) ) {
+        if ( ! empty( $file['url'] ) ) {
+            return array(
+                'url'      => $file['url'],
+                'title'    => ! empty( $file['title'] ) ? (string) $file['title'] : '',
+                'filename' => ! empty( $file['filename'] ) ? (string) $file['filename'] : '',
+            );
+        }
+        if ( ! empty( $file['ID'] ) ) {
+            $file = (int) $file['ID'];
+        }
+    }
+
+    if ( is_numeric( $file ) ) {
+        $attachment_id = (int) $file;
+        $url             = wp_get_attachment_url( $attachment_id );
+        if ( ! $url ) {
+            return null;
+        }
+        $attached = get_attached_file( $attachment_id );
+
+        return array(
+            'url'      => $url,
+            'title'    => get_the_title( $attachment_id ),
+            'filename' => $attached ? basename( $attached ) : '',
+        );
+    }
+
+    if ( is_string( $file ) && filter_var( $file, FILTER_VALIDATE_URL ) ) {
+        $path = wp_parse_url( $file, PHP_URL_PATH );
+
+        return array(
+            'url'      => $file,
+            'title'    => '',
+            'filename' => $path ? basename( $path ) : '',
+        );
+    }
+
+    return null;
+}
+
+/**
  * Browser/tab title string: heading + optional page + site (same layout as WP core defaults).
  *
  * @param string $heading Main title segment (banner H1 text).
