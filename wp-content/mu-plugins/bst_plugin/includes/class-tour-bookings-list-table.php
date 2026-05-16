@@ -363,7 +363,7 @@ class BST_Tour_Bookings_List_Table extends WP_List_Table {
      * Finalization ID column with link
      */
     public function column_finalization_id($item) {
-        if ($item->booking_status === 'Booked' && empty($item->finalization_entry_id) && $item->booking_method === 'Web') {
+        if ($item->booking_status === 'Booked' && empty($item->finalization_entry_id)) {
             return sprintf(
                 '<a href="%s" target="_blank">url</a>',
                 esc_url(bst_get_finalization_url($item->id))

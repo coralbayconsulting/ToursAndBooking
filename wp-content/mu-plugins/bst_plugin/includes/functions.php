@@ -309,6 +309,22 @@ function bst_tour_date_acf_date_meta_to_ymd( $raw ) {
 }
 
 /**
+ * First tour-date post ID from a booking's tour_date_id (may include pipe suffix).
+ *
+ * @param int|string $tour_date_id Booking tour_date_id column.
+ * @return int Tour-date post ID or 0.
+ */
+function bst_booking_tour_date_post_id( $tour_date_id ) {
+    $raw = trim( (string) $tour_date_id );
+    if ( '' === $raw ) {
+        return 0;
+    }
+    $parts = explode( '|', $raw );
+
+    return (int) trim( $parts[0] );
+}
+
+/**
  * Whether a tour date should appear on public schedule UIs.
  * Hides tour dates that start in calendar years before the current calendar year.
  *

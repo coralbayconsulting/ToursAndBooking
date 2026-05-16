@@ -4023,20 +4023,9 @@ class BST_Plugin {
         $reservations_count = $wpdb->get_var("SELECT COUNT(*) FROM $booking_table WHERE booking_status = 'Reserved' AND created_date < DATE_SUB(NOW(), INTERVAL 30 MINUTE)");
 
         // 7. Finalization needed - match exact dashboard criteria
-        $one_twenty_days_from_now = date('Y-m-d', strtotime('+120 days'));
-        $finalization_count = $wpdb->get_var($wpdb->prepare("
-            SELECT COUNT(*) FROM $booking_table b
-            LEFT JOIN {$wpdb->prefix}posts td ON b.tour_date_id = td.ID AND td.post_type = 'tour-date'
-            LEFT JOIN {$wpdb->prefix}postmeta td_meta ON td.ID = td_meta.post_id AND td_meta.meta_key = 'start_date'
-            WHERE b.booking_method = 'Web'
-            AND b.booking_status = 'Booked'
-            AND td_meta.meta_value IS NOT NULL
-            AND (
-                (LENGTH(td_meta.meta_value) = 8 AND STR_TO_DATE(td_meta.meta_value, '%%Y%%m%%d') <= %s AND STR_TO_DATE(td_meta.meta_value, '%%Y%%m%%d') >= CURDATE()) OR
-                (LENGTH(td_meta.meta_value) = 10 AND td_meta.meta_value <= %s AND td_meta.meta_value >= CURDATE())
-            )
-            AND (b.finalization_entry_id IS NULL OR b.finalization_entry_id = 0)
-        ", $one_twenty_days_from_now, $one_twenty_days_from_now));
+        $finalization_count = function_exists( 'bst_get_finalization_needed_bookings' )
+            ? count( bst_get_finalization_needed_bookings() )
+            : 0;
 
         // 8. Refunds due (negative balance OR pending refund payment)
         $refunds_due_count = $wpdb->get_var("

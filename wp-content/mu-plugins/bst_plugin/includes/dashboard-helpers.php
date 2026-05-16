@@ -11,6 +11,88 @@ if (!defined('ABSPATH')) {
 }
 
 /**
+ * Bookings that need finalization and whose tour departs within the sent window.
+ *
+ * Includes Web and Offline (paper/admin) bookings — finalization does not require a GF9 entry.
+ * Uses normalized tour-date parsing (Y-m-d, Ymd, m/d/Y) so departures are not dropped when
+ * ACF stores American-style dates.
+ *
+ * @return object[] Rows shaped for the dashboard finalization tile.
+ */
+function bst_get_finalization_needed_bookings() {
+    global $wpdb;
+
+    $booking_table           = $wpdb->prefix . 'bst_tour_booking';
+    $finalization_sent_days  = (int) get_option( 'bst_finalization_sent_days', 120 );
+    $finalization_sent_date  = date( 'Y-m-d', strtotime( '+' . $finalization_sent_days . ' days' ) );
+    $today                   = current_time( 'Y-m-d' );
+
+    $candidates = $wpdb->get_results(
+        "
+        SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name,
+               b.guest1_email, b.guest2_email,
+               CONCAT(b.guest1_first_name, ' ', b.guest1_last_name) AS guest1_name,
+               CONCAT(b.guest2_first_name, ' ', b.guest2_last_name) AS guest2_name,
+               b.finalization_email_sent, b.created_date, b.tour_date_id,
+               b.tour_id, b.tour_package_id,
+               b.balance_due, b.tour_currency, b.finalization_entry_id, b.booking_entry_id,
+               el.last_finalization_sent
+        FROM {$booking_table} b
+        LEFT JOIN (
+            SELECT booking_id, MAX(sent_date) AS last_finalization_sent
+            FROM {$wpdb->prefix}bst_email_log
+            WHERE email_type = 'finalization' AND sent_successfully = 1
+            GROUP BY booking_id
+        ) el ON b.id = el.booking_id
+        WHERE b.booking_status = 'Booked'
+        AND (b.finalization_entry_id IS NULL OR b.finalization_entry_id = 0 OR b.finalization_entry_id = '')
+        "
+    );
+
+    if ( empty( $candidates ) ) {
+        return array();
+    }
+
+    $finalization_needed = array();
+
+    foreach ( $candidates as $booking ) {
+        $tour_date_post_id = function_exists( 'bst_booking_tour_date_post_id' )
+            ? bst_booking_tour_date_post_id( $booking->tour_date_id )
+            : (int) trim( explode( '|', (string) $booking->tour_date_id )[0] );
+
+        if ( $tour_date_post_id <= 0 ) {
+            continue;
+        }
+
+        $start_raw = get_post_meta( $tour_date_post_id, 'start_date', true );
+        if ( ( '' === $start_raw || null === $start_raw ) && function_exists( 'get_field' ) ) {
+            $acf_start = get_field( 'start_date', $tour_date_post_id );
+            $start_raw = ( is_scalar( $acf_start ) && '' !== $acf_start ) ? (string) $acf_start : '';
+        }
+
+        $start_ymd = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+            ? bst_tour_date_acf_date_meta_to_ymd( $start_raw )
+            : '';
+
+        if ( '' === $start_ymd || $start_ymd < $today || $start_ymd > $finalization_sent_date ) {
+            continue;
+        }
+
+        $booking->start_date = $start_ymd;
+        $finalization_needed[] = $booking;
+    }
+
+    usort(
+        $finalization_needed,
+        static function ( $a, $b ) {
+            return strcmp( $a->start_date, $b->start_date );
+        }
+    );
+
+    return $finalization_needed;
+}
+
+/**
  * Return core booking metrics for dashboard tiles.
  *
  * @global wpdb $wpdb
@@ -72,21 +154,8 @@ function bst_get_dashboard_metrics() {
         AND created_date < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
     ");
 
-    // 7. Finalization needed (match existing criteria)
-    $one_twenty_days_from_now = date('Y-m-d', strtotime('+120 days'));
-    $finalization_count = (int) $wpdb->get_var($wpdb->prepare("
-        SELECT COUNT(*) FROM $booking_table b
-        LEFT JOIN {$wpdb->prefix}posts td ON b.tour_date_id = td.ID AND td.post_type = 'tour-date'
-        LEFT JOIN {$wpdb->prefix}postmeta td_meta ON td.ID = td_meta.post_id AND td_meta.meta_key = 'start_date'
-        WHERE b.booking_method = 'Web'
-        AND b.booking_status = 'Booked'
-        AND td_meta.meta_value IS NOT NULL
-        AND (
-            (LENGTH(td_meta.meta_value) = 8 AND STR_TO_DATE(td_meta.meta_value, '%%Y%%m%%d') <= %s AND STR_TO_DATE(td_meta.meta_value, '%%Y%%m%%d') >= CURDATE()) OR
-            (LENGTH(td_meta.meta_value) = 10 AND td_meta.meta_value <= %s AND td_meta.meta_value >= CURDATE())
-        )
-        AND (b.finalization_entry_id IS NULL OR b.finalization_entry_id = 0)
-    ", $one_twenty_days_from_now, $one_twenty_days_from_now));
+    // 7. Finalization needed (same rules as dashboard tile — robust date parsing)
+    $finalization_count = count( bst_get_finalization_needed_bookings() );
 
     // 8. Refunds due (negative balance OR pending refund payment)
     $refunds_due_count = (int) $wpdb->get_var("

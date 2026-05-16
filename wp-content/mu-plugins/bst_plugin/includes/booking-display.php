@@ -207,6 +207,142 @@ function bst_parse_balance_deadline($terms_text) {
 }
 
 /**
+ * Tour start date (Y-m-d) for a booking row.
+ *
+ * @param object $booking Booking row.
+ * @return string Y-m-d or empty.
+ */
+function bst_get_booking_tour_start_ymd( $booking ) {
+    if ( empty( $booking->tour_date_id ) ) {
+        return '';
+    }
+
+    $tour_date_post_id = function_exists( 'bst_booking_tour_date_post_id' )
+        ? bst_booking_tour_date_post_id( $booking->tour_date_id )
+        : (int) trim( explode( '|', (string) $booking->tour_date_id )[0] );
+
+    if ( $tour_date_post_id <= 0 ) {
+        return '';
+    }
+
+    $start_raw = get_post_meta( $tour_date_post_id, 'start_date', true );
+    if ( ( '' === $start_raw || null === $start_raw ) && function_exists( 'get_field' ) ) {
+        $acf_start = get_field( 'start_date', $tour_date_post_id );
+        $start_raw = ( is_scalar( $acf_start ) && '' !== $acf_start ) ? (string) $acf_start : '';
+    }
+
+    return function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+        ? bst_tour_date_acf_date_meta_to_ymd( $start_raw )
+        : '';
+}
+
+/**
+ * Balance payment deadline (before tour start) for a booking.
+ *
+ * Web bookings: parsed from GF registration terms (or 60 days on legacy form 4).
+ * Offline / paper (no booking GF entry): 3 months before tour — same rule used for
+ * projected finalization timing (~4-month outreach window, balance due at 3 months).
+ *
+ * @param object $booking Booking row.
+ * @return array{value:?int,unit:string} value + unit ('days' or 'months').
+ */
+function bst_get_balance_payment_deadline( $booking ) {
+    $offline_default = array(
+        'value' => 3,
+        'unit'  => 'months',
+    );
+
+    if ( empty( $booking ) ) {
+        return array( 'value' => null, 'unit' => '' );
+    }
+
+    $entry_id = ! empty( $booking->booking_entry_id ) ? $booking->booking_entry_id : ( $booking->finalization_entry_id ?? null );
+
+    if ( empty( $entry_id ) || ! class_exists( 'GFAPI' ) ) {
+        return $offline_default;
+    }
+
+    $entry = GFAPI::get_entry( $entry_id );
+    if ( ! $entry || is_wp_error( $entry ) ) {
+        return $offline_default;
+    }
+
+    $form_id = (int) $entry['form_id'];
+
+    if ( 4 === $form_id ) {
+        return array(
+            'value' => 60,
+            'unit'  => 'days',
+        );
+    }
+
+    $reg_terms_field     = GFAPI::get_field( $form_id, '36' );
+    $reg_terms_consented = rgar( $entry, '36.1' );
+    $reg_terms_text      = '';
+
+    if ( $reg_terms_field && $reg_terms_consented ) {
+        $reg_terms_text = $reg_terms_field->get_value_export( $entry, '36.3' );
+    }
+
+    if ( ! empty( $reg_terms_text ) ) {
+        $parsed = bst_parse_balance_deadline( $reg_terms_text );
+        if ( ! empty( $parsed['value'] ) ) {
+            return array(
+                'value' => (int) $parsed['value'],
+                'unit'  => $parsed['unit'],
+            );
+        }
+    }
+
+    return $offline_default;
+}
+
+/**
+ * Human-readable label for a payment deadline rule (e.g. "3 months", "60 days").
+ *
+ * @param array{value:?int,unit:string} $payment_deadline From bst_get_balance_payment_deadline().
+ * @return string
+ */
+function bst_format_payment_deadline_label( $payment_deadline ) {
+    if ( empty( $payment_deadline['value'] ) ) {
+        return '';
+    }
+
+    $unit = $payment_deadline['unit'] ?? '';
+    if ( 'months' === $unit ) {
+        return $payment_deadline['value'] . ' month' . ( 1 === (int) $payment_deadline['value'] ? '' : 's' );
+    }
+
+    return $payment_deadline['value'] . ' day' . ( 1 === (int) $payment_deadline['value'] ? '' : 's' );
+}
+
+/**
+ * Dashboard-style suffix: " (on YYYY-MM-DD - N months)".
+ *
+ * @param object     $booking Booking row.
+ * @param string|null $balance_due_date Optional precomputed Y-m-d.
+ * @return string
+ */
+function bst_format_balance_due_deadline_suffix( $booking, $balance_due_date = null ) {
+    if ( null === $balance_due_date && function_exists( 'bst_calculate_balance_due_date' ) ) {
+        $balance_due_date = bst_calculate_balance_due_date( $booking );
+    }
+
+    if ( empty( $balance_due_date ) || ! function_exists( 'bst_get_balance_payment_deadline' ) ) {
+        return '';
+    }
+
+    $payment_deadline = bst_get_balance_payment_deadline( $booking );
+    $deadline_label     = bst_format_payment_deadline_label( $payment_deadline );
+
+    if ( '' === $deadline_label ) {
+        return ' (due ' . $balance_due_date . ')';
+    }
+
+    return ' (on ' . $balance_due_date . ' - ' . $deadline_label . ')';
+}
+
+/**
  * Calculate balance due date for a booking
  * 
  * @param object $booking The booking object
@@ -216,63 +352,33 @@ function bst_calculate_balance_due_date($booking) {
     if (empty($booking)) {
         return '';
     }
-    
-    // Get the entry to access registration terms
-    $entry_id = !empty($booking->booking_entry_id) ? $booking->booking_entry_id : $booking->finalization_entry_id;
-    if (empty($entry_id)) {
+
+    $start_ymd = bst_get_booking_tour_start_ymd( $booking );
+    if ( '' === $start_ymd ) {
         return '';
     }
-    
-    $entry = GFAPI::get_entry($entry_id);
-    if (!$entry || is_wp_error($entry)) {
+
+    $payment_deadline = bst_get_balance_payment_deadline( $booking );
+    if ( empty( $payment_deadline['value'] ) ) {
         return '';
     }
-    
-    $form_id = intval($entry['form_id']);
-    
-    // Default for form 4 (legacy) - always use 60 days regardless of field 36 content
-    $payment_deadline = array('value' => null, 'unit' => null);
-    if ($form_id === 4) {
-        $payment_deadline = array('value' => 60, 'unit' => 'days');
+
+    $tour_start_ts = strtotime( $start_ymd . ' 12:00:00' );
+    if ( ! $tour_start_ts ) {
+        return '';
+    }
+
+    if ( 'months' === ( $payment_deadline['unit'] ?? '' ) ) {
+        $balance_due_ts = strtotime( '-' . (int) $payment_deadline['value'] . ' months', $tour_start_ts );
     } else {
-        // For other forms, try to parse from registration terms field
-        $reg_terms_field = GFAPI::get_field($form_id, '36');
-        $reg_terms_consented = rgar($entry, '36.1');
-        $reg_terms_text = '';
-        
-        if ($reg_terms_field && $reg_terms_consented) {
-            $reg_terms_text = $reg_terms_field->get_value_export($entry, '36.3');
-        }
-        
-        if (!empty($reg_terms_text)) {
-            $payment_deadline = bst_parse_balance_deadline($reg_terms_text);
-        }
+        $balance_due_ts = strtotime( '-' . (int) $payment_deadline['value'] . ' days', $tour_start_ts );
     }
-    
-    // Get tour start date from booking's tour_date_id
-    if (!empty($booking->tour_date_id) && $payment_deadline['value']) {
-        $tour_date_id = intval(explode('|', $booking->tour_date_id)[0]);
-        $start_date_str = get_field('start_date', $tour_date_id);
-        
-        if (!empty($start_date_str)) {
-            $tour_start_date = strtotime($start_date_str);
-            
-            if ($tour_start_date) {
-                // Calculate balance due date using calendar months or days
-                if ($payment_deadline['unit'] === 'months') {
-                    $balance_due_timestamp = strtotime('-' . $payment_deadline['value'] . ' months', $tour_start_date);
-                } else {
-                    $balance_due_timestamp = strtotime('-' . $payment_deadline['value'] . ' days', $tour_start_date);
-                }
-                
-                if ($balance_due_timestamp) {
-                    return date('Y-m-d', $balance_due_timestamp);
-                }
-            }
-        }
+
+    if ( ! $balance_due_ts ) {
+        return '';
     }
-    
-    return '';
+
+    return wp_date( 'Y-m-d', $balance_due_ts );
 }
 
 /**

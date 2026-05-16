@@ -238,41 +238,10 @@ $refunds_due = $wpdb->get_results("
     ORDER BY b.balance_due ASC
 ");
 
-// Get tours needing finalization (web bookings with "Booked" status that don't have finalization entry)
-$finalization_sent_days = get_option('bst_finalization_sent_days', 120);
-$finalization_sent_date = date('Y-m-d', strtotime('+' . $finalization_sent_days . ' days'));
-$finalization_needed = $wpdb->get_results($wpdb->prepare("
-    SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name, 
-           b.guest1_email, b.guest2_email,
-           CONCAT(b.guest1_first_name, ' ', b.guest1_last_name) as guest1_name,
-           CONCAT(b.guest2_first_name, ' ', b.guest2_last_name) as guest2_name,
-           td_meta.meta_value as start_date, b.finalization_email_sent, b.created_date, b.tour_date_id,
-           b.tour_id, b.tour_package_id,
-           b.balance_due, b.tour_currency, b.finalization_entry_id, b.booking_entry_id,
-           el.last_finalization_sent
-    FROM $booking_table b
-    LEFT JOIN {$wpdb->prefix}posts td ON b.tour_date_id = td.ID AND td.post_type = 'tour-date'
-    LEFT JOIN {$wpdb->prefix}postmeta td_meta ON td.ID = td_meta.post_id AND td_meta.meta_key = 'start_date'
-    LEFT JOIN (
-        SELECT booking_id, MAX(sent_date) as last_finalization_sent
-        FROM {$wpdb->prefix}bst_email_log
-        WHERE email_type = 'finalization' AND sent_successfully = 1
-        GROUP BY booking_id
-    ) el ON b.id = el.booking_id
-    WHERE b.booking_method = 'Web'
-    AND b.booking_status = 'Booked'
-    AND td_meta.meta_value IS NOT NULL
-    AND (
-        (LENGTH(td_meta.meta_value) = 8 AND STR_TO_DATE(td_meta.meta_value, '%%Y%%m%%d') <= %s AND STR_TO_DATE(td_meta.meta_value, '%%Y%%m%%d') >= CURDATE()) OR
-        (LENGTH(td_meta.meta_value) = 10 AND td_meta.meta_value <= %s AND td_meta.meta_value >= CURDATE())
-    )
-    AND (b.finalization_entry_id IS NULL OR b.finalization_entry_id = 0 OR b.finalization_entry_id = '')
-    ORDER BY 
-        CASE 
-            WHEN LENGTH(td_meta.meta_value) = 8 THEN STR_TO_DATE(td_meta.meta_value, '%%Y%%m%%d')
-            ELSE td_meta.meta_value
-        END ASC
-", $finalization_sent_date, $finalization_sent_date));
+// Get tours needing finalization (shared helper — handles all ACF date formats and pipe tour_date_id)
+$finalization_needed = function_exists( 'bst_get_finalization_needed_bookings' )
+    ? bst_get_finalization_needed_bookings()
+    : array();
 
 // For dashboard display, we only want to highlight the NEXT booking(s) in queue, not all convertible ones
 $convertible_waiting_list = [];
@@ -1081,9 +1050,11 @@ if (!empty($waiting_list_bookings)) {
                 // Group bookings by tour date ID (unique identifier)
                 $grouped_bookings = [];
                 foreach ($finalization_needed as $booking) {
-                    // Use tour_date_id as the key to prevent duplicates
-                    $key = $booking->tour_date_id;
-                    $tour_date = bst_dashboard_live_tour_date_text( $booking->tour_date_id );
+                    $tour_date_post_id = function_exists( 'bst_booking_tour_date_post_id' )
+                        ? bst_booking_tour_date_post_id( $booking->tour_date_id )
+                        : (int) $booking->tour_date_id;
+                    $key = $tour_date_post_id;
+                    $tour_date = bst_dashboard_live_tour_date_text( $tour_date_post_id );
                     if ( empty( $tour_date ) ) {
                         $tour_date = 'TBD';
                     }
@@ -1092,7 +1063,7 @@ if (!empty($waiting_list_bookings)) {
                             'tour_text' => bst_dashboard_live_tour_title( $booking->tour_id ),
                             'tour_date' => $tour_date,
                             'start_date' => $booking->start_date,
-                            'tour_date_id' => $booking->tour_date_id,
+                            'tour_date_id' => $tour_date_post_id,
                             'bookings' => []
                         ];
                     }
@@ -1107,7 +1078,7 @@ if (!empty($waiting_list_bookings)) {
                     // Include ALL booking methods (Web and offline/admin) since they still need finalization
                     $total_bookings = $wpdb->get_var($wpdb->prepare(
                         "SELECT COUNT(*) FROM {$wpdb->prefix}bst_tour_booking
-                        WHERE tour_date_id = %d
+                        WHERE CAST(NULLIF(TRIM(SUBSTRING_INDEX(CAST(tour_date_id AS CHAR), '|', 1)), '') AS UNSIGNED) = %d
                         AND (
                             booking_status = 'Booked'
                             OR (finalization_entry_id IS NOT NULL AND finalization_entry_id != 0 AND finalization_entry_id != '')
@@ -1196,40 +1167,10 @@ if (!empty($waiting_list_bookings)) {
                                     $balance_due = floatval($booking->balance_due ?? 0);
                                     $currency_symbol = bst_get_currency_symbol($booking->tour_currency ?? 'EUR');
                                     
-                                    // Calculate finalization due date using centralized helper function
-                                    $due_date_display = '';
-                                    if (function_exists('bst_calculate_balance_due_date')) {
-                                        $balance_due_date = bst_calculate_balance_due_date($booking);
-                                        if (!empty($balance_due_date) && !empty($booking->booking_entry_id)) {
-                                            $entry = GFAPI::get_entry($booking->booking_entry_id);
-                                            if ($entry && !is_wp_error($entry)) {
-                                                $form_id = intval($entry['form_id']);
-                                                $reg_terms_field = GFAPI::get_field($form_id, '36');
-                                                $reg_terms_consented = rgar($entry, '36.1');
-                                                $reg_terms_text = '';
-                                                
-                                                if ($reg_terms_field && $reg_terms_consented) {
-                                                    $reg_terms_text = $reg_terms_field->get_value_export($entry, '36.3');
-                                                }
-                                                
-                                                // Get payment deadline for display text
-                                                $payment_deadline = array('value' => null, 'unit' => null);
-                                                if ($form_id === 4) {
-                                                    $payment_deadline = array('value' => 60, 'unit' => 'days');
-                                                } elseif (!empty($reg_terms_text)) {
-                                                    $payment_deadline = bst_parse_balance_deadline($reg_terms_text);
-                                                }
-                                                
-                                                if ($payment_deadline['value']) {
-                                                    $deadline_days = ($payment_deadline['unit'] === 'months') 
-                                                        ? $payment_deadline['value'] . ' months' 
-                                                        : $payment_deadline['value'] . ' days';
-                                                    $due_date_display = ' (on ' . $balance_due_date . ' - ' . $deadline_days . ')';
-                                                }
-                                            }
-                                        }
-                                    }
-                                    
+                                    $due_date_display = function_exists( 'bst_format_balance_due_deadline_suffix' )
+                                        ? bst_format_balance_due_deadline_suffix( $booking )
+                                        : '';
+
                                     echo 'Balance due: ' . esc_html($currency_symbol . number_format($balance_due, 2)) . esc_html($due_date_display);
                                     ?>
                                 </div>
@@ -1246,7 +1187,7 @@ if (!empty($waiting_list_bookings)) {
                 <?php endforeach; ?>
             </div>
             <div class="dashboard-tile-footer">
-                <span style="color: #666; font-style: italic;">Web bookings requiring finalization email</span>
+                <span style="color: #666; font-style: italic;">Booked tours (web and offline) requiring finalization</span>
             </div>
         </div>
         <script>

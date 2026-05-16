@@ -221,6 +221,23 @@ function bst_add_shared_currency_javascript($form, $form_id = null) {
                 $(document).trigger('bst_currency_updated', [currency]);
             }
         };
+
+        <?php if ((int) $form_id === 10) : ?>
+        // Finalization form: apply booking currency on first paint (field 223 is prepopulated from DB).
+        function bstApplyInitialFormCurrency() {
+            var $currencyField = $('input[name="input_223"]');
+            var currency = $currencyField.length ? String($currencyField.val() || '').trim() : '';
+            if (currency && typeof window.bstUpdateCurrency === 'function') {
+                window.bstUpdateCurrency(currency);
+            }
+        }
+        bstApplyInitialFormCurrency();
+        $(document).on('gform_post_render', function(event, renderedFormId) {
+            if (parseInt(renderedFormId, 10) === 10) {
+                bstApplyInitialFormCurrency();
+            }
+        });
+        <?php endif; ?>
     });
     </script>
     <?php
@@ -571,22 +588,41 @@ function bst_force_form_currency_9($form) {
 // Global currency override for Forms 9 and 10 (both use field 223 for tour_currency)
 add_filter('gform_currency', 'bst_override_forms_currency', 10, 1);
 function bst_override_forms_currency($currency) {
+    $valid_currencies = array('EUR', 'USD', 'GBP', 'CAD', 'AUD');
+
     // Check field 223 (both forms use this for currency)
     if (!empty($_POST['input_223'])) {
         $value = sanitize_text_field($_POST['input_223']);
-        if (in_array($value, array('EUR', 'USD', 'GBP'))) {
+        if (in_array($value, $valid_currencies, true)) {
             return $value;
         }
     }
-    
+
     // Fallback: Check tour_currency parameter from JavaScript (initial form load)
     if (!empty($_POST['tour_currency'])) {
         $value = sanitize_text_field($_POST['tour_currency']);
-        if (in_array($value, array('EUR', 'USD', 'GBP'))) {
+        if (in_array($value, $valid_currencies, true)) {
             return $value;
         }
     }
-    
+
+    // Finalization (GET bid) and tour booking pages — POST is empty on first render
+    $form_id = null;
+    if (!empty($_POST['gform_submit'])) {
+        $form_id = (int) $_POST['gform_submit'];
+    } elseif (!empty($_GET['bid'])) {
+        $form_id = 10;
+    } elseif (is_singular('tour')) {
+        $form_id = 9;
+    }
+
+    if ($form_id === 9 || $form_id === 10) {
+        $tour_currency = bst_get_form_currency_from_sources($form_id);
+        if ($tour_currency && in_array($tour_currency, $valid_currencies, true)) {
+            return $tour_currency;
+        }
+    }
+
     return $currency;
 }
 
@@ -1883,6 +1919,15 @@ function bst_gf10_prepopulate_finalization_form($form) {
             // Add the booking ID as booking_update_id for form submission
             $source_data['booking_update_id'] = $tour_booking->id;
             
+            // Ensure tour currency is set (booking row or parent tour ACF) for GF amount fields
+            if (empty($source_data['tour_currency']) && !empty($tour_booking->tour_id)) {
+                $tour_currency_field = get_field('currency', $tour_booking->tour_id);
+                $valid_currencies    = array('USD', 'CAD', 'AUD', 'EUR', 'GBP', 'Other');
+                if (!empty($tour_currency_field) && in_array($tour_currency_field, $valid_currencies, true)) {
+                    $source_data['tour_currency'] = $tour_currency_field;
+                }
+            }
+
             // Add bank wire discount from settings
             $source_data['bank_wire_discount_perc'] = get_option('bst_bank_wire_discount', 2.5);
             
