@@ -158,12 +158,12 @@ function bst_show_notification_settings($user) {
                     </label><br>
                     
                     <label for="bst_context_bank_wire_pending">
-                        <input type="checkbox" 
-                               name="bst_notification_contexts[]" 
-                               id="bst_context_bank_wire_pending" 
-                               value="bank_wire_pending" 
+                        <input type="checkbox"
+                               name="bst_notification_contexts[]"
+                               id="bst_context_bank_wire_pending"
+                               value="bank_wire_pending"
                                <?php checked(in_array('bank_wire_pending', $notification_contexts)); ?> />
-                        <?php _e('Bank Transfer Pending for more than 3 days', 'bst-plugin'); ?>
+                        <?php _e('Pending Payments for more than 3 days', 'bst-plugin'); ?>
                     </label><br>
                     
                     <label for="bst_context_reservation_not_booked">

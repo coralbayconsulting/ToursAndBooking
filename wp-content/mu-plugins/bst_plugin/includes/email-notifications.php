@@ -218,7 +218,7 @@ function bst_format_digest_email($notifications, $user, $preferences) {
                                     echo '⏳ Waiting List Additions';
                                     break;
                                 case 'bank_wire_pending':
-                                    echo '💳 Bank Transfer Pending for more than 3 days';
+                                    echo '💳 Pending Payments for more than 3 days';
                                     break;
                                 case 'reservation_not_booked':
                                     echo '📅 Reservation not booked for more than 3 days';
@@ -297,7 +297,7 @@ function bst_send_immediate_notification($user_id, $notification_data) {
         'gf9_submission' => 'Booking a Tour on the Web',
         'gf10_finalization' => 'Finalizing a Booking on the Web',
         'waiting_list' => 'Waiting List Addition',
-        'bank_wire_pending' => 'Bank Transfer Pending for more than 3 days',
+        'bank_wire_pending' => 'Pending Payments for more than 3 days',
         'reservation_not_booked' => 'Reservation not booked for more than 3 days',
         'tour_finalization_needed' => 'Tour Finalization Needed'
     ];

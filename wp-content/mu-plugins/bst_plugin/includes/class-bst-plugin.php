@@ -4003,17 +4003,19 @@ class BST_Plugin {
         // 4. Payment failed
         $payment_failed_count = $wpdb->get_var("SELECT COUNT(*) FROM $booking_table WHERE booking_status = 'Payment Failed'");
 
-        // 5. Bank wire pending (candidate rows; matches templates/dashboard.php query)
-        $bank_wire_count = $wpdb->get_var("
-            SELECT COUNT(*) FROM $booking_table 
+        // 5. Pending payments (candidate rows; matches templates/dashboard.php query)
+        $pending_payments_count = $wpdb->get_var("
+            SELECT COUNT(*) FROM $booking_table
             WHERE (
                 booking_status = 'Pending' OR
+                -- Bank Wire: amount-based detection (manual receipt tracking)
                 (deposit_payment_method = 'Bank Wire' AND (deposit_payment_amount IS NULL OR deposit_payment_amount = 0)) OR
                 (balance_payment_method = 'Bank Wire' AND (balance_payment_amount IS NULL OR balance_payment_amount = 0)) OR
                 (additional_payment_method = 'Bank Wire' AND (additional_payment_amount IS NULL OR additional_payment_amount = 0)) OR
-                (deposit_payment_method = 'Bank Wire' AND deposit_payment_status IN ('Pending', 'Processing')) OR
-                (balance_payment_method = 'Bank Wire' AND balance_payment_status IN ('Pending', 'Processing')) OR
-                (additional_payment_method = 'Bank Wire' AND additional_payment_status IN ('Pending', 'Processing'))
+                -- Any payment method with a pending/processing status
+                (deposit_payment_method IS NOT NULL AND deposit_payment_method != '' AND deposit_payment_status IN ('Pending', 'Processing')) OR
+                (balance_payment_method IS NOT NULL AND balance_payment_method != '' AND balance_payment_status IN ('Pending', 'Processing')) OR
+                (additional_payment_method IS NOT NULL AND additional_payment_method != '' AND additional_payment_status IN ('Pending', 'Processing'))
             )
         ");
 
@@ -4070,7 +4072,7 @@ class BST_Plugin {
             array('🚨', __('Overbooked Tour Dates', 'bst-plugin'), count($overbooked_dates), '#dc3545', true),
             array('🚐', __('Oversold Limited Vehicles', 'bst-plugin'), $lv_oversold_count, '#c05621', true),
             array('💰', __('Refunds Due', 'bst-plugin'), $refunds_due_count, '#dc3232', true),
-            array('🏦', 'Bank Transfer Pending', $bank_wire_count, '#dc3232', true),
+            array('🏦', 'Pending Payments', $pending_payments_count, '#dc3232', true),
             array('⏳', 'Processing Payments', $processing_count, '#ff9500', true),
             array('❌', 'Payment Failed', $payment_failed_count, '#dc3232', true),
             array('📋', 'Finalization Needed', $finalization_count, '#8f2ce6', true),
