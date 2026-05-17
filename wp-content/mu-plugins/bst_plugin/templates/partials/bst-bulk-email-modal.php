@@ -38,8 +38,39 @@ function bstNormalizeBulkBooking(b) {
 		g2 = String(b.guest2_name).trim();
 	}
 	var email = (b.guest1_email || b.email || '').trim();
-	return { id: id, guest1_name: g1 || 'Guest', guest1_email: email, guest2_name: g2 };
+	var email2 = (b.guest2_email || '').trim();
+	return { id: id, guest1_name: g1 || 'Guest', guest1_email: email, guest2_name: g2, guest2_email: email2 };
 }
+
+window.bstGetBookingRecipientEmails = function(booking, includeAllParticipants) {
+	var g1 = (booking.guest1_email || '').trim();
+	var g2 = (booking.guest2_email || '').trim();
+	if (!includeAllParticipants) {
+		return g1 ? [g1] : [];
+	}
+	var emails = [];
+	if (g1) { emails.push(g1); }
+	if (g2 && !emails.some(function(e) { return e.toLowerCase() === g2.toLowerCase(); })) {
+		emails.push(g2);
+	}
+	return emails;
+};
+
+window.bstBuildBulkSendQueue = function(bookings) {
+	var includeAll = jQuery('#bulk-send-all-participants').is(':checked');
+	var queue = [];
+	bookings.forEach(function(booking) {
+		window.bstGetBookingRecipientEmails(booking, includeAll).forEach(function(email) {
+			queue.push({ booking: booking, email: email });
+		});
+	});
+	return queue;
+};
+
+window.bstFormatBulkRecipientEmails = function(booking) {
+	var includeAll = jQuery('#bulk-send-all-participants').is(':checked');
+	return window.bstGetBookingRecipientEmails(booking, includeAll).join(', ');
+};
 
 window.bstBulkEmailState = {
 	bookings: [],
@@ -72,6 +103,8 @@ window.openDashboardFinalizationEmailModal = function(tourDateId, tourName, book
 	jQuery('body').css('overflow', 'hidden');
 	window.loadBulkEmailTemplates();
 	jQuery('#bulk-email-subject').off('input.bstBulk').on('input.bstBulk', window.updateBulkSubjectCounter);
+	jQuery('#bulk-send-all-participants').prop('checked', false);
+	window.updateBulkParticipantOptionHint();
 };
 
 window.closeBulkEmailModal = function() {
@@ -85,6 +118,29 @@ window.closeBulkEmailModal = function() {
 	window.bstBulkEmailState.selectedBookings = [];
 	window.bstBulkEmailState.currentPreviewIndex = 0;
 	window.bstBulkEmailState.templateContent = '';
+	jQuery('#bulk-send-all-participants').prop('checked', false);
+};
+
+window.updateBulkParticipantOptionHint = function() {
+	var st = window.bstBulkEmailState;
+	var includeAll = jQuery('#bulk-send-all-participants').is(':checked');
+	var selected = window.getSelectedBookings();
+	var recipientCount = 0;
+	var withGuest2 = 0;
+	selected.forEach(function(booking) {
+		var emails = window.bstGetBookingRecipientEmails(booking, includeAll);
+		recipientCount += emails.length;
+		if ((booking.guest2_email || '').trim()) {
+			withGuest2++;
+		}
+	});
+	var hint = includeAll
+		? recipientCount + ' email(s) to ' + selected.length + ' booking(s) (all participants with an address)'
+		: recipientCount + ' email(s) to primary guest (Guest 1) per booking';
+	if (includeAll && withGuest2 < selected.length) {
+		hint += ' — ' + (selected.length - withGuest2) + ' booking(s) have no second guest email';
+	}
+	jQuery('#bulk-participant-option-hint').text(hint);
 };
 
 window.updateRecipientDisplay = function() {
@@ -98,6 +154,7 @@ window.updateRecipientDisplay = function() {
 	}
 	var btnText = selected === total ? 'Send to All' : 'Send to Selected';
 	jQuery('#bulk-send-btn-text').text(btnText);
+	window.updateBulkParticipantOptionHint();
 };
 
 window.openRecipientSelector = function() {
@@ -107,11 +164,19 @@ window.openRecipientSelector = function() {
 		var bookingId = parseInt(booking.id, 10);
 		var isChecked = st.selectedBookings.indexOf(bookingId) !== -1 ? 'checked' : '';
 		var guestName = booking.guest1_name + (booking.guest2_name ? ' & ' + booking.guest2_name : '');
-		var guestEmail = booking.guest1_email;
+		var emailParts = [];
+		var g1Email = (booking.guest1_email || '').trim();
+		var g2Email = (booking.guest2_email || '').trim();
+		if (g1Email) { emailParts.push(g1Email); }
+		if (g2Email && !emailParts.some(function(e) { return e.toLowerCase() === g2Email.toLowerCase(); })) {
+			emailParts.push(g2Email);
+		}
+		var guestEmailDisplay = emailParts.join(', ');
 		html += '<label style="display: flex; align-items: center; gap: 8px; padding: 10px; cursor: pointer; border: 1px solid #ddd; border-radius: 4px; background: white; transition: background 0.2s;" onmouseover="this.style.background=\'#f9f9f9\'" onmouseout="this.style.background=\'white\'">';
 		html += '<input type="checkbox" class="recipient-checkbox" value="' + bookingId + '" ' + isChecked + ' onchange="window.updateRecipientSelectionCount()" style="cursor: pointer;" />';
 		html += '<div style="flex: 1;"><div style="font-weight: 600;">' + jQuery('<div/>').text(guestName).html() + '</div>';
-		html += '<div style="font-size: 12px; color: #666;">' + jQuery('<div/>').text(guestEmail).html() + '</div></div></label>';
+		html += '<div style="font-size: 12px; color: #666;">' + jQuery('<div/>').text(guestEmailDisplay).html() + '</div>';
+		html += '</div></label>';
 	});
 	jQuery('#recipient-list').html(html);
 	window.updateRecipientSelectionCount();
@@ -260,7 +325,7 @@ window.updateBulkPreview = function() {
 	if (!content) {
 		jQuery('#bulk-preview-content').html('<p style="color: #d63638;">No template content. Please select a template in the Compose tab.</p>');
 		jQuery('#bulk-preview-subject').text(subject || '(No subject)');
-		jQuery('#bulk-preview-to').text(currentBooking.guest1_email);
+		jQuery('#bulk-preview-to').text(window.bstFormatBulkRecipientEmails(currentBooking));
 		return;
 	}
 	var cc = jQuery('#bulk-email-cc').val();
@@ -279,7 +344,7 @@ window.updateBulkPreview = function() {
 			if (response.success && response.data) {
 				jQuery('#bulk-preview-content').html(response.data.content);
 				jQuery('#bulk-preview-subject').text(response.data.subject || subject);
-				jQuery('#bulk-preview-to').text(currentBooking.guest1_email);
+				jQuery('#bulk-preview-to').text(window.bstFormatBulkRecipientEmails(currentBooking));
 				if (response.data.cc && response.data.cc.trim() !== '') {
 					if (!jQuery('#bulk-preview-cc-wrapper').length) {
 						jQuery('#bulk-preview-to').parent().after('<div id="bulk-preview-cc-wrapper" style="margin-bottom: 8px;"><strong>CC:</strong> <span id="bulk-preview-cc"></span></div>');
@@ -412,9 +477,20 @@ window.sendBulkEmailToAll = function() {
 		alert('Please select at least one recipient.');
 		return;
 	}
-	var confirmMsg = selectedBookings.length === st.bookings.length
-		? 'Send email to all ' + selectedBookings.length + ' booking(s)?\n\nSubject: ' + subject
-		: 'Send email to ' + selectedBookings.length + ' of ' + st.bookings.length + ' booking(s)?\n\nSubject: ' + subject;
+	var sendQueue = window.bstBuildBulkSendQueue(selectedBookings);
+	if (sendQueue.length === 0) {
+		alert('No email addresses found for the selected bookings.');
+		return;
+	}
+	var includeAll = jQuery('#bulk-send-all-participants').is(':checked');
+	var confirmMsg;
+	if (includeAll && sendQueue.length > selectedBookings.length) {
+		confirmMsg = 'Send ' + sendQueue.length + ' email(s) to all participants with an address across ' + selectedBookings.length + ' booking(s)?\n\nSubject: ' + subject;
+	} else if (selectedBookings.length === st.bookings.length) {
+		confirmMsg = 'Send email to all ' + sendQueue.length + ' recipient(s) (' + selectedBookings.length + ' booking(s))?\n\nSubject: ' + subject;
+	} else {
+		confirmMsg = 'Send email to ' + sendQueue.length + ' recipient(s) (' + selectedBookings.length + ' of ' + st.bookings.length + ' booking(s))?\n\nSubject: ' + subject;
+	}
 	if (!confirm(confirmMsg)) { return; }
 	var selectedTemplate = jQuery('#bulk-template-select').find('option:selected');
 	var emailType = selectedTemplate.data('type') || 'Ad Hoc';
@@ -431,14 +507,14 @@ window.sendBulkEmailToAll = function() {
 			email_subject: subject,
 			cc_emails: cc,
 			tour_date_id: st.tourDateId || '',
-			total_emails: selectedBookings.length,
+			total_emails: sendQueue.length,
 			is_test: 0,
 			notes: '',
 			nonce: bstBulkFinalizationNonce
 		},
 		success: function(response) {
 			if (response.success && response.data.batch_id) {
-				window.sendBulkEmailsWithBatch(response.data.batch_id, selectedBookings, subject, cc, content, emailType);
+				window.sendBulkEmailsWithBatch(response.data.batch_id, sendQueue, subject, cc, content, emailType);
 			} else {
 				alert('Failed to create email batch');
 				jQuery('#bulk-send-test-btn, #bulk-send-all-btn').prop('disabled', false);
@@ -453,17 +529,19 @@ window.sendBulkEmailToAll = function() {
 	});
 };
 
-window.sendBulkEmailsWithBatch = function(batchId, bookings, subject, cc, content, emailType) {
-	jQuery('#bulk-send-status').text('Sending 0 of ' + bookings.length + '...').css('color', '#666');
+window.sendBulkEmailsWithBatch = function(batchId, sendQueue, subject, cc, content, emailType) {
+	jQuery('#bulk-send-status').text('Sending 0 of ' + sendQueue.length + '...').css('color', '#666');
 	var successCount = 0;
 	var errorCount = 0;
 	var failedBookings = [];
 	var currentIndex = 0;
-	function guestLabel(b) {
-		return b.guest1_name + (b.guest2_name ? ' & ' + b.guest2_name : '');
+	function queueItemLabel(item) {
+		var b = item.booking;
+		var name = b.guest1_name + (b.guest2_name ? ' & ' + b.guest2_name : '');
+		return name + ' (' + item.email + ')';
 	}
 	function sendNext() {
-		if (currentIndex >= bookings.length) {
+		if (currentIndex >= sendQueue.length) {
 			jQuery.ajax({
 				url: typeof ajaxurl !== 'undefined' ? ajaxurl : '<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>',
 				method: 'POST',
@@ -487,15 +565,16 @@ window.sendBulkEmailsWithBatch = function(batchId, bookings, subject, cc, conten
 			});
 			return;
 		}
-		var booking = bookings[currentIndex];
-		jQuery('#bulk-send-status').text('Sending ' + (currentIndex + 1) + ' of ' + bookings.length + '...').css('color', '#666');
+		var item = sendQueue[currentIndex];
+		var booking = item.booking;
+		jQuery('#bulk-send-status').text('Sending ' + (currentIndex + 1) + ' of ' + sendQueue.length + '...').css('color', '#666');
 		jQuery.ajax({
 			url: typeof ajaxurl !== 'undefined' ? ajaxurl : '<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>',
 			method: 'POST',
 			data: {
 				action: 'bst_send_adhoc_email_compose',
 				booking_id: booking.id,
-				email_to: booking.guest1_email,
+				email_to: item.email,
 				email_cc: cc,
 				subject: subject,
 				message: content,
@@ -508,14 +587,14 @@ window.sendBulkEmailsWithBatch = function(batchId, bookings, subject, cc, conten
 					successCount++;
 				} else {
 					errorCount++;
-					failedBookings.push(guestLabel(booking));
+					failedBookings.push(queueItemLabel(item));
 				}
 				currentIndex++;
 				sendNext();
 			},
 			error: function() {
 				errorCount++;
-				failedBookings.push(guestLabel(booking));
+				failedBookings.push(queueItemLabel(item));
 				currentIndex++;
 				sendNext();
 			}
@@ -563,6 +642,14 @@ window.updateBulkSubjectCounter = function() {
 							<button type="button" onclick="openRecipientSelector()" class="button" style="white-space: nowrap;">
 								<i class="fas fa-user-check"></i> <?php esc_html_e( 'Select Recipients...', 'bst-plugin' ); ?>
 							</button>
+						</div>
+						<label style="text-align: right; padding-top: 8px; grid-column: 1;">&nbsp;</label>
+						<div style="max-width: 700px;">
+							<label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 13px;">
+								<input type="checkbox" id="bulk-send-all-participants" onchange="window.updateBulkParticipantOptionHint(); if (jQuery('#bulk-preview-tab').is(':visible')) { window.updateBulkPreview(); }" style="margin-top: 3px;" />
+								<span><?php esc_html_e( 'Send to all participants with an email address (Guest 1 and Guest 2)', 'bst-plugin' ); ?></span>
+							</label>
+							<div id="bulk-participant-option-hint" style="font-size: 12px; color: #666; margin-top: 6px; margin-left: 24px;"></div>
 						</div>
 						<label style="text-align: right; padding-top: 8px;">CC:</label>
 						<input type="email" id="bulk-email-cc" placeholder="<?php esc_attr_e( 'Optional', 'bst-plugin' ); ?>" style="width: 100%; max-width: 500px; padding: 8px;" />

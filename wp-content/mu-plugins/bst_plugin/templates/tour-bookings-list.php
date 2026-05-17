@@ -1927,10 +1927,16 @@ var pageBookingsData = [];
     $bookings_for_js = array();
     foreach ($filtered_bookings as $booking) {
         $bookings_for_js[] = array(
-            'id' => (int)$booking->id,
-            'name' => trim(($booking->guest1_first_name ?? '') . ' ' . ($booking->guest1_last_name ?? '')),
+            'id' => (int) $booking->id,
+            'guest1_first_name' => $booking->guest1_first_name ?? '',
+            'guest1_last_name' => $booking->guest1_last_name ?? '',
+            'guest1_email' => $booking->guest1_email ?? '',
+            'guest2_first_name' => $booking->guest2_first_name ?? '',
+            'guest2_last_name' => $booking->guest2_last_name ?? '',
+            'guest2_email' => $booking->guest2_email ?? '',
+            'name' => trim( ( $booking->guest1_first_name ?? '' ) . ' ' . ( $booking->guest1_last_name ?? '' ) ),
             'email' => $booking->guest1_email ?? '',
-            'booking_status' => $booking->booking_status ?? ''
+            'booking_status' => $booking->booking_status ?? '',
         );
     }
 ?>
