@@ -236,6 +236,24 @@ $current_time = time();
         </div>
     </div>
 
+    <?php if ( function_exists( 'bst_seo_migration_tools_section' ) ) : ?>
+    <div class="postbox bst-tools-postbox">
+        <h2 class="hndle" style="padding:12px 16px;">SEO Migration</h2>
+        <div class="inside">
+            <?php bst_seo_migration_tools_section(); ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if ( function_exists( 'bst_llms_txt_tools_section' ) ) : ?>
+    <div class="postbox bst-tools-postbox">
+        <h2 class="hndle" style="padding:12px 16px;">llms.txt</h2>
+        <div class="inside">
+            <?php bst_llms_txt_tools_section(); ?>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div class="postbox bst-tools-postbox">
         <h2 class="hndle" style="padding:12px 16px;">Commissions</h2>
         <div class="inside">

@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "PowerShell(Get-ChildItem -Path 'c:\\\\Users\\\\wayne\\\\Local Sites\\\\bluestradatours-development\\\\app\\\\public\\\\wp-content\\\\mu-plugins' -Recurse -File | ForEach-Object { $_.FullName })",
+      "WebFetch(domain:www.bluestradatours.com)",
+      "Bash(cat)",
+      "Bash(chmod +x /tmp/check_links.sh)",
+      "Bash(/tmp/check_links.sh)",
+      "Bash(chmod +x /tmp/check_links_verbose.sh)",
+      "Bash(/tmp/check_links_verbose.sh)"
     ]
   }
 }

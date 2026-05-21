@@ -686,8 +686,8 @@ add_filter('wpseo_pre_analysis_post_content', 'bst_wpseo_pre_analysis_post_conte
 
 // Add SEO meta descriptions for tour pages
 function add_tour_seo_meta() {
-    // Yoast already outputs description + Open Graph; duplicating tags hurts SEO/social parsers.
-    if (defined('WPSEO_VERSION')) {
+    // seo-head.php (BST plugin) handles this when Yoast is not active.
+    if (defined('WPSEO_VERSION') || function_exists('bst_seo_head_output')) {
         return;
     }
     if (is_singular('tour')) {
@@ -758,4 +758,15 @@ function enqueue_custom_tooltip_script() {
 }
 add_action('wp_enqueue_scripts', 'enqueue_custom_tooltip_script');
 
+/**
+ * Override Yoast og:type from 'article' to 'product' on single tour pages.
+ */
+function bst_yoast_opengraph_type_for_tours( $type, $presentation = null ) {
+    unset( $presentation );
+    if ( is_singular( 'tour' ) ) {
+        return 'product';
+    }
+    return $type;
+}
+add_filter( 'wpseo_opengraph_type', 'bst_yoast_opengraph_type_for_tours', 10, 2 );
 

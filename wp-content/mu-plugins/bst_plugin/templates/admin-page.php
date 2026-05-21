@@ -11,7 +11,13 @@
         echo '<table class="form-table">';
         do_settings_fields('bst_settings_page', 'bst_gmail_section');
         echo '</table>';
-        
+
+        echo '<h2>SEO &amp; Schema</h2>';
+        echo '<p class="description" style="margin-bottom:10px;">Controls the Organization schema output on the homepage and social sharing metadata. Individual tour and tour-type SEO overrides are set on each post using the SEO fields in the editor.</p>';
+        echo '<table class="form-table">';
+        do_settings_fields('bst_settings_page', 'bst_seo_section');
+        echo '</table>';
+
         ?>
         <h2>Package Settings</h2>
         <table class="form-table">

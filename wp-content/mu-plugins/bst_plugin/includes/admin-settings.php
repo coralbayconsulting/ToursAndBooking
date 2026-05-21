@@ -41,6 +41,10 @@ function bst_register_settings() {
     register_setting('bst_settings_group', 'bst_gmail_matched_label', array('default' => 'BST-Matched'));
     register_setting('bst_settings_group', 'bst_gmail_unmatched_label', array('default' => 'BST-Unmatched'));
     
+    // SEO settings
+    register_setting('bst_settings_group', 'bst_organization_description');
+    register_setting('bst_settings_group', 'bst_organization_social_urls');
+
     // Register package settings
     for ($i = 1; $i <= 5; $i++) {
         register_setting('bst_settings_group', 'bst_package_' . $i . '_name');
@@ -145,6 +149,29 @@ function bst_register_settings() {
     );
 
     add_settings_section(
+        'bst_seo_section',
+        'SEO &amp; Schema',
+        'bst_seo_section_callback',
+        'bst_settings_page'
+    );
+
+    add_settings_field(
+        'bst_organization_description',
+        'Organization Description',
+        'bst_organization_description_callback',
+        'bst_settings_page',
+        'bst_seo_section'
+    );
+
+    add_settings_field(
+        'bst_organization_social_urls',
+        'Social Profile URLs',
+        'bst_organization_social_urls_callback',
+        'bst_settings_page',
+        'bst_seo_section'
+    );
+
+    add_settings_section(
         'bst_deployment_section',
         'Deployment Tools',
         'bst_deployment_section_callback',
@@ -204,7 +231,7 @@ function bst_register_settings() {
         'Our Tours archive page title (H1 & browser tab)',
         'bst_ptarchive_tour_type_page_title_callback',
         'bst_settings_page',
-        'bst_settings_section'
+        'bst_seo_section'
     );
 
     add_settings_field(
@@ -212,7 +239,7 @@ function bst_register_settings() {
         'Our Tours archive meta description',
         'bst_ptarchive_tour_type_meta_description_callback',
         'bst_settings_page',
-        'bst_settings_section'
+        'bst_seo_section'
     );
 
     add_settings_field(
@@ -408,7 +435,7 @@ function bst_banner_image_callback() {
 function bst_ptarchive_tour_type_page_title_callback() {
     $val = get_option('bst_ptarchive_tour_type_page_title', '');
     echo '<input type="text" id="bst_ptarchive_tour_type_page_title" name="bst_ptarchive_tour_type_page_title" value="' . esc_attr($val) . '" style="width: 100%; max-width: 560px;" maxlength="120" />';
-    echo '<p class="description">Shown as the main heading on <code>/tour-types/</code> and as the first part of the page title (site name is added automatically). Leave empty to use the default <strong>Our Tours</strong>. Yoast does not provide a per-page SEO box for this archive URL.</p>';
+    echo '<p class="description">Shown as the main heading on <code>/tour-types/</code> and as the first part of the page title (site name is added automatically). Leave empty to use the default <strong>Our Tours</strong>.</p>';
 }
 
 function bst_ptarchive_tour_type_meta_description_callback() {
@@ -1281,6 +1308,22 @@ function bst_send_twilio_whatsapp($to, $message, $account_sid = null, $auth_toke
         $error_code = isset($response_data['code']) ? $response_data['code'] : $response_code;
         return array('success' => false, 'error' => "Twilio WhatsApp error ({$error_code}): {$error_message}");
     }
+}
+
+function bst_seo_section_callback() {
+    echo '<p>Controls the Organization schema output on the homepage and social sharing metadata. Individual tour and tour-type SEO overrides are set on each post using the SEO fields in the editor.</p>';
+}
+
+function bst_organization_description_callback() {
+    $val = get_option( 'bst_organization_description', '' );
+    echo '<textarea id="bst_organization_description" name="bst_organization_description" rows="3" style="width:100%;max-width:560px;" maxlength="300">' . esc_textarea( $val ) . '</textarea>';
+    echo '<p class="description">One or two sentences describing the business for the Organization schema on the homepage. Falls back to your WordPress tagline (<em>' . esc_html( get_bloginfo( 'description' ) ) . '</em>) if left empty.</p>';
+}
+
+function bst_organization_social_urls_callback() {
+    $val = get_option( 'bst_organization_social_urls', '' );
+    echo '<textarea id="bst_organization_social_urls" name="bst_organization_social_urls" rows="6" style="width:100%;max-width:560px;" placeholder="https://www.facebook.com/yourpage&#10;https://www.instagram.com/yourhandle&#10;https://www.youtube.com/@yourchannel">' . esc_textarea( $val ) . '</textarea>';
+    echo '<p class="description">One URL per line. These are added as <code>sameAs</code> on the Organization schema (homepage) so Google and AI crawlers can associate your social profiles with your brand. Include Facebook, Instagram, YouTube, LinkedIn, X/Twitter, TripAdvisor, etc.</p>';
 }
 
 function bst_release_data_cleanup_callback() {
