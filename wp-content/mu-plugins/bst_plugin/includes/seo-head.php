@@ -67,11 +67,6 @@ function bst_seo_head_output() {
 	if ( ! empty( $data['image'] ) ) {
 		$og_image = $data['image'][0] === '/' ? home_url( $data['image'] ) : $data['image'];
 		echo '<meta property="og:image" content="' . esc_url( $og_image ) . '">' . "\n";
-		$dims = bst_seo_get_image_dimensions( $og_image );
-		if ( $dims ) {
-			echo '<meta property="og:image:width" content="' . esc_attr( $dims[0] ) . '">' . "\n";
-			echo '<meta property="og:image:height" content="' . esc_attr( $dims[1] ) . '">' . "\n";
-		}
 		echo '<meta property="og:image:alt" content="' . esc_attr( $data['title'] ?? '' ) . '">' . "\n";
 	}
 
@@ -294,24 +289,6 @@ function bst_seo_clean_field( $value ) {
 	return strpos( (string) $value, '%%' ) !== false ? '' : trim( (string) $value );
 }
 
-function bst_seo_get_image_dimensions( $url ) {
-	if ( ! $url ) {
-		return null;
-	}
-	// attachment_url_to_postid() requires an absolute URL with a scheme.
-	if ( $url[0] === '/' ) {
-		$url = home_url( $url );
-	}
-	$attachment_id = attachment_url_to_postid( $url );
-	if ( ! $attachment_id ) {
-		return null;
-	}
-	$meta = wp_get_attachment_metadata( $attachment_id );
-	if ( ! empty( $meta['width'] ) && ! empty( $meta['height'] ) ) {
-		return array( (int) $meta['width'], (int) $meta['height'] );
-	}
-	return null;
-}
 
 function bst_seo_trim_description( $text, $max = 155 ) {
 	$text = trim( preg_replace( '/\s+/', ' ', (string) $text ) );
