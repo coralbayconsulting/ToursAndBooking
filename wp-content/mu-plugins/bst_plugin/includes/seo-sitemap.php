@@ -52,7 +52,7 @@ function bst_sitemap_handle_request() {
 // ---- Index ----
 
 function bst_sitemap_output_index() {
-	$types = array( 'tours', 'tour-types', 'taxonomy', 'pages' );
+	$types = array( 'tours', 'tour-types', 'taxonomy', 'pages', 'blog' );
 	echo '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
 	echo '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
 	foreach ( $types as $type ) {
@@ -84,6 +84,9 @@ function bst_sitemap_output_sub( $type ) {
 			break;
 		case 'pages':
 			bst_sitemap_urls_for_post_type( 'page', 'monthly', '0.5', '' );
+			break;
+		case 'blog':
+			bst_sitemap_urls_for_post_type( 'post', 'monthly', '0.4', '' );
 			break;
 	}
 

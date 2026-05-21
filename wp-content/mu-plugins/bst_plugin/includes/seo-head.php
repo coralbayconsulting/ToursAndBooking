@@ -65,8 +65,9 @@ function bst_seo_head_output() {
 	echo '<meta property="og:type" content="' . esc_attr( $og_type ) . '">' . "\n";
 
 	if ( ! empty( $data['image'] ) ) {
-		echo '<meta property="og:image" content="' . esc_url( $data['image'] ) . '">' . "\n";
-		$dims = bst_seo_get_image_dimensions( $data['image'] );
+		$og_image = $data['image'][0] === '/' ? home_url( $data['image'] ) : $data['image'];
+		echo '<meta property="og:image" content="' . esc_url( $og_image ) . '">' . "\n";
+		$dims = bst_seo_get_image_dimensions( $og_image );
 		if ( $dims ) {
 			echo '<meta property="og:image:width" content="' . esc_attr( $dims[0] ) . '">' . "\n";
 			echo '<meta property="og:image:height" content="' . esc_attr( $dims[1] ) . '">' . "\n";
@@ -83,7 +84,7 @@ function bst_seo_head_output() {
 		echo '<meta name="twitter:description" content="' . esc_attr( $data['description'] ) . '">' . "\n";
 	}
 	if ( ! empty( $data['image'] ) ) {
-		echo '<meta name="twitter:image" content="' . esc_url( $data['image'] ) . '">' . "\n";
+		echo '<meta name="twitter:image" content="' . esc_url( $og_image ) . '">' . "\n";
 	}
 }
 
@@ -138,8 +139,8 @@ function bst_seo_resolve_head_data() {
 
 function bst_seo_data_for_tour( $post_id, $site_name, $sep ) {
 	$post_title = get_the_title( $post_id );
-	$seo_title  = trim( (string) get_field( 'bst_seo_title', $post_id ) );
-	$seo_desc   = trim( (string) get_field( 'bst_seo_description', $post_id ) );
+	$seo_title  = bst_seo_clean_field( get_field( 'bst_seo_title', $post_id ) );
+	$seo_desc   = bst_seo_clean_field( get_field( 'bst_seo_description', $post_id ) );
 
 	$title = $seo_title !== ''
 		? $seo_title
@@ -161,8 +162,8 @@ function bst_seo_data_for_tour( $post_id, $site_name, $sep ) {
 
 function bst_seo_data_for_tour_type_post( $post_id, $site_name, $sep ) {
 	$post_title = get_the_title( $post_id );
-	$seo_title  = trim( (string) get_field( 'bst_seo_title', $post_id ) );
-	$seo_desc   = trim( (string) get_field( 'bst_seo_description', $post_id ) );
+	$seo_title  = bst_seo_clean_field( get_field( 'bst_seo_title', $post_id ) );
+	$seo_desc   = bst_seo_clean_field( get_field( 'bst_seo_description', $post_id ) );
 
 	$title = $seo_title !== ''
 		? $seo_title
@@ -188,8 +189,8 @@ function bst_seo_data_for_tour_type_code_term( $term, $site_name, $sep ) {
 	}
 
 	// BST SEO override fields on the term (registered via seo-fields.php location rule).
-	$seo_title = function_exists( 'get_field' ) ? trim( (string) get_field( 'bst_seo_title', $term ) ) : '';
-	$seo_desc  = function_exists( 'get_field' ) ? trim( (string) get_field( 'bst_seo_description', $term ) ) : '';
+	$seo_title = function_exists( 'get_field' ) ? bst_seo_clean_field( get_field( 'bst_seo_title', $term ) ) : '';
+	$seo_desc  = function_exists( 'get_field' ) ? bst_seo_clean_field( get_field( 'bst_seo_description', $term ) ) : '';
 	// Banner heading + image from the linked tour-type post.
 	$banner_data = function_exists( 'bst_get_queried_tour_type_code_banner_data' )
 		? bst_get_queried_tour_type_code_banner_data()
@@ -249,7 +250,17 @@ function bst_seo_data_for_tour_type_archive( $site_name, $sep ) {
 }
 
 function bst_seo_data_fallback( $site_name, $sep ) {
-	// Generic fallback for pages, posts, and anything else.
+	// Front page may also satisfy is_singular() when set to a static page — check it first.
+	if ( is_front_page() || is_home() ) {
+		return array(
+			'title'       => $site_name . $sep . get_bloginfo( 'description' ),
+			'description' => bst_seo_trim_description( get_bloginfo( 'description' ) ),
+			'canonical'   => home_url( '/' ),
+			'image'       => '',
+			'og_type'     => 'website',
+		);
+	}
+
 	if ( is_singular() ) {
 		$post_id    = get_queried_object_id();
 		$title      = get_the_title( $post_id ) . $sep . $site_name;
@@ -263,11 +274,6 @@ function bst_seo_data_fallback( $site_name, $sep ) {
 			$image = $src ? $src[0] : '';
 		}
 		$canonical = (string) get_permalink( $post_id );
-	} elseif ( is_front_page() || is_home() ) {
-		$title       = $site_name . $sep . get_bloginfo( 'description' );
-		$description = bst_seo_trim_description( get_bloginfo( 'description' ) );
-		$image       = '';
-		$canonical   = home_url( '/' );
 	} else {
 		return array();
 	}
@@ -282,6 +288,11 @@ function bst_seo_data_fallback( $site_name, $sep ) {
 }
 
 // ---- Helpers ----
+
+function bst_seo_clean_field( $value ) {
+	// Discard values that contain unprocessed Yoast template variables (%%var%%).
+	return strpos( (string) $value, '%%' ) !== false ? '' : trim( (string) $value );
+}
 
 function bst_seo_get_image_dimensions( $url ) {
 	if ( ! $url ) {

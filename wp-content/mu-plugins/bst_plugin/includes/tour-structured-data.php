@@ -39,7 +39,8 @@ function bst_wp_head_tour_schema() {
 	// ---- Core ACF fields ----
 	$tour_title        = (string) get_the_title( $tour_id );
 	$short_description = wp_strip_all_tags( (string) get_field( 'short_description', $tour_id ) );
-	$banner_image      = (string) get_field( 'detail_banner_image', $tour_id );
+	$banner_image_raw  = (string) get_field( 'detail_banner_image', $tour_id );
+	$banner_image      = $banner_image_raw && $banner_image_raw[0] === '/' ? home_url( $banner_image_raw ) : $banner_image_raw;
 	$starting_from     = (string) get_field( 'starting_from', $tour_id );
 	$airport           = (string) get_field( 'airport', $tour_id );
 	$currency          = (string) get_field( 'currency', $tour_id );
