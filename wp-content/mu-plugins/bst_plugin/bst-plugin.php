@@ -64,7 +64,6 @@ require_once plugin_dir_path(__FILE__) . 'includes/gravity-forms-email-capture.p
 require_once plugin_dir_path(__FILE__) . 'includes/seo-fields.php';
 require_once plugin_dir_path(__FILE__) . 'includes/seo-head.php';
 require_once plugin_dir_path(__FILE__) . 'includes/seo-sitemap.php';
-require_once plugin_dir_path(__FILE__) . 'includes/seo-migration.php';
 require_once plugin_dir_path(__FILE__) . 'includes/llms-txt.php';
 
 // Initialize the plugin
