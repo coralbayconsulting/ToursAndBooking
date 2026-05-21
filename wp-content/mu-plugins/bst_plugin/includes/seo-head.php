@@ -298,6 +298,10 @@ function bst_seo_get_image_dimensions( $url ) {
 	if ( ! $url ) {
 		return null;
 	}
+	// attachment_url_to_postid() requires an absolute URL with a scheme.
+	if ( $url[0] === '/' ) {
+		$url = home_url( $url );
+	}
 	$attachment_id = attachment_url_to_postid( $url );
 	if ( ! $attachment_id ) {
 		return null;
