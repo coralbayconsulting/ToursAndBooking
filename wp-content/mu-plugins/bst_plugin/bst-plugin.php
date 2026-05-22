@@ -71,6 +71,17 @@ add_action( 'init', function() {
 	add_post_type_support( 'page', 'excerpt' );
 } );
 
+// Remove Colibri theme footer credit from page output.
+add_action( 'template_redirect', function() {
+	ob_start( function( $buffer ) {
+		return preg_replace(
+			'/\s*Created for free using WordPress and\s*<a[^>]*>Colibri<\/a>/',
+			' All Rights Reserved.',
+			$buffer
+		);
+	} );
+} );
+
 // Initialize the plugin
 BST_Plugin::get_instance();
 
