@@ -221,7 +221,7 @@ function bst_register_settings() {
 
     add_settings_field(
         'bst_ptarchive_tour_type_page_title',
-        'Our Tours archive page title (H1 & browser tab)',
+        'Our Tours archive SEO title',
         'bst_ptarchive_tour_type_page_title_callback',
         'bst_settings_page',
         'bst_seo_section'
@@ -416,7 +416,7 @@ function bst_banner_image_callback() {
 function bst_ptarchive_tour_type_page_title_callback() {
     $val = get_option('bst_ptarchive_tour_type_page_title', '');
     echo '<input type="text" id="bst_ptarchive_tour_type_page_title" name="bst_ptarchive_tour_type_page_title" value="' . esc_attr($val) . '" style="width: 100%; max-width: 560px;" maxlength="120" />';
-    echo '<p class="description">Shown as the main heading on <code>/tour-types/</code> and as the first part of the page title (site name is added automatically). Leave empty to use the default <strong>Our Tours</strong>.</p>';
+    echo '<p class="description">Used for the meta title, og:title, and browser tab on <code>/tour-types/</code>. Site name is appended automatically. Leave empty to use the default <strong>Our Tours</strong>. The H1 on the page always shows "Our Tours".</p>';
 }
 
 function bst_ptarchive_tour_type_meta_description_callback() {

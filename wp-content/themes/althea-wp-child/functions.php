@@ -119,12 +119,7 @@ function bst_is_tour_type_post_type_archive() {
  * Filter: bst_tour_type_post_type_archive_display_title
  */
 function bst_get_tour_type_post_type_archive_display_title() {
-    $default = 'Our Tours';
-    $from_opt  = trim((string) get_option('bst_ptarchive_tour_type_page_title', ''));
-    if ($from_opt !== '') {
-        $default = $from_opt;
-    }
-    return apply_filters('bst_tour_type_post_type_archive_display_title', $default);
+    return apply_filters( 'bst_tour_type_post_type_archive_display_title', 'Our Tours' );
 }
 
 /**

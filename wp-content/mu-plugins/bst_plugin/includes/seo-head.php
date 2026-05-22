@@ -227,10 +227,9 @@ function bst_seo_data_for_tour_type_code_term( $term, $site_name, $sep ) {
 }
 
 function bst_seo_data_for_tour_type_archive( $site_name, $sep ) {
-	$heading  = function_exists( 'bst_get_tour_type_post_type_archive_display_title' )
-		? bst_get_tour_type_post_type_archive_display_title()
-		: 'Our Tours';
-	$seo_desc = trim( (string) get_option( 'bst_ptarchive_tour_type_meta_description', '' ) );
+	$seo_title_opt = trim( (string) get_option( 'bst_ptarchive_tour_type_page_title', '' ) );
+	$heading       = $seo_title_opt !== '' ? $seo_title_opt : 'Our Tours';
+	$seo_desc      = trim( (string) get_option( 'bst_ptarchive_tour_type_meta_description', '' ) );
 
 	$title = $heading . $sep . $site_name;
 
