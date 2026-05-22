@@ -171,13 +171,6 @@ function bst_register_settings() {
         'bst_seo_section'
     );
 
-    add_settings_section(
-        'bst_deployment_section',
-        'Deployment Tools',
-        'bst_deployment_section_callback',
-        'bst_tools_page'
-    );
-
     add_settings_field(
         'bst_company_name',
         'Company Name',
@@ -298,14 +291,6 @@ function bst_register_settings() {
         'bst_settings_section'
     );
 
-    add_settings_field(
-        'bst_version_bumper',
-        'Child Theme Version Management',
-        'bst_version_bumper_callback',
-        'bst_tools_page',
-        'bst_deployment_section'
-    );
-
     add_settings_section(
         'bst_admin_operations_section',
         'Admin Operations',
@@ -345,10 +330,6 @@ add_action(
 
 function bst_settings_section_callback() {
     echo '<p>Set your global settings below:</p>';
-}
-
-function bst_deployment_section_callback() {
-    echo '<p>Tools to help with Azure deployment cache busting:</p>';
 }
 
 function bst_admin_operations_section_callback() {
@@ -757,21 +738,12 @@ function bst_enqueue_admin_javascript($hook) {
         ));
     }
     
-    // Add version bumper script only on settings pages - Use a more reliable URL path for Azure
-    $version_script_url = content_url('mu-plugins/bst_plugin/js/bst-version-bumper.js');
-    $version_script_path = WP_CONTENT_DIR . '/mu-plugins/bst_plugin/js/bst-version-bumper.js';
-    $version_script_version = file_exists($version_script_path) ? filemtime($version_script_path) : time();
-    
-    wp_enqueue_script('bst-version-bumper', $version_script_url, array('jquery'), $version_script_version, true);
-    wp_localize_script('bst-version-bumper', 'bst_version_ajax', array(
-        'ajax_url' => admin_url('admin-ajax.php'),
-        'nonce' => wp_create_nonce('bst_version_bumper_nonce')
-    ));
 }
 add_action('admin_enqueue_scripts', 'bst_enqueue_admin_javascript');
 
-// Version bumper callback function for the tools page
-function bst_version_bumper_callback() {
+// (version bumper removed — cache busting now via filemtime() in child theme functions.php)
+if ( false ) {
+function bst_version_bumper_callback_removed() {
     echo '<div id="version-bumper-operations">';
     echo '<p>Update version numbers in child theme functions.php to bust browser cache.</p>';
     echo '<p>This tool will automatically increment version numbers for enqueued stylesheets and scripts.</p>';
@@ -1009,8 +981,7 @@ function bst_bump_child_theme_versions() {
     ));
 }
 add_action('wp_ajax_bst_bump_versions', 'bst_bump_child_theme_versions');
-
-
+} // end if(false) — version bumper dead code
 
 // Register settings for package names, rooms, and vehicles
 function bst_register_package_settings() {

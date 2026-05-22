@@ -36,11 +36,6 @@ $current_time = time();
 <div class="wrap">
     <h1>Tools</h1>
 
-    <h2>Deployment Tools</h2>
-    <table class="form-table">
-        <?php do_settings_fields('bst_tools_page', 'bst_deployment_section'); ?>
-    </table>
-
     <h2>Admin Operations</h2>
     <table class="form-table">
         <?php do_settings_fields('bst_tools_page', 'bst_admin_operations_section'); ?>
