@@ -1329,10 +1329,32 @@ function bst_organization_social_urls_callback() {
 function bst_release_data_cleanup_callback() {
     echo '<div id="release-data-cleanup-operations">';
     echo '<p>' . esc_html__( 'Execute data cleanup tasks for the current release.', 'bst-plugin' ) . '</p>';
-    echo '<div style="padding: 15px; background: #f0f0f0; border-left: 4px solid #ccc; color: #666; max-width: 960px;">';
-    echo '<p><strong>' . esc_html__( 'No cleanup tasks are currently defined for this release.', 'bst-plugin' ) . '</strong></p>';
-    echo '<p>' . esc_html__( 'This section is intentionally kept as a placeholder. When a future release needs a one-time data cleanup, tasks can be added back here.', 'bst-plugin' ) . '</p>';
-    echo '</div>';
+
+    // SEO template variable cleanup.
+    $nonce = wp_create_nonce( 'bst_seo_cleanup' );
+    echo '<p>';
+    echo '<strong>SEO Field Cleanup</strong> — Resolves template variables in saved SEO Title and Meta Description fields across all tours, tour types, pages, posts, and taxonomy terms. ';
+    echo 'Replaces <code>%%sitename%%</code>, <code>%%sep%%</code>, and BST variables (<code>{site_name}</code>, <code>{sep}</code>) with their actual values and strips any remaining unknown <code>%%var%%</code> tokens.';
+    echo '</p>';
+    echo '<button type="button" class="button button-primary" onclick="bstRunSeoCleanup(this)">Run SEO Field Cleanup</button>';
+    echo ' <span id="bst-seo-cleanup-result" style="margin-left:12px;"></span>';
+    echo '<script>
+    function bstRunSeoCleanup(btn) {
+        btn.disabled = true;
+        btn.textContent = "Running…";
+        document.getElementById("bst-seo-cleanup-result").textContent = "";
+        jQuery.post(ajaxurl, {
+            action: "bst_seo_cleanup_template_vars",
+            _wpnonce: "' . esc_js( $nonce ) . '"
+        }, function(response) {
+            document.getElementById("bst-seo-cleanup-result").textContent = response.success ? response.data : ("Error: " + response.data);
+        }).always(function() {
+            btn.disabled = false;
+            btn.textContent = "Run SEO Field Cleanup";
+        });
+    }
+    </script>';
+
     echo '</div>';
 }
 

@@ -301,11 +301,46 @@ function bst_seo_data_fallback( $site_name, $sep ) {
 
 // ---- Helpers ----
 
-function bst_seo_clean_field( $value ) {
-	// Discard values that contain unprocessed Yoast template variables (%%var%%).
-	return strpos( (string) $value, '%%' ) !== false ? '' : trim( (string) $value );
+/**
+ * Resolve BST and Yoast template variables in an SEO field value.
+ *
+ * Supported variables:
+ *   {site_name}    or  %%sitename%%  → site name
+ *   {sep}          or  %%sep%%       → ' - '
+ *
+ * Any remaining unknown %%var%% tokens are stripped.
+ */
+function bst_seo_resolve_template_vars( $value ) {
+	$value = (string) $value;
+	if ( $value === '' ) {
+		return '';
+	}
+	$site_name = get_bloginfo( 'name' );
+	$sep       = ' - ';
+
+	// BST-style variables (case-sensitive, curly-brace syntax).
+	$value = str_replace(
+		array( '{site_name}', '{sep}' ),
+		array( $site_name,    $sep    ),
+		$value
+	);
+
+	// Yoast-style variables (case-insensitive, %% syntax) — known subset only.
+	$value = str_ireplace(
+		array( '%%sitename%%', '%%sep%%', '%%page%%', '%%pagenumber%%', '%%pagetotal%%' ),
+		array( $site_name,     $sep,      '',          '',                ''              ),
+		$value
+	);
+
+	// Strip any remaining unknown %%var%% tokens.
+	$value = preg_replace( '/%%[^%]*%%/', '', $value );
+
+	return trim( preg_replace( '/\s+/', ' ', $value ) );
 }
 
+function bst_seo_clean_field( $value ) {
+	return bst_seo_resolve_template_vars( $value );
+}
 
 function bst_seo_trim_description( $text, $max = 155 ) {
 	$text = trim( preg_replace( '/\s+/', ' ', (string) $text ) );
@@ -313,4 +348,90 @@ function bst_seo_trim_description( $text, $max = 155 ) {
 		$text = mb_substr( $text, 0, $max - 1 ) . '…';
 	}
 	return $text;
+}
+
+// ---- SEO field cleanup (converts Yoast %% vars to BST {vars} in the DB) ----
+
+/**
+ * Convert Yoast template variables to BST equivalents for storage.
+ * Known vars become {site_name} / {sep}; unknown %%var%% tokens are stripped.
+ */
+function bst_seo_normalize_field_for_storage( $value ) {
+	$value = (string) $value;
+	if ( $value === '' ) {
+		return '';
+	}
+
+	// Convert known Yoast vars to BST equivalents.
+	$value = str_ireplace(
+		array( '%%sitename%%', '%%sep%%' ),
+		array( '{site_name}',  '{sep}'   ),
+		$value
+	);
+
+	// Strip page-number vars (meaningless in SEO title/description).
+	$value = str_ireplace(
+		array( '%%page%%', '%%pagenumber%%', '%%pagetotal%%' ),
+		'',
+		$value
+	);
+
+	// Strip any remaining unknown %%var%% tokens.
+	$value = preg_replace( '/%%[^%]*%%/', '', $value );
+
+	return trim( preg_replace( '/\s+/', ' ', $value ) );
+}
+
+add_action( 'wp_ajax_bst_seo_cleanup_template_vars', 'bst_seo_cleanup_template_vars_handler' );
+
+function bst_seo_cleanup_template_vars_handler() {
+	check_ajax_referer( 'bst_seo_cleanup', '_wpnonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( 'Unauthorized' );
+	}
+
+	$updated = 0;
+	$fields  = array( 'bst_seo_title', 'bst_seo_description' );
+
+	// Posts.
+	$posts = get_posts( array(
+		'post_type'      => array( 'tour', 'tour-type', 'page', 'post' ),
+		'post_status'    => 'any',
+		'posts_per_page' => -1,
+		'fields'         => 'ids',
+	) );
+
+	foreach ( $posts as $post_id ) {
+		foreach ( $fields as $field ) {
+			$raw = get_post_meta( $post_id, $field, true );
+			if ( ! $raw ) {
+				continue;
+			}
+			$clean = bst_seo_normalize_field_for_storage( $raw );
+			if ( $clean !== $raw ) {
+				update_post_meta( $post_id, $field, $clean );
+				$updated++;
+			}
+		}
+	}
+
+	// Taxonomy terms.
+	$terms = get_terms( array( 'taxonomy' => 'tour-type-code', 'hide_empty' => false ) );
+	if ( ! is_wp_error( $terms ) ) {
+		foreach ( $terms as $term ) {
+			foreach ( $fields as $field ) {
+				$raw = get_term_meta( $term->term_id, $field, true );
+				if ( ! $raw ) {
+					continue;
+				}
+				$clean = bst_seo_normalize_field_for_storage( $raw );
+				if ( $clean !== $raw ) {
+					update_term_meta( $term->term_id, $field, $clean );
+					$updated++;
+				}
+			}
+		}
+	}
+
+	wp_send_json_success( "Done. {$updated} field(s) updated." );
 }
