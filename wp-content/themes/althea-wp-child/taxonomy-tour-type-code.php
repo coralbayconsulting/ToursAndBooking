@@ -145,7 +145,7 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
 
             <!-- TOP BANNER -->
             <div class="top-banner-container">
-                <img class="top-banner" src="<?php echo esc_url($banner_image); ?>" alt="<?php echo esc_attr($banner_text); ?> - Tour Category Banner">
+                <img class="top-banner" src="<?php echo esc_url($banner_image); ?>" alt="<?php echo esc_attr($banner_text); ?> - Tour Category Banner" fetchpriority="high">
                 <h1 class="banner-text"><?php echo esc_html($banner_text); ?></h1>
             </div>
         </div>
@@ -588,26 +588,26 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
                                 $tour_rating = get_field('tour_rating', $tour_post->ID);
                                 ?>
                                 <div class="tour-box">
-                                    <h2><?php echo $title; ?></h2>
+                                    <h2><?php echo esc_html($title); ?></h2>
                                     <div class="listing-image-container">
-                                        <a href="<?php echo get_permalink($tour_post->ID); ?>">
+                                        <a href="<?php echo esc_url(get_permalink($tour_post->ID)); ?>">
                                             <?php if ($new) : ?>
                                                 <img class="new-icon" border="0" src="<?php echo get_stylesheet_directory_uri(); ?>/images/new-icon-corner.jpg" alt="New Icon">
                                             <?php endif; ?>
                                             <?php if ($enable_tour_rating && $tour_rating) : ?>
-                                                <div class="medal-rating-overlay" data-tooltip="<?php echo htmlspecialchars($tour_rating->description ? $tour_rating->description : $tour_rating->name, ENT_QUOTES, 'UTF-8'); ?>">
+                                                <div class="medal-rating-overlay" data-tooltip="<?php echo esc_attr($tour_rating->description ? $tour_rating->description : $tour_rating->name); ?>">
                                                     <span style="color: white; font-size: 12px; font-weight: 600; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap;"><?php echo esc_html($tour_rating->name); ?></span>
                                                 </div>
                                             <?php endif; ?>
-                                            <img src="<?php echo $image; ?>" alt="<?php echo $title; ?>">
+                                            <img src="<?php echo esc_url($image); ?>" alt="<?php echo esc_attr($title); ?>" loading="lazy">
                                             <?php if ($title_modifier) : ?>
                                             <div class="overlay-text">
-                                                    <span class="badge green"><?php echo $title_modifier; ?></span>
+                                                    <span class="badge green"><?php echo esc_html($title_modifier); ?></span>
                                                 </div>
                                             <?php endif; ?>
                                         </a>
                                     </div>
-                                    <p><?php echo $description; ?></p>
+                                    <p><?php echo wp_kses_post($description); ?></p>
                                     
                                     <?php
                                     // Add pricing text: "Prices starting at" + half the cost of package 3 + "per person"
@@ -706,7 +706,7 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
                                         }
                                         ?>
                                     </div>
-                                    <a href="<?php echo get_permalink($tour_post->ID); ?>" class="info-button">INFO</a>
+                                    <a href="<?php echo esc_url(get_permalink($tour_post->ID)); ?>" class="info-button">View Tour Details</a>
                                 </div>
                                 <?php
                             endforeach;

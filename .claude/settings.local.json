@@ -16,7 +16,11 @@
       "Bash(curl -s https://www.bluestradatours.com/about-us/)",
       "Read(//tmp/**)",
       "Bash(curl -s https://www.bluestradatours.com/wp-content/themes/althea-wp/style.css)",
-      "Bash(dir \"c:\\\\Users\\\\wayne\\\\Local Sites\\\\bluestradatours-development\\\\app\\\\public\\\\wp-content\\\\plugins\\\\remove-footer-credit\")"
+      "Bash(dir \"c:\\\\Users\\\\wayne\\\\Local Sites\\\\bluestradatours-development\\\\app\\\\public\\\\wp-content\\\\plugins\\\\remove-footer-credit\")",
+      "WebFetch(domain:www.googleapis.com)",
+      "Bash(sort -k9)",
+      "Bash(awk '{print $9, $5}')",
+      "Bash(sort -t'-' -k3 -V)"
     ]
   }
 }

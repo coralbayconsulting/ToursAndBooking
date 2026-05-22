@@ -59,7 +59,7 @@ $bst_show_filter = $bst_show_years; // no rating filter on this archive
             <!-- TOP BANNER -->
             <div class="top-banner-container">
                 <?php $bst_archive_title = bst_get_tour_type_post_type_archive_display_title(); ?>
-                <img class="top-banner" src="<?php echo esc_url(get_option('bst_banner_image')); ?>" alt="<?php echo esc_attr($bst_archive_title); ?> - Banner Image">
+                <img class="top-banner" src="<?php echo esc_url(get_option('bst_banner_image')); ?>" alt="<?php echo esc_attr($bst_archive_title); ?> - Banner Image" fetchpriority="high">
                 <h1 class="banner-text"><?php echo esc_html($bst_archive_title); ?></h1>
             </div>
         </div>
@@ -209,14 +209,14 @@ $bst_show_filter = $bst_show_years; // no rating filter on this archive
                             ?>
                             <div class="tour-type-box">
                                 <h2>
-                                    <?php echo $title; ?>
+                                    <?php echo esc_html($title); ?>
                                 </h2>
                                 <div class="listing-image-container">
                                     <a href="<?php echo esc_url($taxonomy_url); ?>">
-                                        <img src="<?php echo $image; ?>" alt="<?php echo $title; ?> - Tour Category">
+                                        <img src="<?php echo esc_url($image); ?>" alt="<?php echo esc_attr($title); ?> - Tour Category" loading="lazy">
                                     </a>
                                 </div>
-                                <p><?php echo $description; ?></p>
+                                <p><?php echo wp_kses_post($description); ?></p>
                                 <div class="date-container">
                                     <?php
                                     foreach ($tours_by_year as $year => $tours) {
@@ -257,7 +257,7 @@ $bst_show_filter = $bst_show_years; // no rating filter on this archive
                                     }
                                     ?>
                                 </div>
-                                <a href="<?php echo esc_url($taxonomy_url); ?>" class="info-button">INFO</a>
+                                <a href="<?php echo esc_url($taxonomy_url); ?>" class="info-button">View Tour Details</a>
                             </div>
                         <?php
                     endwhile;
