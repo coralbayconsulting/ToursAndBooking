@@ -66,6 +66,11 @@ require_once plugin_dir_path(__FILE__) . 'includes/seo-head.php';
 require_once plugin_dir_path(__FILE__) . 'includes/seo-sitemap.php';
 require_once plugin_dir_path(__FILE__) . 'includes/llms-txt.php';
 
+// Enable excerpt support for Pages so the Excerpt panel appears in the block editor.
+add_action( 'init', function() {
+	add_post_type_support( 'page', 'excerpt' );
+} );
+
 // Initialize the plugin
 BST_Plugin::get_instance();
 

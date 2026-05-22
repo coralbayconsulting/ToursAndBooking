@@ -261,7 +261,7 @@ function bst_seo_data_fallback( $site_name, $sep ) {
 		$title      = get_the_title( $post_id ) . $sep . $site_name;
 		$excerpt    = has_excerpt( $post_id )
 			? wp_strip_all_tags( get_the_excerpt( $post_id ) )
-			: wp_strip_all_tags( wp_trim_words( get_post_field( 'post_content', $post_id ), 30, '...' ) );
+			: wp_strip_all_tags( wp_trim_words( strip_shortcodes( get_post_field( 'post_content', $post_id ) ), 30, '...' ) );
 		$description = bst_seo_trim_description( $excerpt );
 		$image      = '';
 		if ( has_post_thumbnail( $post_id ) ) {

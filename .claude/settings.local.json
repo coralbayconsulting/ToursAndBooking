@@ -8,7 +8,14 @@
       "Bash(chmod +x /tmp/check_links.sh)",
       "Bash(/tmp/check_links.sh)",
       "Bash(chmod +x /tmp/check_links_verbose.sh)",
-      "Bash(/tmp/check_links_verbose.sh)"
+      "Bash(/tmp/check_links_verbose.sh)",
+      "Bash(curl -s \"https://www.bluestradatours.com/\")",
+      "Bash(curl -s \"https://www.bluestradatours.com/about-us/\")",
+      "Bash(curl -s \"https://www.bluestradatours.com/tour-types/\")",
+      "Bash(curl -s \"https://www.bluestradatours.com/blog/\")",
+      "Bash(curl -s https://www.bluestradatours.com/about-us/)",
+      "Read(//tmp/**)",
+      "Bash(curl -s https://www.bluestradatours.com/wp-content/themes/althea-wp/style.css)"
     ]
   }
 }
