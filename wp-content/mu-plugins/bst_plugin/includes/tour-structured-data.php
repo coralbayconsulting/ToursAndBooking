@@ -294,8 +294,31 @@ function bst_wp_head_organization_schema() {
 		$org['sameAs'] = array_values( array_unique( $same_as ) );
 	}
 
+	$website = array(
+		'@type'           => 'WebSite',
+		'@id'             => home_url( '/#website' ),
+		'url'             => home_url( '/' ),
+		'name'            => get_bloginfo( 'name' ),
+		'description'     => get_bloginfo( 'description' ),
+		'potentialAction' => array(
+			'@type'       => 'SearchAction',
+			'target'      => array(
+				'@type'       => 'EntryPoint',
+				'urlTemplate' => home_url( '/?s={search_term_string}' ),
+			),
+			'query-input' => 'required name=search_term_string',
+		),
+	);
+
+	unset( $org['@context'] );
+
+	$graph = array(
+		'@context' => 'https://schema.org',
+		'@graph'   => array( $org, $website ),
+	);
+
 	echo "\n" . '<script type="application/ld+json">' . "\n";
-	echo wp_json_encode( $org, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+	echo wp_json_encode( $graph, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 	echo "\n" . '</script>' . "\n";
 }
 

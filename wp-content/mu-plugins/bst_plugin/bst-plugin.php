@@ -74,18 +74,6 @@ add_action( 'init', function() {
 // Initialize the plugin
 BST_Plugin::get_instance();
 
-/**
- * Add noindex meta tag for private tours
- * Prevents search engines from indexing private tours while keeping them accessible via direct link
- */
-add_action('wp_head', function() {
-    if (is_singular('tour')) {
-        $private = get_field('private', get_the_ID());
-        if ($private == 1) {
-            echo '<meta name="robots" content="noindex">' . "\n";
-        }
-    }
-});
 
 /**
  * Standardized import message handling

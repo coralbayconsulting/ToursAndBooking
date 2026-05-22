@@ -37,6 +37,14 @@ function bst_seo_head_output() {
 	// WordPress core outputs <title> via wp_head when add_theme_support('title-tag') is set.
 	// We filter pre_get_document_title / document_title instead (see below), so no echo here.
 
+	// ---- Robots ----
+	$is_private_tour = is_singular( 'tour' ) && function_exists( 'get_field' ) && get_field( 'private', get_queried_object_id() );
+	if ( $is_private_tour ) {
+		echo '<meta name="robots" content="noindex">' . "\n";
+	} else {
+		echo '<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">' . "\n";
+	}
+
 	// ---- Meta description ----
 	if ( ! empty( $data['description'] ) ) {
 		echo '<meta name="description" content="' . esc_attr( $data['description'] ) . '">' . "\n";
