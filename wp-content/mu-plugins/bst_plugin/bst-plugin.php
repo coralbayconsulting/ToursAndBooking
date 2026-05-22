@@ -72,8 +72,12 @@ add_action( 'init', function() {
 } );
 
 // Register tour listing card image size (600×338 matches displayed card dimensions).
+// Remove unused Gravity Forms image choice sizes (not used on this site).
 add_action( 'after_setup_theme', function() {
 	add_image_size( 'tour-listing', 600, 338, true );
+	remove_image_size( 'gform-image-choice-sm' );
+	remove_image_size( 'gform-image-choice-md' );
+	remove_image_size( 'gform-image-choice-lg' );
 } );
 
 // Remove Colibri theme footer credit from page output.
