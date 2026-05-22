@@ -213,7 +213,7 @@ $bst_show_filter = $bst_show_years; // no rating filter on this archive
                                 </h2>
                                 <div class="listing-image-container">
                                     <a href="<?php echo esc_url($taxonomy_url); ?>">
-                                        <img src="<?php echo esc_url($image); ?>" alt="<?php echo esc_attr($title); ?> - Tour Category" loading="lazy">
+                                        <?php echo wp_get_attachment_image( $image, 'tour-listing', false, [ 'alt' => esc_attr( $title ) . ' - Tour Category', 'loading' => 'lazy' ] ); ?>
                                     </a>
                                 </div>
                                 <p><?php echo wp_kses_post($description); ?></p>

@@ -71,6 +71,11 @@ add_action( 'init', function() {
 	add_post_type_support( 'page', 'excerpt' );
 } );
 
+// Register tour listing card image size (600×338 matches displayed card dimensions).
+add_action( 'after_setup_theme', function() {
+	add_image_size( 'tour-listing', 600, 338, true );
+} );
+
 // Remove Colibri theme footer credit from page output.
 add_action( 'template_redirect', function() {
 	ob_start( function( $buffer ) {
