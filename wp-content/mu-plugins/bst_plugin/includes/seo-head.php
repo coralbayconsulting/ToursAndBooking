@@ -247,11 +247,20 @@ function bst_seo_data_for_tour_type_archive( $site_name, $sep ) {
 function bst_seo_data_fallback( $site_name, $sep ) {
 	// Front page may also satisfy is_singular() when set to a static page — check it first.
 	if ( is_front_page() || is_home() ) {
+		$front_id = (int) get_option( 'page_on_front' );
+		$desc_raw = ( $front_id && has_excerpt( $front_id ) )
+			? wp_strip_all_tags( get_the_excerpt( $front_id ) )
+			: get_bloginfo( 'description' );
+		$image = '';
+		if ( $front_id && has_post_thumbnail( $front_id ) ) {
+			$src   = wp_get_attachment_image_src( get_post_thumbnail_id( $front_id ), 'large' );
+			$image = $src ? $src[0] : '';
+		}
 		return array(
 			'title'       => $site_name . $sep . get_bloginfo( 'description' ),
-			'description' => bst_seo_trim_description( get_bloginfo( 'description' ) ),
+			'description' => bst_seo_trim_description( $desc_raw ),
 			'canonical'   => home_url( '/' ),
-			'image'       => '',
+			'image'       => $image,
 			'og_type'     => 'website',
 		);
 	}
