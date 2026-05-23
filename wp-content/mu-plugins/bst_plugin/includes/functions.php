@@ -250,6 +250,14 @@ function set_source_and_referrer() {
 }
 add_action('init', 'set_source_and_referrer');
 
+// Release the session write lock after capturing source/referrer so it does
+// not interfere with WordPress loopback REST API requests (Site Health check).
+add_action('init', function() {
+    if (session_id()) {
+        session_write_close();
+    }
+}, 20);
+
 // Function to format currency values according to the user's locale
 function format_currency($price, $currency = 'EUR') {
     // Get the user's locale
