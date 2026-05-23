@@ -23,6 +23,27 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 add_action( 'wp_head', 'bst_seo_head_output', 1 );
 
+// Use wp_robots filter so our directives replace WordPress core's default
+// max-image-preview:large output rather than duplicating it.
+add_filter( 'wp_robots', 'bst_seo_robots_directives' );
+
+function bst_seo_robots_directives( $robots ) {
+	if ( defined( 'WPSEO_VERSION' ) ) {
+		return $robots;
+	}
+	$is_private_tour = is_singular( 'tour' ) && function_exists( 'get_field' ) && get_field( 'private', get_queried_object_id() );
+	if ( $is_private_tour ) {
+		return array( 'noindex' => true );
+	}
+	return array(
+		'index'             => true,
+		'follow'            => true,
+		'max-image-preview' => 'large',
+		'max-snippet'       => -1,
+		'max-video-preview' => -1,
+	);
+}
+
 function bst_seo_head_output() {
 	if ( defined( 'WPSEO_VERSION' ) ) {
 		return;
@@ -36,14 +57,6 @@ function bst_seo_head_output() {
 	// ---- <title> (only when theme does not support title-tag) ----
 	// WordPress core outputs <title> via wp_head when add_theme_support('title-tag') is set.
 	// We filter pre_get_document_title / document_title instead (see below), so no echo here.
-
-	// ---- Robots ----
-	$is_private_tour = is_singular( 'tour' ) && function_exists( 'get_field' ) && get_field( 'private', get_queried_object_id() );
-	if ( $is_private_tour ) {
-		echo '<meta name="robots" content="noindex">' . "\n";
-	} else {
-		echo '<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">' . "\n";
-	}
 
 	// ---- Meta description ----
 	if ( ! empty( $data['description'] ) ) {
