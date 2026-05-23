@@ -592,7 +592,7 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
                                     <div class="listing-image-container">
                                         <a href="<?php echo esc_url(get_permalink($tour_post->ID)); ?>">
                                             <?php if ($new) : ?>
-                                                <img class="new-icon" border="0" src="<?php echo get_stylesheet_directory_uri(); ?>/images/new-icon-corner.jpg" alt="New Icon">
+                                                <img class="new-icon" border="0" src="<?php echo get_stylesheet_directory_uri(); ?>/images/new-icon-corner.webp" alt="New Icon">
                                             <?php endif; ?>
                                             <?php if ($enable_tour_rating && $tour_rating) : ?>
                                                 <div class="medal-rating-overlay" data-tooltip="<?php echo esc_attr($tour_rating->description ? $tour_rating->description : $tour_rating->name); ?>">
