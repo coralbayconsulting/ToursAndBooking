@@ -171,13 +171,13 @@ if (function_exists('bst_get_tour_type_for_tour')) {
                             $email_subject = rawurlencode('Check out this tour: ' . $share_title);
                             $email_body = rawurlencode('I thought you might like this tour:' . "\n\n" . $share_title . "\n" . $share_url);
                             ?>
-                            <a href="mailto:?subject=<?php echo $email_subject; ?>&body=<?php echo $email_body; ?>" class="bst-share-icon" title="Email to a friend">
+                            <a href="mailto:?subject=<?php echo $email_subject; ?>&body=<?php echo $email_body; ?>" class="bst-share-icon" title="Email to a friend" aria-label="Email this tour to a friend">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
                                     <polyline points="22,6 12,13 2,6"></polyline>
                                 </svg>
                             </a>
-                            <a href="https://wa.me/?text=<?php echo urlencode('Check out this tour: ' . $share_title . ' ' . $share_url); ?>" class="bst-share-icon" title="Share on WhatsApp" target="_blank" rel="noopener noreferrer">
+                            <a href="https://wa.me/?text=<?php echo urlencode('Check out this tour: ' . $share_title . ' ' . $share_url); ?>" class="bst-share-icon" title="Share on WhatsApp" target="_blank" rel="noopener noreferrer" aria-label="Share this tour on WhatsApp">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
                                 </svg>
