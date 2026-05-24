@@ -706,7 +706,7 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
                                         }
                                         ?>
                                     </div>
-                                    <a href="<?php echo esc_url(get_permalink($tour_post->ID)); ?>" class="info-button">Info</a>
+                                    <a href="<?php echo esc_url(get_permalink($tour_post->ID)); ?>" class="info-button">INFO</a>
                                 </div>
                                 <?php
                             endforeach;
