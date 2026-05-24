@@ -218,7 +218,7 @@ function bst_invoices_sort_link( $col_key, $current_sort_by, $current_sort_order
             <tr>
                 <td>
                     <?php if ( $invoice_url ) : ?>
-                        <a href="<?php echo esc_url( $invoice_url ); ?>" target="_blank">
+                        <a href="<?php echo esc_url( $invoice_url ); ?>" target="_blank" rel="noopener noreferrer">
                             <?php echo esc_html( $invoice_number ); ?>
                         </a>
                     <?php else : ?>
@@ -226,7 +226,7 @@ function bst_invoices_sort_link( $col_key, $current_sort_by, $current_sort_order
                     <?php endif; ?>
                 </td>
                 <td>
-                    <a href="<?php echo esc_url( $booking_edit_url ); ?>" target="_blank">
+                    <a href="<?php echo esc_url( $booking_edit_url ); ?>" target="_blank" rel="noopener noreferrer">
                         #<?php echo esc_html( $booking->id ); ?>
                     </a>
                 </td>

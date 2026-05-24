@@ -1925,7 +1925,7 @@ jQuery(document).ready(function($) {
                     
                     if (customer.id) {
                         customerHtml = '<strong>Customer Found:</strong><br>' +
-                                     '<a href="' + window.location.origin + '/wp-admin/admin.php?page=bst-plugin-customer-form&action=edit&id=' + customer.id + '" target="_blank">' +
+                                     '<a href="' + window.location.origin + '/wp-admin/admin.php?page=bst-plugin-customer-form&action=edit&id=' + customer.id + '" target="_blank" rel="noopener noreferrer">' +
                                      '#' + customer.id + ' - ' + customer.first_name + ' ' + customer.last_name + ' (' + customer.email + ')' +
                                      '</a>';
                     } else {

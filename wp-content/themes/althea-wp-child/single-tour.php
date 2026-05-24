@@ -177,7 +177,7 @@ if (function_exists('bst_get_tour_type_for_tour')) {
                                     <polyline points="22,6 12,13 2,6"></polyline>
                                 </svg>
                             </a>
-                            <a href="https://wa.me/?text=<?php echo urlencode('Check out this tour: ' . $share_title . ' ' . $share_url); ?>" class="bst-share-icon" title="Share on WhatsApp" target="_blank" rel="noopener">
+                            <a href="https://wa.me/?text=<?php echo urlencode('Check out this tour: ' . $share_title . ' ' . $share_url); ?>" class="bst-share-icon" title="Share on WhatsApp" target="_blank" rel="noopener noreferrer">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
                                 </svg>

@@ -419,7 +419,7 @@ function bst_render_customer_tile_content($booking) {
     if (!empty($booking->customer_id)) {
         $cust = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$wpdb->prefix}bst_customers WHERE id = %d", $booking->customer_id));
         if ($cust) {
-            $html .= '<a href="' . esc_url(admin_url('admin.php?page=bst-plugin-customer-form&action=edit&id=' . $cust->id)) . '" target="_blank">';
+            $html .= '<a href="' . esc_url(admin_url('admin.php?page=bst-plugin-customer-form&action=edit&id=' . $cust->id)) . '" target="_blank" rel="noopener noreferrer">';
             $html .= esc_html("#{$cust->id} - {$cust->first_name} {$cust->last_name} ({$cust->email})");
             $html .= '</a>';
         } else {
@@ -457,7 +457,7 @@ function bst_render_gravity_forms_tile_content($booking) {
     // Booking ID
     $html .= '<div class="view-item"><strong>Booking ID:</strong> ';
     if (!empty($booking->booking_entry_id)) {
-        $html .= '<a href="' . esc_url(admin_url('admin.php?page=gf_entries&view=entry&id=9&lid=' . $booking->booking_entry_id)) . '" target="_blank">';
+        $html .= '<a href="' . esc_url(admin_url('admin.php?page=gf_entries&view=entry&id=9&lid=' . $booking->booking_entry_id)) . '" target="_blank" rel="noopener noreferrer">';
         $html .= esc_html($booking->booking_entry_id);
         $html .= '</a>';
     } else {
@@ -468,7 +468,7 @@ function bst_render_gravity_forms_tile_content($booking) {
     // Finalization ID
     $html .= '<div class="view-item"><strong>Finalization ID:</strong> ';
     if (!empty($booking->finalization_entry_id)) {
-        $html .= '<a href="' . esc_url(admin_url('admin.php?page=gf_entries&view=entry&id=10&lid=' . $booking->finalization_entry_id)) . '" target="_blank">';
+        $html .= '<a href="' . esc_url(admin_url('admin.php?page=gf_entries&view=entry&id=10&lid=' . $booking->finalization_entry_id)) . '" target="_blank" rel="noopener noreferrer">';
         $html .= esc_html($booking->finalization_entry_id);
         $html .= '</a>';
         $html .= ' &nbsp;<button type="button" class="reprocess-gf10-btn" style="background:#8b5e00;color:white;border:none;padding:2px 8px;border-radius:3px;cursor:pointer;font-size:12px;vertical-align:middle;">Reprocess</button>';
@@ -521,7 +521,7 @@ function bst_render_administrative_tile_content($booking) {
 function bst_render_link_item($label, $url) {
     $html = '<div class="view-item">';
     $html .= '<strong>' . esc_html($label) . ':</strong>';
-    $html .= '<a href="' . esc_url($url) . '" target="_blank" class="link-url">' . esc_html($url) . '</a>';
+    $html .= '<a href="' . esc_url($url) . '" target="_blank" rel="noopener noreferrer" class="link-url">' . esc_html($url) . '</a>';
     $html .= '<button class="copy-button" onclick="copyToClipboard(\'' . esc_js($url) . '\', this)">';
     $html .= '<span class="dashicons dashicons-clipboard copy-icon"></span>';
     $html .= '<span class="copy-text">Copy</span>';
@@ -890,7 +890,7 @@ function bst_render_tour_package_tile_content($booking) {
     }
     $html .= '<div class="view-item"><strong>Tour:</strong> ' . esc_html($tour_title);
     if (!empty($booking->tour_id)) {
-        $html .= ' (ID: <a href="' . esc_url(admin_url('post.php?post=' . $booking->tour_id . '&action=edit')) . '" target="_blank" title="Edit tour record">' . esc_html($booking->tour_id) . '</a>)';
+        $html .= ' (ID: <a href="' . esc_url(admin_url('post.php?post=' . $booking->tour_id . '&action=edit')) . '" target="_blank" rel="noopener noreferrer" title="Edit tour record">' . esc_html($booking->tour_id) . '</a>)';
     }
     $html .= '</div>';
     
@@ -920,7 +920,7 @@ function bst_render_tour_package_tile_content($booking) {
     }
     $html .= '<div class="view-item"><strong>Tour Date:</strong> ' . esc_html( $tour_date_disp );
     if ( $tour_date_id > 0 ) {
-        $html .= ' (ID: <a href="' . esc_url( admin_url( 'post.php?post=' . $tour_date_id . '&action=edit' ) ) . '" target="_blank" title="Edit tour date record">' . esc_html( (string) $tour_date_id ) . '</a>)';
+        $html .= ' (ID: <a href="' . esc_url( admin_url( 'post.php?post=' . $tour_date_id . '&action=edit' ) ) . '" target="_blank" rel="noopener noreferrer" title="Edit tour date record">' . esc_html( (string) $tour_date_id ) . '</a>)';
     }
     $html .= '</div>';
     
@@ -1259,7 +1259,7 @@ function bst_render_invoicing_tile_content($booking) {
     if (!empty($booking->finalization_entry_id) && !empty($booking->booking_invoice_number) && $booking->booking_invoice_number !== 'Not generated') {
         $encoded_entry_id = bst_encode_booking_id($booking->finalization_entry_id);
         $invoice_url = site_url('/bookinginvoice/') . '?eid=' . $encoded_entry_id;
-        $invoice_number .= ' (<a href="' . esc_url($invoice_url) . '" target="_blank" style="color: #0066cc; text-decoration: none;">View Invoice</a>)';
+        $invoice_number .= ' (<a href="' . esc_url($invoice_url) . '" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: none;">View Invoice</a>)';
     }
     $html .= '<div class="view-item"><strong>Invoice Number:</strong> ' . wp_kses_post($invoice_number) . '</div>';
     

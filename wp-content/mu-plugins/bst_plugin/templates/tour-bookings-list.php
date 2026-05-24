@@ -1036,22 +1036,22 @@ if ($selected_tour > 0 && $selected_date > 0 && !empty($filtered_bookings)) {
                     <!-- Booking ID with link -->
                     <td class="booking-id-column">
                         <?php if ($booking->booking_status === 'Reserved' && empty($booking->booking_entry_id)) : ?>
-                            <a href="<?php echo esc_url(bst_get_reservation_url($booking->id)); ?>" target="_blank">
+                            <a href="<?php echo esc_url(bst_get_reservation_url($booking->id)); ?>" target="_blank" rel="noopener noreferrer">
                                 url
                             </a>
                         <?php elseif (!empty($booking->booking_entry_id)) : ?>
-                            <a href="<?php echo esc_url(admin_url('admin.php?page=gf_entries&view=entry&id=9&lid=' . $booking->booking_entry_id)); ?>" target="_blank">
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=gf_entries&view=entry&id=9&lid=' . $booking->booking_entry_id)); ?>" target="_blank" rel="noopener noreferrer">
                                 <?php echo esc_html($booking->booking_entry_id); ?>
                             </a>
                         <?php endif; ?>
                     </td>                    <!-- Finalization ID with link -->
                     <td class="finalization-id-column">
                         <?php if ($booking->booking_status === 'Booked' && empty($booking->finalization_entry_id)) : ?>
-                            <a href="<?php echo esc_url(bst_get_finalization_url($booking->id)); ?>" target="_blank">
+                            <a href="<?php echo esc_url(bst_get_finalization_url($booking->id)); ?>" target="_blank" rel="noopener noreferrer">
                                 url
                             </a>
                         <?php elseif (!empty($booking->finalization_entry_id)) : ?>
-                            <a href="<?php echo esc_url(admin_url('admin.php?page=gf_entries&view=entry&id=10&lid=' . $booking->finalization_entry_id)); ?>" target="_blank">
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=gf_entries&view=entry&id=10&lid=' . $booking->finalization_entry_id)); ?>" target="_blank" rel="noopener noreferrer">
                                 <?php echo esc_html($booking->finalization_entry_id); ?>
                             </a>
                         <?php endif; ?>

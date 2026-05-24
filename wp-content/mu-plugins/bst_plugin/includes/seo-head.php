@@ -70,6 +70,8 @@ function bst_seo_head_output() {
 	}
 
 	// ---- Canonical ----
+	// Remove WordPress core's rel_canonical (priority 10) so there is only one canonical tag.
+	remove_action( 'wp_head', 'rel_canonical' );
 	if ( ! empty( $data['canonical'] ) ) {
 		echo '<link rel="canonical" href="' . esc_url( $data['canonical'] ) . '">' . "\n";
 	}
