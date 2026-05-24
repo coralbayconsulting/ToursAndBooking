@@ -39,8 +39,8 @@ function bst_seo_robots_directives( $robots ) {
 		'index'             => true,
 		'follow'            => true,
 		'max-image-preview' => 'large',
-		'max-snippet'       => -1,
-		'max-video-preview' => -1,
+		'max-snippet'       => '-1',
+		'max-video-preview' => '-1',
 	);
 }
 
@@ -199,14 +199,36 @@ function bst_seo_data_for_tour_type_post( $post_id, $site_name, $sep ) {
 	);
 }
 
+function bst_seo_get_linked_tour_type_post_id( $term_id ) {
+	$posts = get_posts( array(
+		'post_type'      => 'tour-type',
+		'posts_per_page' => 1,
+		'fields'         => 'ids',
+		'meta_query'     => array( array(
+			'key'   => 'type_code',
+			'value' => $term_id,
+		) ),
+	) );
+	return ! empty( $posts ) ? (int) $posts[0] : 0;
+}
+
 function bst_seo_data_for_tour_type_code_term( $term, $site_name, $sep ) {
 	if ( ! ( $term instanceof WP_Term ) ) {
 		return array();
 	}
 
-	// BST SEO override fields on the term (registered via seo-fields.php location rule).
-	$seo_title = function_exists( 'get_field' ) ? bst_seo_clean_field( get_field( 'bst_seo_title', $term ) ) : '';
-	$seo_desc  = function_exists( 'get_field' ) ? bst_seo_clean_field( get_field( 'bst_seo_description', $term ) ) : '';
+	// SEO fields come from the linked tour-type post — that is the canonical place
+	// to enter title/description for the taxonomy archive.
+	$seo_title = '';
+	$seo_desc  = '';
+	if ( function_exists( 'get_field' ) ) {
+		$linked_post_id = bst_seo_get_linked_tour_type_post_id( $term->term_id );
+		if ( $linked_post_id ) {
+			$seo_title = bst_seo_clean_field( get_field( 'bst_seo_title', $linked_post_id ) );
+			$seo_desc  = bst_seo_clean_field( get_field( 'bst_seo_description', $linked_post_id ) );
+		}
+	}
+
 	// Banner heading + image from the linked tour-type post.
 	$banner_data = function_exists( 'bst_get_queried_tour_type_code_banner_data' )
 		? bst_get_queried_tour_type_code_banner_data()
