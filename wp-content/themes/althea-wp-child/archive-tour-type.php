@@ -257,7 +257,7 @@ $bst_show_filter = $bst_show_years; // no rating filter on this archive
                                     }
                                     ?>
                                 </div>
-                                <a href="<?php echo esc_url($taxonomy_url); ?>" class="info-button">View Tour Details</a>
+                                <a href="<?php echo esc_url($taxonomy_url); ?>" class="info-button">Info</a>
                             </div>
                         <?php
                     endwhile;
