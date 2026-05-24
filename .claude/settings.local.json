@@ -20,7 +20,10 @@
       "WebFetch(domain:www.googleapis.com)",
       "Bash(sort -k9)",
       "Bash(awk '{print $9, $5}')",
-      "Bash(sort -t'-' -k3 -V)"
+      "Bash(sort -t'-' -k3 -V)",
+      "Bash(wp option *)",
+      "Bash(cmd /c \"dir /b \\\\\"c:\\\\Users\\\\wayne\\\\Local Sites\\\\bluestradatours-development\\\\app\\\\public\\\\wp-content\\\\mu-plugins\\\\\"\")",
+      "Bash(cmd /c dir /b \"c:\\\\Users\\\\wayne\\\\Local Sites\\\\bluestradatours-development\\\\app\\\\public\\\\wp-content\\\\mu-plugins\")"
     ]
   }
 }

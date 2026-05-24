@@ -8,6 +8,16 @@ Author: Wayne Wilson, Coral Bay Consulting
 
 if( ! defined( 'ABSPATH' ) ) exit; // Exit if accessed directly
 
+// Redirect www to non-www. Generic: strips "www." from whatever the current host is,
+// so it is safe in any environment (local dev never has a www. host).
+if ( php_sapi_name() !== 'cli'
+    && isset( $_SERVER['HTTP_HOST'] )
+    && str_starts_with( $_SERVER['HTTP_HOST'], 'www.' ) ) {
+    header( 'HTTP/1.1 301 Moved Permanently' );
+    header( 'Location: https://' . substr( $_SERVER['HTTP_HOST'], 4 ) . $_SERVER['REQUEST_URI'] );
+    exit();
+}
+
 // Load Composer autoloader for Google API Client
 $composer_autoload = ABSPATH . 'vendor/autoload.php';
 if (file_exists($composer_autoload)) {
