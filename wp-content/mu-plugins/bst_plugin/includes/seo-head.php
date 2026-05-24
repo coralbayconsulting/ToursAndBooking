@@ -23,6 +23,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 add_action( 'wp_head', 'bst_seo_head_output', 1 );
 
+// Remove the legacy theme title filter so seo-head.php is the sole title handler.
+// The theme filter (bst_apply_pre_get_document_title_programmatic) was written before
+// this SEO system existed and conflicts with our custom SEO field values.
+add_action( 'wp', function() {
+	remove_filter( 'pre_get_document_title', 'bst_apply_pre_get_document_title_programmatic', 100001 );
+	remove_filter( 'document_title',         'bst_apply_document_title_programmatic',         100001 );
+} );
+
 // Use wp_robots filter so our directives replace WordPress core's default
 // max-image-preview:large output rather than duplicating it.
 add_filter( 'wp_robots', 'bst_seo_robots_directives' );
