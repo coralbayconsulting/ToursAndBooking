@@ -21,15 +21,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-add_action( 'wp_head', 'bst_seo_head_output', 1 );
-
-// Remove the legacy theme title filter so seo-head.php is the sole title handler.
-// The theme filter (bst_apply_pre_get_document_title_programmatic) was written before
-// this SEO system existed and conflicts with our custom SEO field values.
-add_action( 'wp', function() {
-	remove_filter( 'pre_get_document_title', 'bst_apply_pre_get_document_title_programmatic', 100001 );
-	remove_filter( 'document_title',         'bst_apply_document_title_programmatic',         100001 );
-} );
+// Priority 0 fires before WordPress core's _wp_render_title_tag at priority 1,
+// giving us the chance to output <title> first and remove the core action.
+add_action( 'wp_head', 'bst_seo_head_output', 0 );
 
 // Use wp_robots filter so our directives replace WordPress core's default
 // max-image-preview:large output rather than duplicating it.
@@ -62,9 +56,13 @@ function bst_seo_head_output() {
 		return;
 	}
 
-	// ---- <title> (only when theme does not support title-tag) ----
-	// WordPress core outputs <title> via wp_head when add_theme_support('title-tag') is set.
-	// We filter pre_get_document_title / document_title instead (see below), so no echo here.
+	// ---- <title> ----
+	// Output directly and remove WordPress core's _wp_render_title_tag (priority 1) so the
+	// theme's document_title filters cannot override our custom SEO title.
+	if ( ! empty( $data['title'] ) ) {
+		remove_action( 'wp_head', '_wp_render_title_tag', 1 );
+		echo '<title>' . esc_html( $data['title'] ) . '</title>' . "\n";
+	}
 
 	// ---- Meta description ----
 	if ( ! empty( $data['description'] ) ) {
@@ -110,22 +108,6 @@ function bst_seo_head_output() {
 	if ( ! empty( $data['image'] ) ) {
 		echo '<meta name="twitter:image" content="' . esc_url( $og_image ) . '">' . "\n";
 	}
-}
-
-// ---- Title tag filters (replaces Yoast title output) ----
-
-add_filter( 'pre_get_document_title', 'bst_seo_document_title', 100002 );
-add_filter( 'document_title',         'bst_seo_document_title', 100002 );
-
-function bst_seo_document_title( $title ) {
-	if ( defined( 'WPSEO_VERSION' ) ) {
-		return $title;
-	}
-	$data = bst_seo_resolve_head_data();
-	if ( ! empty( $data['title'] ) ) {
-		return $data['title'];
-	}
-	return $title;
 }
 
 // ---- Data resolver ----
