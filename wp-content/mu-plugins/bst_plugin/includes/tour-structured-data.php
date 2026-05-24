@@ -151,6 +151,7 @@ function bst_wp_head_tour_schema() {
 		'url'           => $permalink,
 		'priceCurrency' => $currency,
 		'availability'  => $product_availability,
+		'validFrom'     => get_the_date( 'Y-m-d', $tour_id ),
 		'seller'        => array(
 			'@type' => 'Organization',
 			'@id'   => home_url( '/#organization' ),
@@ -206,6 +207,7 @@ function bst_wp_head_tour_schema() {
 			'url'           => $permalink,
 			'priceCurrency' => $currency,
 			'availability'  => $avail > 0 ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut',
+			'validFrom'     => get_the_date( 'Y-m-d', $tour_id ),
 		);
 		if ( $price !== null ) {
 			$event_offer['price'] = $price;
@@ -222,14 +224,23 @@ function bst_wp_head_tour_schema() {
 				: 'https://schema.org/EventSoldOut',
 			'eventAttendanceMode' => 'https://schema.org/OfflineEventAttendanceMode',
 			'location'            => array(
-				'@type' => 'Place',
-				'name'  => $location_name,
+				'@type'   => 'Place',
+				'name'    => $location_name,
+				'address' => array(
+					'@type'         => 'PostalAddress',
+					'streetAddress' => $location_name,
+				),
 			),
 			'organizer'           => array(
 				'@type' => 'Organization',
 				'@id'   => home_url( '/#organization' ),
 				'name'  => get_bloginfo( 'name' ),
 				'url'   => home_url( '/' ),
+			),
+			'performer'           => array(
+				'@type' => 'Organization',
+				'@id'   => home_url( '/#organization' ),
+				'name'  => get_bloginfo( 'name' ),
 			),
 			'offers'              => $event_offer,
 		);
