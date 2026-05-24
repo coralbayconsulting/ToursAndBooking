@@ -106,8 +106,8 @@ function bst_seo_head_output() {
 
 // ---- Title tag filters (replaces Yoast title output) ----
 
-add_filter( 'pre_get_document_title', 'bst_seo_document_title', 100001 );
-add_filter( 'document_title',         'bst_seo_document_title', 100001 );
+add_filter( 'pre_get_document_title', 'bst_seo_document_title', 100002 );
+add_filter( 'document_title',         'bst_seo_document_title', 100002 );
 
 function bst_seo_document_title( $title ) {
 	if ( defined( 'WPSEO_VERSION' ) ) {
