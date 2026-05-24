@@ -39,8 +39,26 @@ function bst_wp_head_tour_schema() {
 	// ---- Core ACF fields ----
 	$tour_title        = (string) get_the_title( $tour_id );
 	$short_description = wp_strip_all_tags( (string) get_field( 'short_description', $tour_id ) );
-	$banner_image_raw  = (string) get_field( 'detail_banner_image', $tour_id );
-	$banner_image      = $banner_image_raw && $banner_image_raw[0] === '/' ? home_url( $banner_image_raw ) : $banner_image_raw;
+
+	// Banner image: try detail_banner_image, fall back to image_1.
+	// Normalise to a full absolute URL so schema validators never see a relative path.
+	$bst_resolve_img = function( $raw ) {
+		$raw = (string) $raw;
+		if ( $raw === '' ) {
+			return '';
+		}
+		if ( filter_var( $raw, FILTER_VALIDATE_URL ) ) {
+			return $raw; // already absolute
+		}
+		if ( $raw[0] === '/' ) {
+			return home_url( $raw ); // root-relative
+		}
+		return ''; // attachment ID or unrecognised — skip
+	};
+	$banner_image = $bst_resolve_img( get_field( 'detail_banner_image', $tour_id ) );
+	if ( $banner_image === '' ) {
+		$banner_image = $bst_resolve_img( get_field( 'image_1', $tour_id ) );
+	}
 	$starting_from     = (string) get_field( 'starting_from', $tour_id );
 	$airport           = (string) get_field( 'airport', $tour_id );
 	$currency          = (string) get_field( 'currency', $tour_id );
@@ -49,11 +67,25 @@ function bst_wp_head_tour_schema() {
 	}
 	$permalink = (string) get_permalink( $tour_id );
 
-	// ---- Price: package_3 / 2 = per-person shared double (lowest "starting at" tier) ----
+	// ---- Price: lowest per-person price across all packages (half of total = shared-double rate) ----
+	// Tries packages in order; stops at the first non-zero value so we always
+	// have a price if any package is configured on the tour.
 	$price           = null;
 	$package_pricing = get_field( 'package_pricing', $tour_id );
-	if ( ! empty( $package_pricing['package_3'] ) ) {
-		$price = (string) round( floatval( $package_pricing['package_3'] ) / 2 );
+	if ( is_array( $package_pricing ) ) {
+		$min_half = null;
+		for ( $pkg_i = 1; $pkg_i <= 5; $pkg_i++ ) {
+			$pkg_val = isset( $package_pricing[ 'package_' . $pkg_i ] ) ? floatval( $package_pricing[ 'package_' . $pkg_i ] ) : 0;
+			if ( $pkg_val > 0 ) {
+				$half = round( $pkg_val / 2 );
+				if ( $min_half === null || $half < $min_half ) {
+					$min_half = $half;
+				}
+			}
+		}
+		if ( $min_half !== null ) {
+			$price = (string) $min_half;
+		}
 	}
 
 	// ---- Tour type title (for breadcrumb) ----
@@ -99,6 +131,18 @@ function bst_wp_head_tour_schema() {
 		}
 	}
 
+	// ---- Availability: InStock when any UPCOMING date has open slots ----
+	$has_open_slot = false;
+	foreach ( $upcoming as $d ) {
+		if ( intval( $d['availability'] ) > 0 ) {
+			$has_open_slot = true;
+			break;
+		}
+	}
+	$product_availability = $has_open_slot
+		? 'https://schema.org/InStock'
+		: 'https://schema.org/PreOrder'; // tours run each year; PreOrder signals future availability
+
 	// ---- Build: Offer (base, shared by Product) ----
 	$location_name = $starting_from . ( $airport ? ' (' . $airport . ')' : '' );
 
@@ -106,11 +150,16 @@ function bst_wp_head_tour_schema() {
 		'@type'         => 'Offer',
 		'url'           => $permalink,
 		'priceCurrency' => $currency,
-		'availability'  => 'https://schema.org/InStock',
+		'availability'  => $product_availability,
+		'seller'        => array(
+			'@type' => 'Organization',
+			'@id'   => home_url( '/#organization' ),
+			'name'  => get_bloginfo( 'name' ),
+		),
 	);
 	if ( $price !== null ) {
 		$base_offer['price']           = $price;
-		$base_offer['priceValidUntil'] = date( 'Y' ) . '-12-31';
+		$base_offer['priceValidUntil'] = wp_date( 'Y' ) . '-12-31';
 	}
 
 	// ---- Build: Product ----
@@ -360,10 +409,14 @@ function bst_wp_head_collection_schema() {
 			return;
 		}
 
+		// Use the same resolved SEO title as <title> and og:title.
+		$seo_data  = function_exists( 'bst_seo_resolve_head_data' ) ? bst_seo_resolve_head_data() : array();
+		$page_name = ! empty( $seo_data['title'] ) ? $seo_data['title'] : $heading . ' - ' . $site_name;
+
 		$schema = array(
 			'@context'   => 'https://schema.org',
 			'@type'      => 'CollectionPage',
-			'name'       => $heading . ' - ' . $site_name,
+			'name'       => $page_name,
 			'url'        => $url,
 			'mainEntity' => array(
 				'@type'           => 'ItemList',
@@ -425,10 +478,14 @@ function bst_wp_head_collection_schema() {
 			return;
 		}
 
+		// Use the same resolved SEO title as <title> and og:title.
+		$seo_data  = function_exists( 'bst_seo_resolve_head_data' ) ? bst_seo_resolve_head_data() : array();
+		$page_name = ! empty( $seo_data['title'] ) ? $seo_data['title'] : $heading . ' - ' . $site_name;
+
 		$schema = array(
 			'@context'   => 'https://schema.org',
 			'@type'      => 'CollectionPage',
-			'name'       => $heading . ' - ' . $site_name,
+			'name'       => $page_name,
 			'url'        => (string) $link,
 			'mainEntity' => array(
 				'@type'           => 'ItemList',

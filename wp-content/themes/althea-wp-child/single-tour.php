@@ -12,33 +12,8 @@ if (function_exists('bst_get_tour_type_for_tour')) {
     $tour_type_title = $tour_type_info['title'];
     $tour_type_slug  = $tour_type_info['slug'];
 }
-
-// SEO Meta Tags for single tour pages (only when Yoast is not active — Yoast outputs these in wp_head).
-if (is_singular('tour') && !defined('WPSEO_VERSION')) {
-    $tour_title = get_the_title();
-    $short_description = get_field('short_description');
-    $banner_image = get_field('detail_banner_image');
-    
-    // Create meta description
-    $meta_description = wp_strip_all_tags($short_description);
-    if (strlen($meta_description) > 160) {
-        $meta_description = substr($meta_description, 0, 157) . '...';
-    }
-    
-    echo '<meta name="description" content="' . esc_attr($meta_description) . '">' . "\n";
-    echo '<meta name="robots" content="index, follow">' . "\n";
-    echo '<link rel="canonical" href="' . esc_url(get_permalink()) . '">' . "\n";
-    echo '<meta property="og:title" content="' . esc_attr($tour_title) . '">' . "\n";
-    echo '<meta property="og:description" content="' . esc_attr($meta_description) . '">' . "\n";
-    echo '<meta property="og:image" content="' . esc_url($banner_image) . '">' . "\n";
-    echo '<meta property="og:url" content="' . esc_url(get_permalink()) . '">' . "\n";
-    echo '<meta property="og:type" content="website">' . "\n";
-    echo '<meta property="og:site_name" content="Blue Strada Tours">' . "\n";
-    echo '<meta name="twitter:card" content="summary_large_image">' . "\n";
-    echo '<meta name="twitter:title" content="' . esc_attr($tour_title) . '">' . "\n";
-    echo '<meta name="twitter:description" content="' . esc_attr($meta_description) . '">' . "\n";
-    echo '<meta name="twitter:image" content="' . esc_url($banner_image) . '">' . "\n";
-}
+// SEO meta tags (title, description, og:*, canonical, robots) are output by
+// seo-head.php via wp_head — no duplicate output needed here.
 ?>
 
 <div class="page-content">
