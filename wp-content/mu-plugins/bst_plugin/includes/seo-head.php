@@ -29,14 +29,29 @@ add_action( 'wp_head', 'bst_seo_head_output', 0 );
 // max-image-preview:large output rather than duplicating it.
 add_filter( 'wp_robots', 'bst_seo_robots_directives' );
 
+// Append BST-specific disallow rules to the dynamically generated robots.txt.
+add_filter( 'robots_txt', 'bst_robots_txt_rules' );
+
 function bst_seo_robots_directives( $robots ) {
 	if ( defined( 'WPSEO_VERSION' ) ) {
 		return $robots;
 	}
+
+	// Internal CPTs — never index these.
+	if ( is_singular( array( 'tour-date', 'vehicle', 'source-code', 'email-template' ) ) ) {
+		return array( 'noindex' => true, 'follow' => false );
+	}
+
+	// Colibri page builder taxonomy archives.
+	if ( is_tax( 'element_category' ) ) {
+		return array( 'noindex' => true, 'follow' => false );
+	}
+
 	$is_private_tour = is_singular( 'tour' ) && function_exists( 'get_field' ) && get_field( 'private', get_queried_object_id() );
 	if ( $is_private_tour ) {
 		return array( 'noindex' => true );
 	}
+
 	return array(
 		'index'             => true,
 		'follow'            => true,
@@ -44,6 +59,25 @@ function bst_seo_robots_directives( $robots ) {
 		'max-snippet'       => '-1',
 		'max-video-preview' => '-1',
 	);
+}
+
+function bst_robots_txt_rules( $output ) {
+	$rules = "\n# BST: Block internal and non-public paths\n"
+		. "Disallow: /wp-content/themes/\n"
+		. "Disallow: /wp-content/plugins/\n"
+		. "Disallow: /tour-date/\n"
+		. "Disallow: /vehicle/\n"
+		. "Disallow: /source-code/\n"
+		. "Disallow: /email-template/\n"
+		. "Disallow: /element_category/\n"
+		. "Disallow: /booking/\n"
+		. "Disallow: /bookinginvoice/\n"
+		. "Disallow: /wp-json/\n"
+		. "Disallow: /*?post_type=\n"
+		. "Disallow: /*?s=\n"
+		. "\nSitemap: " . home_url( '/sitemap.xml' ) . "\n";
+
+	return $output . $rules;
 }
 
 function bst_seo_head_output() {
