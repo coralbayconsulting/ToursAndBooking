@@ -4034,11 +4034,15 @@ class BST_Plugin {
                OR (refund_payment_status = 'Pending' AND COALESCE(refund_payment_amount, 0) > 0)
         ");
 
+        $new_web_booking_statuses = function_exists( 'bst_dashboard_new_web_booking_status_sql_in' )
+            ? bst_dashboard_new_web_booking_status_sql_in()
+            : "'Pending', 'Booked', 'Finalized', 'Completed'";
+
         // 9. Web Bookings in last 24 hours (exclude reservations and waiting list)
         $last_24h_count = $wpdb->get_var("
             SELECT COUNT(*) FROM $booking_table 
             WHERE created_date >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-            AND booking_status IN ('Pending', 'Booked', 'Finalized')
+            AND booking_status IN ($new_web_booking_statuses)
             AND booking_entry_id IS NOT NULL 
             AND booking_entry_id != 0
         ");
@@ -4049,7 +4053,7 @@ class BST_Plugin {
             FROM $booking_table 
             WHERE booking_entry_id IS NOT NULL 
             AND booking_entry_id != 0 
-            AND booking_status IN ('Pending', 'Booked', 'Finalized')
+            AND booking_status IN ($new_web_booking_statuses)
             ORDER BY created_date DESC 
             LIMIT 1
         ");

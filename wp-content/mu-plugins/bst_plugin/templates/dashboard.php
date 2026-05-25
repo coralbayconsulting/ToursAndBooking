@@ -207,12 +207,15 @@ $reservations_not_booked = $wpdb->get_results("
     LIMIT 10
 ");
 
-// Get most recent web bookings (last 5, pending and booked only)
+// Get most recent web bookings (last 5, by created_date — include bookings that finalized quickly)
+$new_web_booking_statuses = function_exists( 'bst_dashboard_new_web_booking_status_sql_in' )
+    ? bst_dashboard_new_web_booking_status_sql_in()
+    : "'Pending', 'Booked', 'Finalized', 'Completed'";
 $recent_bookings = $wpdb->get_results("
     SELECT b.id, b.guest1_first_name, b.guest1_last_name, b.guest2_first_name, b.guest2_last_name,
            b.created_date, b.booking_status, b.tour_id, b.tour_date_id, b.tour_package_id
     FROM $booking_table b
-    WHERE b.booking_status IN ('Pending', 'Booked') 
+    WHERE b.booking_status IN ($new_web_booking_statuses)
       AND b.booking_method = 'Web'
     ORDER BY b.created_date DESC 
     LIMIT 5

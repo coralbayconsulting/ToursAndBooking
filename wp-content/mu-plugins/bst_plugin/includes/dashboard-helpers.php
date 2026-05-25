@@ -11,6 +11,35 @@ if (!defined('ABSPATH')) {
 }
 
 /**
+ * Booking statuses treated as new web bookings on the dashboard (filtered by created_date).
+ *
+ * @return string[] Status labels as stored in booking_status.
+ */
+function bst_dashboard_new_web_booking_statuses() {
+    return array( 'Pending', 'Booked', 'Finalized', 'Completed' );
+}
+
+/**
+ * SQL IN (...) fragment for bst_dashboard_new_web_booking_statuses().
+ *
+ * @global wpdb $wpdb
+ * @return string Quoted, comma-separated status values for SQL IN clauses.
+ */
+function bst_dashboard_new_web_booking_status_sql_in() {
+    global $wpdb;
+
+    return implode(
+        ', ',
+        array_map(
+            static function ( $status ) use ( $wpdb ) {
+                return $wpdb->prepare( '%s', $status );
+            },
+            bst_dashboard_new_web_booking_statuses()
+        )
+    );
+}
+
+/**
  * Bookings that need finalization and whose tour departs within the sent window.
  *
  * Includes Web and Offline (paper/admin) bookings — finalization does not require a GF9 entry.
@@ -164,11 +193,13 @@ function bst_get_dashboard_metrics() {
            OR (refund_payment_status = 'Pending' AND COALESCE(refund_payment_amount, 0) > 0)
     ");
 
+    $new_web_booking_statuses = bst_dashboard_new_web_booking_status_sql_in();
+
     // 9. Web bookings in last 24 hours (exclude reservations + waiting list)
     $last_24h_count = (int) $wpdb->get_var("
         SELECT COUNT(*) FROM $booking_table 
         WHERE created_date >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-        AND booking_status IN ('Pending', 'Booked', 'Finalized')
+        AND booking_status IN ($new_web_booking_statuses)
         AND booking_entry_id IS NOT NULL 
         AND booking_entry_id != 0
     ");
@@ -179,7 +210,7 @@ function bst_get_dashboard_metrics() {
         FROM $booking_table 
         WHERE booking_entry_id IS NOT NULL 
         AND booking_entry_id != 0 
-        AND booking_status IN ('Pending', 'Booked', 'Finalized')
+        AND booking_status IN ($new_web_booking_statuses)
         ORDER BY created_date DESC 
         LIMIT 1
     ");
