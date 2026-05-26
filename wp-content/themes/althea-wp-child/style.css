@@ -26,6 +26,18 @@ Updated: 2025-01-05 22:40:54
     --darkblue: #0056b3; /* Hover Button */
 }
 
+/*
+ * Colibri General Settings page background: on mobile, cover zooms into
+ * the center pavement. Scale to viewport width and anchor bottom so the cars stay visible.
+ */
+@media (max-width: 767px) {
+    body#colibri {
+        background-size: 100% auto !important;
+        background-position: center bottom !important;
+        background-repeat: no-repeat !important;
+    }
+}
+
 /* Create the translucent overlay effect */
 .translucent-overlay {
     position: relative;
