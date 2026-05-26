@@ -26,6 +26,33 @@ Updated: 2025-01-05 22:40:54
     --darkblue: #0056b3; /* Hover Button */
 }
 
+/*
+ * Mobile page background (General Settings on body.custom-background).
+ * - scroll: real iOS/Android do not paint fixed; DevTools desktop engine does.
+ * - 100% auto + bottom: cover + center crops grey pavement (pixelated "shadow").
+ */
+@supports (-webkit-touch-callout: none) {
+	body#colibri,
+	body#colibri.custom-background,
+	body.custom-background {
+		background-attachment: scroll !important;
+		background-size: 100% auto !important;
+		background-position: center bottom !important;
+		background-repeat: no-repeat !important;
+	}
+}
+
+@media (max-width: 767px) {
+	body#colibri,
+	body#colibri.custom-background,
+	body.custom-background {
+		background-attachment: scroll !important;
+		background-size: 100% auto !important;
+		background-position: center bottom !important;
+		background-repeat: no-repeat !important;
+	}
+}
+
 /* Create the translucent overlay effect */
 .translucent-overlay {
     position: relative;

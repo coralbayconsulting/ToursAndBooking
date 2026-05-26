@@ -31,6 +31,16 @@ add_action( 'wp_enqueue_scripts', 'child_theme_configurator_css', 10 );
 
 // END ENQUEUE PARENT ACTION
 
+/**
+ * General Settings background: scroll + cover in theme mods (mobile overrides in style.css).
+ */
+add_filter( 'theme_mod_background_attachment', static function () {
+	return 'scroll';
+}, 20 );
+add_filter( 'theme_mod_background_size', static function () {
+	return 'cover';
+}, 20 );
+
 function enqueue_font_awesome() {
     wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css', array(), '6.0.13');
 }
