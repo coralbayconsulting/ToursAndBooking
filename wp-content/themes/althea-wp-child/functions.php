@@ -32,21 +32,35 @@ add_action( 'wp_enqueue_scripts', 'child_theme_configurator_css', 10 );
 // END ENQUEUE PARENT ACTION
 
 /**
- * Real phones (not DevTools): change custom-background before #custom-background-css is built.
- * wp_is_mobile() is false in desktop DevTools emulation — style.css media query handles that.
+ * iOS Safari breaks with background-attachment:fixed (pixelated/zoomed crop).
+ * Colibri outputs #custom-background-css at wp_head priority 11 — we override at 12.
  */
-function bst_mobile_custom_background_theme_mods() {
-	if ( ! wp_is_mobile() ) {
+add_filter( 'theme_mod_background_attachment', static function () {
+	return 'scroll';
+}, 20 );
+
+function bst_fix_mobile_background_css() {
+	if ( is_admin() ) {
 		return;
 	}
-	add_filter( 'theme_mod_background_attachment', static function () {
-		return 'scroll';
-	} );
-	add_filter( 'theme_mod_background_position_y', static function () {
-		return 'bottom';
-	} );
+	?>
+	<style id="bst-background-ios-fix">
+		body.custom-background,
+		.colibri-featured-img-bg {
+			background-attachment: scroll !important;
+			background-size: cover !important;
+			background-repeat: no-repeat !important;
+		}
+		@media (max-width: 767px) {
+			body.custom-background,
+			.colibri-featured-img-bg {
+				background-position: center bottom !important;
+			}
+		}
+	</style>
+	<?php
 }
-add_action( 'wp', 'bst_mobile_custom_background_theme_mods' );
+add_action( 'wp_head', 'bst_fix_mobile_background_css', 12 );
 
 function enqueue_font_awesome() {
     wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css', array(), '6.0.13');

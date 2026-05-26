@@ -26,20 +26,6 @@ Updated: 2025-01-05 22:40:54
     --darkblue: #0056b3; /* Hover Button */
 }
 
-/*
- * General Settings page background (body.custom-background only).
- * Do not target .colibri-featured-img-bg — that is a separate hero layer.
- * #custom-background-css uses attachment:fixed; iOS Safari mishandles it.
- */
-@media (max-width: 767px) {
-    body.custom-background {
-        background-attachment: scroll !important;
-        background-position: center bottom !important;
-        background-size: cover !important;
-        background-repeat: no-repeat !important;
-    }
-}
-
 /* Create the translucent overlay effect */
 .translucent-overlay {
     position: relative;
