@@ -27,25 +27,16 @@ Updated: 2025-01-05 22:40:54
 }
 
 /*
- * WordPress General Settings page background (body.custom-background).
- * Production outputs #custom-background-css with attachment:fixed — iOS Safari
- * mishandles that (zoomed/cropped shadow look). Override on small screens.
+ * General Settings page background (body.custom-background only).
+ * Do not target .colibri-featured-img-bg — that is a separate hero layer.
+ * #custom-background-css uses attachment:fixed; iOS Safari mishandles it.
  */
 @media (max-width: 767px) {
-    html.althea-wp-theme body#colibri.custom-background,
-    html.althea-wp-theme body.custom-background,
-    html.althea-wp-theme body#colibri .background-layer,
-    html.althea-wp-theme body#colibri .slideshow-image,
-    html.althea-wp-theme #colibri .colibri-featured-img-bg {
-        background-size: cover !important;
-        background-position: center bottom !important;
-        background-repeat: no-repeat !important;
+    body.custom-background {
         background-attachment: scroll !important;
-    }
-
-    html.althea-wp-theme body#colibri.custom-background,
-    html.althea-wp-theme body.custom-background {
-        background-color: #a8a8a8 !important;
+        background-position: center bottom !important;
+        background-size: cover !important;
+        background-repeat: no-repeat !important;
     }
 }
 
