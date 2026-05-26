@@ -26,6 +26,24 @@ Updated: 2025-01-05 22:40:54
     --darkblue: #0056b3; /* Hover Button */
 }
 
+/*
+ * Real iPhone/iPad Safari: fixed body backgrounds often do not paint (white or blocky).
+ * Chrome DevTools mobile mode does NOT match -webkit-touch-callout, so DevTools stays
+ * on the customizer output (fixed/cover/auto) and keeps looking correct.
+ */
+@media (max-width: 767px) {
+	@supports (-webkit-touch-callout: none) {
+		body.custom-background,
+		body#colibri.custom-background {
+			background-attachment: scroll !important;
+		}
+
+		.h-hero {
+			background-color: transparent !important;
+		}
+	}
+}
+
 /* Create the translucent overlay effect */
 .translucent-overlay {
     position: relative;
