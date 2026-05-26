@@ -26,6 +26,28 @@ Updated: 2025-01-05 22:40:54
     --darkblue: #0056b3; /* Hover Button */
 }
 
+/*
+ * General Settings page background (body.custom-background).
+ * Backup if theme_mod filters are bypassed. See also functions.php.
+ */
+body.custom-background {
+    background-size: cover !important;
+    background-attachment: scroll !important;
+    background-repeat: no-repeat !important;
+}
+
+@media (max-width: 767px) {
+    body.custom-background {
+        background-position: center bottom !important;
+    }
+}
+
+@media (min-width: 768px) {
+    body.custom-background {
+        background-position: center center !important;
+    }
+}
+
 /* Create the translucent overlay effect */
 .translucent-overlay {
     position: relative;
