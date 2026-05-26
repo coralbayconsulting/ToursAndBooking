@@ -27,14 +27,22 @@ Updated: 2025-01-05 22:40:54
 }
 
 /*
- * Colibri General Settings page background: on mobile, cover zooms into
- * the center pavement. Scale to viewport width and anchor bottom so the cars stay visible.
+ * Colibri General Settings page background (mobile).
+ * 100% auto left a white band above the image; cover + bottom fills the screen
+ * and keeps the cars in view (instead of center-crop pavement only).
  */
 @media (max-width: 767px) {
-    body#colibri {
-        background-size: 100% auto !important;
+    html.althea-wp-theme body#colibri,
+    html.althea-wp-theme body#colibri .background-layer,
+    html.althea-wp-theme body#colibri .slideshow-image {
+        background-size: cover !important;
         background-position: center bottom !important;
         background-repeat: no-repeat !important;
+        background-attachment: scroll !important;
+    }
+
+    html.althea-wp-theme body#colibri {
+        background-color: #a8a8a8 !important;
     }
 }
 
