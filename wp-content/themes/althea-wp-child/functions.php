@@ -31,43 +31,6 @@ add_action( 'wp_enqueue_scripts', 'child_theme_configurator_css', 10 );
 
 // END ENQUEUE PARENT ACTION
 
-/**
- * General Settings page background (#custom-background-css on body.custom-background).
- * Colibri "auto" + "top" causes a pixelated/zoomed crop on mobile; fixed attachment breaks iOS.
- */
-add_filter( 'theme_mod_background_attachment', static function () {
-	return 'scroll';
-}, 20 );
-add_filter( 'theme_mod_background_size', static function () {
-	return 'cover';
-}, 20 );
-
-function bst_custom_background_css() {
-	if ( is_admin() ) {
-		return;
-	}
-	?>
-	<style id="bst-custom-background-fix">
-		body.custom-background {
-			background-size: cover !important;
-			background-attachment: scroll !important;
-			background-repeat: no-repeat !important;
-		}
-		@media (max-width: 767px) {
-			body.custom-background {
-				background-position: center bottom !important;
-			}
-		}
-		@media (min-width: 768px) {
-			body.custom-background {
-				background-position: center center !important;
-			}
-		}
-	</style>
-	<?php
-}
-add_action( 'wp_head', 'bst_custom_background_css', 12 );
-
 function enqueue_font_awesome() {
     wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css', array(), '6.0.13');
 }

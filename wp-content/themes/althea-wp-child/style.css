@@ -27,25 +27,28 @@ Updated: 2025-01-05 22:40:54
 }
 
 /*
- * General Settings page background (body.custom-background).
- * Backup if theme_mod filters are bypassed. See also functions.php.
+ * Colibri General Settings page background (body.custom-background).
+ * Production also injects .colibri-featured-img-bg (second full-page image); that layer
+ * stacks on top and often looks pixelated on mobile — disable it.
  */
-body.custom-background {
-    background-size: cover !important;
-    background-attachment: scroll !important;
-    background-repeat: no-repeat !important;
+.colibri-featured-img-bg {
+    display: none !important;
+    background-image: none !important;
 }
 
+/* Mobile: DevTools-good treatment — width-fit, cars anchored at bottom */
 @media (max-width: 767px) {
-    body.custom-background {
+    body#colibri.custom-background {
+        background-size: 100% auto !important;
         background-position: center bottom !important;
+        background-repeat: no-repeat !important;
+        background-attachment: scroll !important;
     }
 }
 
-@media (min-width: 768px) {
-    body.custom-background {
-        background-position: center center !important;
-    }
+/* iOS Safari: scroll instead of fixed on full-page backgrounds */
+body.custom-background {
+    background-attachment: scroll !important;
 }
 
 /* Create the translucent overlay effect */
