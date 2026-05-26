@@ -31,6 +31,25 @@ add_action( 'wp_enqueue_scripts', 'child_theme_configurator_css', 10 );
 
 // END ENQUEUE PARENT ACTION
 
+/**
+ * Override WordPress custom-background CSS on mobile (loads after #custom-background-css).
+ * iOS Safari breaks with background-attachment:fixed (zoomed/cropped pavement only).
+ */
+function bst_mobile_custom_background_fix() {
+	?>
+	<style id="bst-mobile-custom-background-fix">
+	@media (max-width: 767px) {
+		body.custom-background {
+			background-position: center bottom !important;
+			background-attachment: scroll !important;
+			background-size: cover !important;
+		}
+	}
+	</style>
+	<?php
+}
+add_action( 'wp_head', 'bst_mobile_custom_background_fix', 999 );
+
 function enqueue_font_awesome() {
     wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css', array(), '6.0.13');
 }

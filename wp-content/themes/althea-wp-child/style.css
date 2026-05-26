@@ -27,21 +27,24 @@ Updated: 2025-01-05 22:40:54
 }
 
 /*
- * Colibri General Settings page background (mobile).
- * 100% auto left a white band above the image; cover + bottom fills the screen
- * and keeps the cars in view (instead of center-crop pavement only).
+ * WordPress General Settings page background (body.custom-background).
+ * Production outputs #custom-background-css with attachment:fixed — iOS Safari
+ * mishandles that (zoomed/cropped shadow look). Override on small screens.
  */
 @media (max-width: 767px) {
-    html.althea-wp-theme body#colibri,
+    html.althea-wp-theme body#colibri.custom-background,
+    html.althea-wp-theme body.custom-background,
     html.althea-wp-theme body#colibri .background-layer,
-    html.althea-wp-theme body#colibri .slideshow-image {
+    html.althea-wp-theme body#colibri .slideshow-image,
+    html.althea-wp-theme #colibri .colibri-featured-img-bg {
         background-size: cover !important;
         background-position: center bottom !important;
         background-repeat: no-repeat !important;
         background-attachment: scroll !important;
     }
 
-    html.althea-wp-theme body#colibri {
+    html.althea-wp-theme body#colibri.custom-background,
+    html.althea-wp-theme body.custom-background {
         background-color: #a8a8a8 !important;
     }
 }
