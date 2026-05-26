@@ -32,31 +32,29 @@ add_action( 'wp_enqueue_scripts', 'child_theme_configurator_css', 10 );
 // END ENQUEUE PARENT ACTION
 
 /**
- * Android (and other non-iOS) phones: force scroll on body background.
- * iOS uses style.css @supports (-webkit-touch-callout). Not loaded for desktop
- * or typical Chrome DevTools (desktop user-agent).
+ * Real phones only (wp_is_mobile): fixed body backgrounds often do not paint.
+ * Chrome DevTools with a desktop user-agent is not mobile — customizer CSS unchanged.
  */
-function bst_android_handheld_background_fix() {
+function bst_handheld_background_fix() {
 	if ( is_admin() || ! wp_is_mobile() ) {
 		return;
 	}
-	$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? $_SERVER['HTTP_USER_AGENT'] : '';
-	if ( preg_match( '/iPhone|iPad|iPod/i', $ua ) ) {
-		return;
-	}
 	?>
-	<style id="bst-android-background-fix">
+	<style id="bst-handheld-background-fix">
 		body.custom-background,
 		body#colibri.custom-background {
 			background-attachment: scroll !important;
 		}
-		.h-hero {
+		.h-hero,
+		.h-hero .background-wrapper,
+		.h-hero .background-layer,
+		.page-header .h-hero {
 			background-color: transparent !important;
 		}
 	</style>
 	<?php
 }
-add_action( 'wp_head', 'bst_android_handheld_background_fix', 12 );
+add_action( 'wp_head', 'bst_handheld_background_fix', 12 );
 
 function enqueue_font_awesome() {
     wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css', array(), '6.0.13');
