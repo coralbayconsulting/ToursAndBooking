@@ -740,6 +740,10 @@ class BST_Plugin {
         if ($booking && function_exists('bst_booking_extension_addon_amount')) {
             $booking->bst_extension_addon_amount = bst_booking_extension_addon_amount($booking);
         }
+
+        if ($booking && function_exists('bst_normalize_booking_record')) {
+            $booking = bst_normalize_booking_record($booking);
+        }
         
         include BST_PLUGIN_DIR . 'templates/tour-bookings-edit.php';
     }

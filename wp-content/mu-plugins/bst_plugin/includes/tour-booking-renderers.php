@@ -135,23 +135,24 @@ function bst_format_currency($amount, $currency = 'EUR') {
  */
 function bst_format_address($address_line1, $address_line2, $city, $state_province, $postal_code, $country) {
     $address_parts = array();
+    $normalize = function_exists('bst_normalize_booking_text') ? 'bst_normalize_booking_text' : 'wp_unslash';
     
     // Add address lines
-    if (!empty($address_line1)) $address_parts[] = esc_html(trim($address_line1));
-    if (!empty($address_line2)) $address_parts[] = esc_html(trim($address_line2));
+    if (!empty($address_line1)) $address_parts[] = esc_html(trim($normalize($address_line1)));
+    if (!empty($address_line2)) $address_parts[] = esc_html(trim($normalize($address_line2)));
     
     // Add city, state, postal
     $city_line = array();
-    if (!empty($city)) $city_line[] = esc_html(trim($city));
-    if (!empty($state_province)) $city_line[] = esc_html(trim($state_province));
-    if (!empty($postal_code)) $city_line[] = esc_html(trim($postal_code));
+    if (!empty($city)) $city_line[] = esc_html(trim($normalize($city)));
+    if (!empty($state_province)) $city_line[] = esc_html(trim($normalize($state_province)));
+    if (!empty($postal_code)) $city_line[] = esc_html(trim($normalize($postal_code)));
     
     if (!empty($city_line)) {
         $address_parts[] = implode(', ', $city_line);
     }
     
     // Add country
-    if (!empty($country)) $address_parts[] = esc_html(trim($country));
+    if (!empty($country)) $address_parts[] = esc_html(trim($normalize($country)));
     
     return implode('<br>', $address_parts);
 }

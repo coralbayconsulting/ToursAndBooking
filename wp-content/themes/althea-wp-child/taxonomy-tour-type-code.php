@@ -599,7 +599,7 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
                                                     <span style="color: white; font-size: 12px; font-weight: 600; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); white-space: nowrap;"><?php echo esc_html($tour_rating->name); ?></span>
                                                 </div>
                                             <?php endif; ?>
-                                            <?php echo wp_get_attachment_image( $image, 'tour-listing', false, [ 'alt' => esc_attr( $title ), 'loading' => 'lazy' ] ); ?>
+                                            <?php echo wp_get_attachment_image( $image, 'tour-listing', false, [ 'alt' => esc_attr( $title ), 'loading' => 'lazy', 'sizes' => '(max-width: 600px) calc(100vw - 40px), 300px' ] ); ?>
                                             <?php if ($title_modifier) : ?>
                                             <div class="overlay-text">
                                                     <span class="badge green"><?php echo esc_html($title_modifier); ?></span>

@@ -2816,7 +2816,10 @@ function bst_sanitize_booking_fields($data) {
     
     foreach ($field_limits as $field_name => $max_length) {
         if (isset($data[$field_name])) {
-            $data[$field_name] = bst_truncate_field($data[$field_name], $max_length);
+            $data[$field_name] = bst_truncate_field(
+                bst_normalize_booking_text($data[$field_name]),
+                $max_length
+            );
         }
     }
     

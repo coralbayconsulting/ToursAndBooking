@@ -306,6 +306,7 @@ function bst_create_tour_booking($data, $context = 'manual') {
     try {
         // Add creation audit fields using shared utility
         $data = bst_add_audit_fields_create($data);
+        $data = bst_normalize_booking_data_strings($data);
         
         // Insert the booking
         $insert_result = $wpdb->insert($booking_table, $data);
@@ -461,6 +462,7 @@ function bst_update_tour_booking($booking_id, $data, $context = 'manual') {
         
         // Add update audit fields using shared utility
         $data = bst_add_audit_fields_update($data);
+        $data = bst_normalize_booking_data_strings($data);
         
         // Update the booking
         $update_result = $wpdb->update($booking_table, $data, array('id' => $booking_id));

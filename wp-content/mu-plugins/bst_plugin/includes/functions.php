@@ -59,6 +59,50 @@ if (!session_id() && !headers_sent()) {
  * @param string $hook Cron hook name.
  * @return bool
  */
+function bst_normalize_booking_text( $value ) {
+    if ( ! is_string( $value ) || $value === '' ) {
+        return $value;
+    }
+
+    return wp_unslash( $value );
+}
+
+/**
+ * Strip stray slashes from all string values in a booking data array.
+ *
+ * @param array $data Booking field data keyed by column name.
+ * @return array
+ */
+function bst_normalize_booking_data_strings( array $data ) {
+    foreach ( $data as $key => $value ) {
+        if ( is_string( $value ) ) {
+            $data[ $key ] = bst_normalize_booking_text( $value );
+        }
+    }
+
+    return $data;
+}
+
+/**
+ * Normalize string properties on a booking row object for display/editing.
+ *
+ * @param object|null $booking Booking row from the database.
+ * @return object|null
+ */
+function bst_normalize_booking_record( $booking ) {
+    if ( ! $booking || ! is_object( $booking ) ) {
+        return $booking;
+    }
+
+    foreach ( get_object_vars( $booking ) as $key => $value ) {
+        if ( is_string( $value ) ) {
+            $booking->$key = bst_normalize_booking_text( $value );
+        }
+    }
+
+    return $booking;
+}
+
 function bst_is_cron_hook_scheduled($hook) {
     $crons = _get_cron_array();
     if (empty($crons) || !is_array($crons)) {
