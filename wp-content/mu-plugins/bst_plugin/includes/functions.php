@@ -614,9 +614,10 @@ function bst_vehicle_label_for_gf_from_id( $vehicle_post_id ) {
 function bst_enqueue_custom_admin_css($hook) {
     global $typenow;
 
-    // Enqueue for the 'tour' and 'tour-date' post types, or BST plugin admin pages
+    // Enqueue for the 'tour', 'tour-date', and 'vehicle' post types, or BST plugin admin pages
     if (($typenow == 'tour') || 
         ($typenow == 'tour-date') || 
+        ($typenow == 'vehicle') ||
         ($hook === 'bst-tours-booking_page_bst-tour-bookings') ||
         ($hook === 'bst-tours-booking_page_bst-plugin-customer-list') ||
         ($hook === 'toplevel_page_bst-plugin') ||

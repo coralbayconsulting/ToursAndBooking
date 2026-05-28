@@ -3159,8 +3159,7 @@ class BST_Plugin {
         // Left side: Back to list button
         echo '<div>';
         echo '<a href="' . esc_url($list_url) . '" class="button button-secondary bst-edit-nav-link">';
-        echo '<span class="dashicons dashicons-arrow-left-alt" style="vertical-align: middle; margin-right: 5px;"></span>';
-        echo 'Back to ' . ucfirst(str_replace('-', ' ', $post->post_type ?? '')) . ' List';
+        echo '&larr; Back to ' . esc_html(ucfirst(str_replace('-', ' ', $post->post_type ?? ''))) . ' List';
         echo '</a>';
         echo '</div>';
         
@@ -3566,9 +3565,7 @@ class BST_Plugin {
             }
             
             $prev_url = add_query_arg($edit_params, admin_url('post.php?post=' . $prev_id . '&action=edit'));
-            $buttons[] = '<a href="' . esc_url($prev_url) . '" class="button button-secondary bst-edit-nav-link">';
-            $buttons[] = '<span class="dashicons dashicons-arrow-left-alt2" style="vertical-align: middle;"></span> Previous';
-            $buttons[] = '</a>';
+            $buttons[] = '<a href="' . esc_url($prev_url) . '" class="button button-secondary bst-edit-nav-link">&larr; Previous</a>';
         }
         
         // Next button
@@ -3611,9 +3608,7 @@ class BST_Plugin {
             }
             
             $next_url = add_query_arg($edit_params, admin_url('post.php?post=' . $next_id . '&action=edit'));
-            $buttons[] = '<a href="' . esc_url($next_url) . '" class="button button-secondary bst-edit-nav-link" style="margin-left: 5px;">';
-            $buttons[] = 'Next <span class="dashicons dashicons-arrow-right-alt2" style="vertical-align: middle;"></span>';
-            $buttons[] = '</a>';
+            $buttons[] = '<a href="' . esc_url($next_url) . '" class="button button-secondary bst-edit-nav-link bst-edit-nav-next">Next &rarr;</a>';
         }
         
         return implode('', $buttons);

@@ -1,4 +1,18 @@
 /* BST Plugin Admin Styles - Updated for cache busting - Tour Dates Layout Optimization */
+
+/* Tour / tour-date / vehicle edit screen list navigation (WP 7 .button layout) */
+a.bst-edit-nav-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35em;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+a.bst-edit-nav-next {
+    margin-left: 5px;
+}
 /* Ensure the table layout is fixed */
 .acf-repeater .acf-table {
     table-layout: fixed;
