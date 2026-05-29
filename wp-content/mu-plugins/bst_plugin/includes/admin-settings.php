@@ -8,6 +8,7 @@ function bst_register_settings() {
     register_setting('bst_settings_group', 'bst_vat_rate', array('default' => 22.0)); // VAT rate as decimal (e.g., 22.0 for 22%)
     register_setting('bst_settings_group', 'bst_bank_wire_discount', array('default' => 2.5)); // Bank wire discount as decimal (e.g., 2.5 for 2.5%)
     register_setting('bst_settings_group', 'bst_banner_image');
+    register_setting('bst_settings_group', 'bst_blog_banner_image');
     register_setting('bst_settings_group', 'bst_ptarchive_tour_type_page_title');
     register_setting('bst_settings_group', 'bst_ptarchive_tour_type_meta_description');
     register_setting('bst_settings_group', 'bst_enable_tour_rating', array('default' => false));
@@ -220,6 +221,14 @@ function bst_register_settings() {
     );
 
     add_settings_field(
+        'bst_blog_banner_image',
+        'Blog Banner',
+        'bst_blog_banner_image_callback',
+        'bst_settings_page',
+        'bst_settings_section'
+    );
+
+    add_settings_field(
         'bst_ptarchive_tour_type_page_title',
         'Our Tours archive SEO title',
         'bst_ptarchive_tour_type_page_title_callback',
@@ -411,6 +420,14 @@ function bst_banner_image_callback() {
     echo '<input type="text" id="bst_banner_image" name="bst_banner_image" value="' . esc_attr($banner_image) . '" style="display:none;" />';
     echo '<input type="button" id="upload_image_button" class="button" value="Upload Image" />';
     echo '<p class="description">Use the upload button to select an image from the media library.</p>';
+}
+
+function bst_blog_banner_image_callback() {
+    $banner_image = get_option('bst_blog_banner_image');
+    echo '<img id="bst_blog_banner_image_preview" src="' . esc_attr($banner_image) . '" style="max-width: 300px; display: ' . ($banner_image ? 'block' : 'none') . ';" />';
+    echo '<input type="text" id="bst_blog_banner_image" name="bst_blog_banner_image" value="' . esc_attr($banner_image) . '" style="display:none;" />';
+    echo '<input type="button" id="upload_blog_banner_button" class="button" value="Upload Image" />';
+    echo '<p class="description">Banner for the main blog page and the default for category archives without their own banner image. Uses the same crop as tour pages (250px height, centered low).</p>';
 }
 
 function bst_ptarchive_tour_type_page_title_callback() {

@@ -211,38 +211,22 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
                 <?php endif; // Close $bst_show_filter check ?>
                 
                 <!-- Share Buttons -->
-                <div class="bst-share-buttons">
-                    <span class="bst-share-label">Share:</span>
-                    <?php 
-                    // Get taxonomy term for sharing via helper
-                    $term       = get_queried_object();
-                    $share_meta = function_exists('bst_get_tour_type_term_share_metadata')
-                        ? bst_get_tour_type_term_share_metadata($term)
-                        : array('url' => get_term_link($term), 'email_label' => "Blue Strada's tours");
-                    $share_url   = $share_meta['url'];
-                    $email_label = $share_meta['email_label'];
-                    // Use rawurlencode for mailto to preserve proper spacing
-                    $email_subject = rawurlencode('Check out ' . $email_label);
-                    $email_body    = rawurlencode('I thought you might like ' . $email_label . ':' . "\n\n" . $share_url);
-                    ?>
-                    <a href="mailto:?subject=<?php echo $email_subject; ?>&body=<?php echo $email_body; ?>" class="bst-share-icon" title="Email to a friend" aria-label="Email these tours to a friend">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                            <polyline points="22,6 12,13 2,6"></polyline>
-                        </svg>
-                    </a>
-                    <a href="https://wa.me/?text=<?php echo urlencode('Check out ' . $email_label . ': ' . $share_url); ?>" class="bst-share-icon" title="Share on WhatsApp" target="_blank" rel="noopener noreferrer" aria-label="Share these tours on WhatsApp">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-                        </svg>
-                    </a>
-                    <button onclick="bstCopyTourLink(event)" class="bst-share-icon bst-share-copy" title="Copy link to clipboard">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                        </svg>
-                    </button>
-                </div>
+                <?php
+                $term       = get_queried_object();
+                $share_meta = function_exists( 'bst_get_tour_type_term_share_metadata' )
+                    ? bst_get_tour_type_term_share_metadata( $term )
+                    : array(
+                        'url'         => get_term_link( $term ),
+                        'email_label' => "Blue Strada's tours",
+                    );
+                bst_render_share_buttons(
+                    array(
+                        'context'     => 'tours-list',
+                        'url'         => $share_meta['url'],
+                        'email_label' => $share_meta['email_label'],
+                    )
+                );
+                ?>
             </div>
         </div>
 

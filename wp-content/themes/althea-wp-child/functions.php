@@ -737,12 +737,129 @@ add_action('wp_head', 'add_tour_seo_meta');
 
 // Note: tour-rating taxonomy is now registered in the plugin alongside tour-type-code
 
+/**
+ * Render email / WhatsApp / copy-link share buttons.
+ *
+ * @param array $args {
+ *     @type string $context     tour|article|page|tours-list|blog-list
+ *     @type string $url         Share URL (defaults to current post permalink).
+ *     @type string $title       Single-item title for tour/article/page contexts.
+ *     @type string $email_label List label for tours-list context.
+ * }
+ */
+function bst_render_share_buttons( $args = array() ) {
+    $args = wp_parse_args(
+        $args,
+        array(
+            'context'     => 'article',
+            'url'         => '',
+            'title'       => '',
+            'email_label' => '',
+        )
+    );
+
+    $context = $args['context'];
+    $url     = $args['url'];
+    $title   = $args['title'];
+
+    if ( $url === '' && in_array( $context, array( 'tour', 'article', 'page' ), true ) ) {
+        $url = get_permalink();
+    }
+
+    if ( $context === 'tours-list' && $url === '' ) {
+        $url = function_exists( 'bst_get_tour_archive_share_metadata' )
+            ? bst_get_tour_archive_share_metadata()['url']
+            : get_post_type_archive_link( 'tour-type' );
+    }
+
+    if ( $context === 'blog-list' && $url === '' && function_exists( 'bst_get_blog_index_url' ) ) {
+        $url = bst_get_blog_index_url();
+    }
+
+    if ( $title === '' && in_array( $context, array( 'tour', 'article', 'page' ), true ) ) {
+        $title = html_entity_decode( get_the_title(), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+    }
+
+    if ( $context === 'tours-list' && $title === '' ) {
+        $title = $args['email_label'] !== '' ? $args['email_label'] : "Blue Strada's tours";
+    }
+
+    if ( $context === 'blog-list' && $title === '' ) {
+        $title = $args['email_label'] !== '' ? $args['email_label'] : ( function_exists( 'bst_get_blog_index_label' ) ? bst_get_blog_index_label() : 'Blog' );
+    }
+
+    switch ( $context ) {
+        case 'tour':
+            $subject_text   = 'Check out this tour: ' . $title;
+            $body_intro     = 'I thought you might like this tour:';
+            $whatsapp_text  = 'Check out this tour: ' . $title . ' ' . $url;
+            $email_aria     = 'Email this tour to a friend';
+            $whatsapp_aria  = 'Share this tour on WhatsApp';
+            break;
+
+        case 'page':
+            $subject_text   = 'Check out this page: ' . $title;
+            $body_intro     = 'I thought you might like this page:';
+            $whatsapp_text  = 'Check out this page: ' . $title . ' ' . $url;
+            $email_aria     = 'Email this page to a friend';
+            $whatsapp_aria  = 'Share this page on WhatsApp';
+            break;
+
+        case 'tours-list':
+            $label = $args['email_label'] !== '' ? $args['email_label'] : "Blue Strada's tours";
+            $subject_text   = 'Check out ' . $label;
+            $body_intro     = 'I thought you might like ' . $label . ':';
+            $whatsapp_text  = 'Check out ' . $label . ': ' . $url;
+            $email_aria     = 'Email these tours to a friend';
+            $whatsapp_aria  = 'Share these tours on WhatsApp';
+            break;
+
+        case 'blog-list':
+            $label = $args['email_label'] !== '' ? $args['email_label'] : 'these articles';
+            $subject_text   = 'Check out ' . $label;
+            $body_intro     = 'I thought you might like ' . $label . ':';
+            $whatsapp_text  = 'Check out ' . $label . ': ' . $url;
+            $email_aria     = 'Email these articles to a friend';
+            $whatsapp_aria  = 'Share these articles on WhatsApp';
+            break;
+
+        case 'article':
+        default:
+            $subject_text   = 'Check out this article: ' . $title;
+            $body_intro     = 'I thought you might like this article:';
+            $whatsapp_text  = 'Check out this article: ' . $title . ' ' . $url;
+            $email_aria     = 'Email this article to a friend';
+            $whatsapp_aria  = 'Share this article on WhatsApp';
+            break;
+    }
+
+    $bst_share_email_subject = rawurlencode( $subject_text );
+    $bst_share_email_body    = rawurlencode( $body_intro . "\n\n" . ( in_array( $context, array( 'tour', 'article', 'page' ), true ) ? $title . "\n" : '' ) . $url );
+    $bst_share_whatsapp_text = $whatsapp_text;
+    $bst_share_email_aria    = $email_aria;
+    $bst_share_whatsapp_aria = $whatsapp_aria;
+
+    $object_id = isset( $args['object_id'] ) ? absint( $args['object_id'] ) : 0;
+    if ( ! $object_id && in_array( $context, array( 'tour', 'article', 'page' ), true ) ) {
+        $object_id = get_the_ID();
+    }
+
+    $bst_share_track_context   = $context;
+    $bst_share_track_url       = $url;
+    $bst_share_track_title     = $title;
+    $bst_share_track_object_id = $object_id;
+
+    include get_stylesheet_directory() . '/partials/bst-share-buttons.php';
+}
+
 // Enqueue custom tooltip JavaScript for star ratings
 function enqueue_custom_tooltip_script() {
-    if (is_tax('tour-type-code') || is_post_type_archive('tour-type') || is_singular('tour')) {
-        wp_enqueue_script('custom-tooltip', get_stylesheet_directory_uri() . '/custom-tooltip.js', array('jquery'), '1.0.1', true);
-        wp_enqueue_script('rating-help', get_stylesheet_directory_uri() . '/js/rating-help.js', array('jquery'), '1.0.1', true);
-        wp_enqueue_script('bst-tour-share', get_stylesheet_directory_uri() . '/js/bst-tour-share.js', array(), '1.0.0', true);
+    if (is_tax('tour-type-code') || is_post_type_archive('tour-type') || is_singular('tour') || is_singular('post') || is_home() || is_category() || is_tag()) {
+        if (is_tax('tour-type-code') || is_post_type_archive('tour-type') || is_singular('tour')) {
+            wp_enqueue_script('custom-tooltip', get_stylesheet_directory_uri() . '/custom-tooltip.js', array('jquery'), '1.0.1', true);
+            wp_enqueue_script('rating-help', get_stylesheet_directory_uri() . '/js/rating-help.js', array('jquery'), '1.0.1', true);
+        }
+        wp_enqueue_script('bst-tour-share', get_stylesheet_directory_uri() . '/js/bst-tour-share.js', array(), '1.1.0', true);
     }
     if (is_tax('tour-type-code') || is_post_type_archive('tour-type')) {
         wp_enqueue_script('bst-auto-refresh', get_stylesheet_directory_uri() . '/js/bst-auto-refresh.js', array('jquery'), '1.0.0', true);

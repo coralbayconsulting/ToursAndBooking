@@ -368,6 +368,10 @@ function create_tour_booking_tables() {
     }
     // Table created or already exists - only log errors
 
+    if ( function_exists( 'bst_create_share_log_table' ) ) {
+        bst_create_share_log_table();
+    }
+
     // Set a transient to indicate tables have been created successfully
     set_transient('bst_tour_booking_tables_created', time(), 24 * HOUR_IN_SECONDS);
 }

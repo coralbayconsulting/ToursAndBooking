@@ -36,6 +36,7 @@ class BST_Plugin {
         require_once BST_PLUGIN_DIR . 'includes/tour-breadcrumbs.php';
         require_once BST_PLUGIN_DIR . 'includes/tour-date-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/share-helpers.php';
+        require_once BST_PLUGIN_DIR . 'includes/share-log.php';
         require_once BST_PLUGIN_DIR . 'includes/gravity-forms.php';
         require_once BST_PLUGIN_DIR . 'includes/booking-display.php';
         require_once BST_PLUGIN_DIR . 'includes/data-import-handlers.php';
