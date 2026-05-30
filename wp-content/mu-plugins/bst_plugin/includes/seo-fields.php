@@ -5,9 +5,11 @@
  * Registers bst_seo_title and bst_seo_description on:
  *   - tour post type
  *   - tour-type post type
+ *   - blog post (post)
  *
  * The tour-type-code taxonomy archive (/tours/{slug}/) reads SEO data from the
- * linked tour-type post — no separate taxonomy term fields needed.
+ * linked tour-type post. Blog category archives use the category name,
+ * description, and banner image automatically.
  *
  * All fields are optional — seo-head.php falls back to content fields when empty.
  */
@@ -44,7 +46,7 @@ function bst_register_seo_field_group() {
 				'label'             => 'Meta Description',
 				'name'              => 'bst_seo_description',
 				'type'              => 'textarea',
-				'instructions'      => 'Overrides the meta description shown in search results and social previews. Leave empty to use the short description / listing description. Aim for 120–155 characters.',
+				'instructions'      => 'Overrides the meta description shown in search results and social previews. Leave empty to use the short description / listing description / post excerpt. Aim for 120–155 characters.',
 				'required'          => 0,
 				'maxlength'         => 320,
 				'rows'              => 3,
@@ -66,6 +68,13 @@ function bst_register_seo_field_group() {
 					'param'    => 'post_type',
 					'operator' => '==',
 					'value'    => 'tour-type',
+				),
+			),
+			array(
+				array(
+					'param'    => 'post_type',
+					'operator' => '==',
+					'value'    => 'post',
 				),
 			),
 		),

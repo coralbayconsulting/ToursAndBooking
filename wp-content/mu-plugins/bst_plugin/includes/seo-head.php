@@ -14,7 +14,10 @@
  *   - Single tour-type (CPT: tour-type)          [individual tour-type post]
  *   - Tour-type-code taxonomy archive             [/tours/{slug}/]
  *   - Tour-type CPT archive                       [/tour-types/]
- *   - All other pages / posts (basic fallback)
+ *   - Single blog post (post)                     [article traffic]
+ *   - Blog category archive (category)            [title, description, banner image]
+ *   - Blog posts index (Settings → Posts page)    [blog banner + page title]
+ *   - Other singular pages / posts (basic fallback)
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -170,6 +173,12 @@ function bst_seo_resolve_head_data() {
 		$cache = bst_seo_data_for_tour_type_code_term( get_queried_object(), $site_name, $sep );
 	} elseif ( function_exists( 'bst_is_tour_type_post_type_archive' ) && bst_is_tour_type_post_type_archive() ) {
 		$cache = bst_seo_data_for_tour_type_archive( $site_name, $sep );
+	} elseif ( is_singular( 'post' ) ) {
+		$cache = bst_seo_data_for_blog_post( get_queried_object_id(), $site_name, $sep );
+	} elseif ( is_category() ) {
+		$cache = bst_seo_data_for_blog_category( get_queried_object(), $site_name, $sep );
+	} elseif ( is_home() && ! is_front_page() ) {
+		$cache = bst_seo_data_for_blog_index( $site_name, $sep );
 	} else {
 		$cache = bst_seo_data_fallback( $site_name, $sep );
 	}
@@ -312,68 +321,187 @@ function bst_seo_data_for_tour_type_archive( $site_name, $sep ) {
 	);
 }
 
-function bst_seo_data_fallback( $site_name, $sep ) {
-	// Front page may also satisfy is_singular() when set to a static page — check it first.
-	if ( is_front_page() || is_home() ) {
-		$front_id     = (int) get_option( 'page_on_front' );
-		$posts_page_id = (int) get_option( 'page_for_posts' );
+/**
+ * SEO for a single blog post — primary traffic target for the blog.
+ *
+ * @param int    $post_id   Post ID.
+ * @param string $site_name Site name.
+ * @param string $sep       Title separator.
+ * @return array{title:string, description:string, canonical:string, image:string, og_type:string}
+ */
+function bst_seo_data_for_blog_post( $post_id, $site_name, $sep ) {
+	$post_id    = (int) $post_id;
+	$post_title = get_the_title( $post_id );
+	$seo_title  = function_exists( 'get_field' ) ? bst_seo_clean_field( get_field( 'bst_seo_title', $post_id ) ) : '';
+	$seo_desc   = function_exists( 'get_field' ) ? bst_seo_clean_field( get_field( 'bst_seo_description', $post_id ) ) : '';
 
-		// Blog posts index on a separate page (e.g. /blog/) — canonical must be that page's URL, not root.
-		if ( is_home() && ! is_front_page() && $posts_page_id ) {
-			$canonical = (string) get_permalink( $posts_page_id );
-			$desc_raw  = ( has_excerpt( $posts_page_id ) )
-				? wp_strip_all_tags( get_the_excerpt( $posts_page_id ) )
-				: get_bloginfo( 'description' );
-			$image = '';
-			if ( has_post_thumbnail( $posts_page_id ) ) {
-				$src   = wp_get_attachment_image_src( get_post_thumbnail_id( $posts_page_id ), 'large' );
-				$image = $src ? $src[0] : '';
-			}
+	$title = $seo_title !== ''
+		? $seo_title
+		: $post_title . $sep . $site_name;
+
+	if ( $seo_desc !== '' ) {
+		$desc_raw = $seo_desc;
+	} elseif ( has_excerpt( $post_id ) ) {
+		$desc_raw = wp_strip_all_tags( get_the_excerpt( $post_id ) );
+	} else {
+		$desc_raw = wp_strip_all_tags(
+			wp_trim_words( strip_shortcodes( (string) get_post_field( 'post_content', $post_id ) ), 30, '...' )
+		);
+	}
+	$description = bst_seo_trim_description( $desc_raw );
+
+	$image = '';
+	if ( has_post_thumbnail( $post_id ) ) {
+		$src = wp_get_attachment_image_src( get_post_thumbnail_id( $post_id ), 'large' );
+		$image = $src ? $src[0] : '';
+	}
+
+	return array(
+		'title'       => $title,
+		'description' => $description,
+		'canonical'   => (string) get_permalink( $post_id ),
+		'image'       => bst_seo_normalize_image_url( $image ),
+		'og_type'     => 'article',
+	);
+}
+
+/**
+ * SEO for a native blog category archive (mirrors tour-type-code term archives).
+ *
+ * @param WP_Term|null $term      Category term.
+ * @param string       $site_name Site name.
+ * @param string       $sep       Title separator.
+ * @return array{title:string, description:string, canonical:string, image:string, og_type:string}
+ */
+function bst_seo_data_for_blog_category( $term, $site_name, $sep ) {
+	if ( ! ( $term instanceof WP_Term ) || $term->taxonomy !== 'category' ) {
+		return array();
+	}
+
+	$heading = $term->name;
+	$title   = $heading . $sep . $site_name;
+
+	if ( $term->description ) {
+		$desc_raw = wp_strip_all_tags( $term->description );
+	} else {
+		$default_desc = trim( (string) get_option( 'bst_ptarchive_blog_category_meta_description', '' ) );
+		if ( $default_desc !== '' ) {
+			$desc_raw = bst_seo_clean_field( $default_desc, array( 'category_name' => $heading ) );
 		} else {
-			$canonical = home_url( '/' );
-			$desc_raw  = ( $front_id && has_excerpt( $front_id ) )
-				? wp_strip_all_tags( get_the_excerpt( $front_id ) )
-				: get_bloginfo( 'description' );
-			$image = '';
-			if ( $front_id && has_post_thumbnail( $front_id ) ) {
-				$src   = wp_get_attachment_image_src( get_post_thumbnail_id( $front_id ), 'large' );
-				$image = $src ? $src[0] : '';
-			}
+			$desc_raw = 'Read ' . $heading . ' articles and stories from ' . $site_name . '.';
+		}
+	}
+	$description = bst_seo_trim_description( $desc_raw );
+
+	$image = '';
+	if ( function_exists( 'bst_get_category_banner_image_url' ) ) {
+		$image = bst_get_category_banner_image_url( $term );
+	}
+
+	$link = get_term_link( $term );
+
+	return array(
+		'title'       => $title,
+		'description' => $description,
+		'canonical'   => ! is_wp_error( $link ) ? (string) $link : '',
+		'image'       => bst_seo_normalize_image_url( $image ),
+		'og_type'     => 'website',
+	);
+}
+
+/**
+ * SEO for the blog posts index (Settings → Reading → Posts page).
+ *
+ * @param string $site_name Site name.
+ * @param string $sep       Title separator.
+ * @return array{title:string, description:string, canonical:string, image:string, og_type:string}
+ */
+function bst_seo_data_for_blog_index( $site_name, $sep ) {
+	$posts_page_id = (int) get_option( 'page_for_posts' );
+	$default_label = $posts_page_id
+		? get_the_title( $posts_page_id )
+		: ( function_exists( 'bst_get_blog_index_label' ) ? bst_get_blog_index_label() : 'Blog' );
+	$seo_title_opt = trim( (string) get_option( 'bst_ptarchive_blog_page_title', '' ) );
+	$heading       = $seo_title_opt !== '' ? bst_seo_clean_field( $seo_title_opt ) : $default_label;
+	$seo_desc      = trim( (string) get_option( 'bst_ptarchive_blog_meta_description', '' ) );
+
+	$title = $heading . $sep . $site_name;
+
+	if ( $seo_desc !== '' ) {
+		$desc_raw = bst_seo_clean_field( $seo_desc );
+	} elseif ( $posts_page_id && has_excerpt( $posts_page_id ) ) {
+		$desc_raw = wp_strip_all_tags( get_the_excerpt( $posts_page_id ) );
+	} else {
+		$desc_raw = 'Explore articles about our tours, travel tips, and motoring adventures from ' . $site_name . '.';
+	}
+	$description = bst_seo_trim_description( $desc_raw );
+
+	$image = function_exists( 'bst_get_blog_banner_image_url' ) ? bst_get_blog_banner_image_url() : '';
+	$canonical = $posts_page_id
+		? (string) get_permalink( $posts_page_id )
+		: (string) get_post_type_archive_link( 'post' );
+
+	return array(
+		'title'       => $title,
+		'description' => $description,
+		'canonical'   => $canonical,
+		'image'       => bst_seo_normalize_image_url( $image ),
+		'og_type'     => 'website',
+	);
+}
+
+function bst_seo_data_fallback( $site_name, $sep ) {
+	// Static front page only — blog index is handled by bst_seo_data_for_blog_index().
+	if ( is_front_page() ) {
+		$front_id = (int) get_option( 'page_on_front' );
+
+		$canonical = home_url( '/' );
+		$desc_raw  = ( $front_id && has_excerpt( $front_id ) )
+			? wp_strip_all_tags( get_the_excerpt( $front_id ) )
+			: get_bloginfo( 'description' );
+		$image = '';
+		if ( $front_id && has_post_thumbnail( $front_id ) ) {
+			$src   = wp_get_attachment_image_src( get_post_thumbnail_id( $front_id ), 'large' );
+			$image = $src ? $src[0] : '';
 		}
 
 		return array(
 			'title'       => $site_name . $sep . get_bloginfo( 'description' ),
 			'description' => bst_seo_trim_description( $desc_raw ),
 			'canonical'   => $canonical,
-			'image'       => $image,
+			'image'       => bst_seo_normalize_image_url( $image ),
 			'og_type'     => 'website',
 		);
 	}
 
 	if ( is_singular() ) {
-		$post_id    = get_queried_object_id();
-		$title      = get_the_title( $post_id ) . $sep . $site_name;
-		$excerpt    = has_excerpt( $post_id )
+		$post_id = get_queried_object_id();
+		if ( get_post_type( $post_id ) === 'post' ) {
+			return array();
+		}
+
+		$title       = get_the_title( $post_id ) . $sep . $site_name;
+		$excerpt     = has_excerpt( $post_id )
 			? wp_strip_all_tags( get_the_excerpt( $post_id ) )
 			: wp_strip_all_tags( wp_trim_words( strip_shortcodes( get_post_field( 'post_content', $post_id ) ), 30, '...' ) );
 		$description = bst_seo_trim_description( $excerpt );
-		$image      = '';
+		$image       = '';
 		if ( has_post_thumbnail( $post_id ) ) {
 			$src   = wp_get_attachment_image_src( get_post_thumbnail_id( $post_id ), 'large' );
 			$image = $src ? $src[0] : '';
 		}
 		$canonical = (string) get_permalink( $post_id );
-	} else {
-		return array();
+
+		return array(
+			'title'       => $title,
+			'description' => $description,
+			'canonical'   => $canonical,
+			'image'       => bst_seo_normalize_image_url( $image ),
+			'og_type'     => 'website',
+		);
 	}
 
-	return array(
-		'title'       => $title,
-		'description' => $description,
-		'canonical'   => $canonical,
-		'image'       => $image,
-		'og_type'     => 'website',
-	);
+	return array();
 }
 
 // ---- Helpers ----
@@ -382,12 +510,16 @@ function bst_seo_data_fallback( $site_name, $sep ) {
  * Resolve BST and Yoast template variables in an SEO field value.
  *
  * Supported variables:
- *   {site_name}    or  %%sitename%%  → site name
- *   {sep}          or  %%sep%%       → ' - '
+ *   {site_name}      or  %%sitename%%  → site name
+ *   {sep}            or  %%sep%%       → ' - '
+ *   {category_name}  or  {title}       → category name (when provided in $context)
  *
  * Any remaining unknown %%var%% tokens are stripped.
+ *
+ * @param string               $value   Field value.
+ * @param array<string,string> $context Optional template context.
  */
-function bst_seo_resolve_template_vars( $value ) {
+function bst_seo_resolve_template_vars( $value, $context = array() ) {
 	$value = (string) $value;
 	if ( $value === '' ) {
 		return '';
@@ -402,6 +534,15 @@ function bst_seo_resolve_template_vars( $value ) {
 		$value
 	);
 
+	if ( ! empty( $context['category_name'] ) ) {
+		$category_name = (string) $context['category_name'];
+		$value         = str_replace(
+			array( '{category_name}', '{title}' ),
+			array( $category_name, $category_name ),
+			$value
+		);
+	}
+
 	// Yoast-style variables (case-insensitive, %% syntax) — known subset only.
 	$value = str_ireplace(
 		array( '%%sitename%%', '%%sep%%', '%%page%%', '%%pagenumber%%', '%%pagetotal%%' ),
@@ -415,8 +556,23 @@ function bst_seo_resolve_template_vars( $value ) {
 	return trim( preg_replace( '/\s+/', ' ', $value ) );
 }
 
-function bst_seo_clean_field( $value ) {
-	return bst_seo_resolve_template_vars( $value );
+function bst_seo_clean_field( $value, $context = array() ) {
+	return bst_seo_resolve_template_vars( $value, $context );
+}
+
+/**
+ * @param string $image Absolute or root-relative image URL.
+ * @return string
+ */
+function bst_seo_normalize_image_url( $image ) {
+	$image = (string) $image;
+	if ( $image === '' ) {
+		return '';
+	}
+	if ( $image[0] === '/' ) {
+		return home_url( $image );
+	}
+	return $image;
 }
 
 function bst_seo_trim_description( $text, $max = 155 ) {

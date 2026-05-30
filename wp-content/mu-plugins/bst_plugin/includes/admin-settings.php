@@ -11,6 +11,9 @@ function bst_register_settings() {
     register_setting('bst_settings_group', 'bst_blog_banner_image');
     register_setting('bst_settings_group', 'bst_ptarchive_tour_type_page_title');
     register_setting('bst_settings_group', 'bst_ptarchive_tour_type_meta_description');
+    register_setting('bst_settings_group', 'bst_ptarchive_blog_page_title');
+    register_setting('bst_settings_group', 'bst_ptarchive_blog_meta_description');
+    register_setting('bst_settings_group', 'bst_ptarchive_blog_category_meta_description');
     register_setting('bst_settings_group', 'bst_enable_tour_rating', array('default' => false));
     register_setting('bst_settings_group', 'bst_low_availability_threshold'); // Low availability threshold setting
     register_setting('bst_settings_group', 'bst_auto_refresh_interval', array('default' => 15)); // Auto-refresh interval in minutes
@@ -221,14 +224,6 @@ function bst_register_settings() {
     );
 
     add_settings_field(
-        'bst_blog_banner_image',
-        'Blog Banner',
-        'bst_blog_banner_image_callback',
-        'bst_settings_page',
-        'bst_settings_section'
-    );
-
-    add_settings_field(
         'bst_ptarchive_tour_type_page_title',
         'Our Tours archive SEO title',
         'bst_ptarchive_tour_type_page_title_callback',
@@ -240,6 +235,38 @@ function bst_register_settings() {
         'bst_ptarchive_tour_type_meta_description',
         'Our Tours archive meta description',
         'bst_ptarchive_tour_type_meta_description_callback',
+        'bst_settings_page',
+        'bst_seo_section'
+    );
+
+    add_settings_field(
+        'bst_blog_banner_image',
+        'Blog Banner',
+        'bst_blog_banner_image_callback',
+        'bst_settings_page',
+        'bst_seo_section'
+    );
+
+    add_settings_field(
+        'bst_ptarchive_blog_page_title',
+        'Blog archive SEO title',
+        'bst_ptarchive_blog_page_title_callback',
+        'bst_settings_page',
+        'bst_seo_section'
+    );
+
+    add_settings_field(
+        'bst_ptarchive_blog_meta_description',
+        'Blog archive meta description',
+        'bst_ptarchive_blog_meta_description_callback',
+        'bst_settings_page',
+        'bst_seo_section'
+    );
+
+    add_settings_field(
+        'bst_ptarchive_blog_category_meta_description',
+        'Blog category default meta description',
+        'bst_ptarchive_blog_category_meta_description_callback',
         'bst_settings_page',
         'bst_seo_section'
     );
@@ -440,6 +467,28 @@ function bst_ptarchive_tour_type_meta_description_callback() {
     $val = get_option('bst_ptarchive_tour_type_meta_description', '');
     echo '<textarea id="bst_ptarchive_tour_type_meta_description" name="bst_ptarchive_tour_type_meta_description" rows="3" style="width: 100%; max-width: 560px;" maxlength="320">' . esc_textarea($val) . '</textarea>';
     echo '<p class="description">Optional meta description for <code>/tour-types/</code> (search engines and Open Graph). If empty, a generic description is used.</p>';
+}
+
+function bst_ptarchive_blog_page_title_callback() {
+    $posts_page_id = (int) get_option( 'page_for_posts' );
+    $default_label = $posts_page_id ? get_the_title( $posts_page_id ) : 'Blog';
+    $val           = get_option( 'bst_ptarchive_blog_page_title', '' );
+    echo '<input type="text" id="bst_ptarchive_blog_page_title" name="bst_ptarchive_blog_page_title" value="' . esc_attr( $val ) . '" style="width: 100%; max-width: 560px;" maxlength="120" />';
+    echo '<p class="description">Used for the meta title, og:title, and browser tab on the blog posts page'
+        . ( $posts_page_id ? ' (<code>' . esc_html( get_permalink( $posts_page_id ) ) . '</code>)' : '' )
+        . '. Site name is appended automatically. Leave empty to use the Posts page title (<strong>' . esc_html( $default_label ) . '</strong>). The H1 on the page is unchanged.</p>';
+}
+
+function bst_ptarchive_blog_meta_description_callback() {
+    $val = get_option( 'bst_ptarchive_blog_meta_description', '' );
+    echo '<textarea id="bst_ptarchive_blog_meta_description" name="bst_ptarchive_blog_meta_description" rows="3" style="width: 100%; max-width: 560px;" maxlength="320">' . esc_textarea( $val ) . '</textarea>';
+    echo '<p class="description">Optional meta description for the blog posts page (search engines and Open Graph). If empty, the Posts page excerpt is used, then a generic fallback.</p>';
+}
+
+function bst_ptarchive_blog_category_meta_description_callback() {
+    $val = get_option( 'bst_ptarchive_blog_category_meta_description', '' );
+    echo '<textarea id="bst_ptarchive_blog_category_meta_description" name="bst_ptarchive_blog_category_meta_description" rows="3" style="width: 100%; max-width: 560px;" maxlength="320">' . esc_textarea( $val ) . '</textarea>';
+    echo '<p class="description">Default meta description for category archives when the category has no description. Category name is used in the title automatically. Supports <code>{category_name}</code>, <code>{site_name}</code>, and <code>{sep}</code>. If empty, a generic description is used.</p>';
 }
 
 function bst_low_availability_threshold_callback() {
@@ -1299,7 +1348,7 @@ function bst_send_twilio_whatsapp($to, $message, $account_sid = null, $auth_toke
 }
 
 function bst_seo_section_callback() {
-    echo '<p>Controls the Organization schema output on the homepage and social sharing metadata. Individual tour and tour-type SEO overrides are set on each post using the SEO fields in the editor.</p>';
+    echo '<p>Controls the Organization schema output on the homepage, archive-page SEO (Our Tours and blog), and social sharing metadata. Individual tour, tour-type, and blog post SEO overrides are set on each post using the SEO fields in the editor.</p>';
 }
 
 function bst_organization_description_callback() {

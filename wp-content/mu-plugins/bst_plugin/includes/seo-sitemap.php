@@ -86,7 +86,7 @@ function bst_sitemap_output_sub( $type ) {
 			bst_sitemap_urls_for_post_type( 'page', 'monthly', '0.5', '' );
 			break;
 		case 'blog':
-			bst_sitemap_urls_for_post_type( 'post', 'monthly', '0.4', '' );
+			bst_sitemap_urls_for_post_type( 'post', 'monthly', '0.7', '' );
 			break;
 	}
 
