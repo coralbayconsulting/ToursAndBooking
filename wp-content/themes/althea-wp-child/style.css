@@ -1294,6 +1294,8 @@ body.category .bst-breadcrumb-section {
 body.single-post .bst-breadcrumb-container.has-share-buttons .bst-breadcrumb-list {
     flex-wrap: nowrap;
     min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
 }
 
 body.single-post .bst-breadcrumb-item--category,
@@ -1306,10 +1308,11 @@ body.single-post .bst-breadcrumb-separator {
 }
 
 body.single-post .bst-breadcrumb-item--current {
+    display: block;
     min-width: 0;
     flex: 1 1 auto;
     overflow: hidden;
-    max-width: min(36em, 52vw);
+    max-width: 100%;
 }
 
 body.single-post .bst-breadcrumb-item--current .bst-breadcrumb-text {
@@ -1317,6 +1320,8 @@ body.single-post .bst-breadcrumb-item--current .bst-breadcrumb-text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .translucent-overlay .bst-blog-archive-wrap {
