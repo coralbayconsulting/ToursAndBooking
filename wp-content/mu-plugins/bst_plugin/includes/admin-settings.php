@@ -1348,7 +1348,7 @@ function bst_send_twilio_whatsapp($to, $message, $account_sid = null, $auth_toke
 }
 
 function bst_seo_section_callback() {
-    echo '<p>Controls the Organization schema output on the homepage, archive-page SEO (Our Tours and blog), and social sharing metadata. Individual tour, tour-type, and blog post SEO overrides are set on each post using the SEO fields in the editor.</p>';
+    echo '<p>Controls the Organization schema output on the homepage, archive-page SEO (Our Tours and blog), and social sharing metadata. Individual tour and tour-type SEO overrides are set on each post using the SEO fields in the editor. Blog posts use the post title, excerpt, and featured image automatically.</p>';
 }
 
 function bst_organization_description_callback() {

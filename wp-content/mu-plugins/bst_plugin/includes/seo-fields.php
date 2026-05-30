@@ -5,7 +5,9 @@
  * Registers bst_seo_title and bst_seo_description on:
  *   - tour post type
  *   - tour-type post type
- *   - blog post (post)
+ *
+ * Blog posts use the native post title, excerpt, and featured image for SEO
+ * (see bst_seo_data_for_blog_post in seo-head.php). No override fields on posts.
  *
  * The tour-type-code taxonomy archive (/tours/{slug}/) reads SEO data from the
  * linked tour-type post. Blog category archives use the category name,
@@ -68,13 +70,6 @@ function bst_register_seo_field_group() {
 					'param'    => 'post_type',
 					'operator' => '==',
 					'value'    => 'tour-type',
-				),
-			),
-			array(
-				array(
-					'param'    => 'post_type',
-					'operator' => '==',
-					'value'    => 'post',
 				),
 			),
 		),

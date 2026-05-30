@@ -7,6 +7,7 @@
  *   /bst-sitemap.xml?type=tour-types     — all published tour-type posts
  *   /bst-sitemap.xml?type=taxonomy       — all tour-type-code taxonomy terms
  *   /bst-sitemap.xml?type=pages          — all published pages
+ *   /bst-sitemap.xml?type=blog           — blog index, categories, and posts
  *
  * When Yoast is active its own sitemap takes precedence; this sitemap is still
  * accessible at /bst-sitemap.xml but Yoast's /sitemap_index.xml is what search
@@ -86,11 +87,68 @@ function bst_sitemap_output_sub( $type ) {
 			bst_sitemap_urls_for_post_type( 'page', 'monthly', '0.5', '' );
 			break;
 		case 'blog':
-			bst_sitemap_urls_for_post_type( 'post', 'monthly', '0.7', '' );
+			bst_sitemap_urls_for_blog();
 			break;
 	}
 
 	echo '</urlset>';
+}
+
+function bst_sitemap_emit_url( $url, $changefreq, $priority, $image = '', $image_title = '', $lastmod = '' ) {
+	if ( ! $url ) {
+		return;
+	}
+
+	echo "\t<url>\n";
+	echo "\t\t<loc>" . esc_url( $url ) . "</loc>\n";
+	if ( $lastmod !== '' ) {
+		echo "\t\t<lastmod>" . esc_html( $lastmod ) . "</lastmod>\n";
+	}
+	echo "\t\t<changefreq>" . esc_html( $changefreq ) . "</changefreq>\n";
+	echo "\t\t<priority>" . esc_html( $priority ) . "</priority>\n";
+	if ( $image ) {
+		echo "\t\t<image:image>\n";
+		echo "\t\t\t<image:loc>" . esc_url( $image ) . "</image:loc>\n";
+		if ( $image_title !== '' ) {
+			echo "\t\t\t<image:title>" . esc_html( $image_title ) . "</image:title>\n";
+		}
+		echo "\t\t</image:image>\n";
+	}
+	echo "\t</url>\n";
+}
+
+function bst_sitemap_urls_for_blog() {
+	if ( function_exists( 'bst_get_blog_index_url' ) ) {
+		$index_url   = bst_get_blog_index_url();
+		$index_title = function_exists( 'bst_get_blog_index_label' ) ? bst_get_blog_index_label() : 'Blog';
+		$index_image = function_exists( 'bst_get_blog_banner_image_url' ) ? bst_get_blog_banner_image_url() : '';
+		bst_sitemap_emit_url( $index_url, 'weekly', '0.6', $index_image, $index_title );
+	}
+
+	$terms = get_terms(
+		array(
+			'taxonomy'   => 'category',
+			'hide_empty' => true,
+		)
+	);
+
+	if ( ! is_wp_error( $terms ) ) {
+		foreach ( $terms as $term ) {
+			$link = get_term_link( $term );
+			if ( is_wp_error( $link ) ) {
+				continue;
+			}
+
+			$image = '';
+			if ( function_exists( 'bst_get_category_banner_image_url' ) ) {
+				$image = bst_get_category_banner_image_url( $term );
+			}
+
+			bst_sitemap_emit_url( (string) $link, 'weekly', '0.65', $image, $term->name );
+		}
+	}
+
+	bst_sitemap_urls_for_post_type( 'post', 'monthly', '0.7', '' );
 }
 
 function bst_sitemap_urls_for_post_type( $post_type, $changefreq, $priority, $image_field ) {

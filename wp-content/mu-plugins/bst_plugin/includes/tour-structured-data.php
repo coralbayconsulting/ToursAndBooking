@@ -4,6 +4,7 @@
  *
  * Schema injected via wp_head on tour pages (Product, Event ×N, BreadcrumbList).
  * Organization schema injected on homepage.
+ * Blog schema is in blog-structured-data.php.
  *
  * Both are output unconditionally — Yoast may or may not be generating these;
  * duplicate blocks are harmless and Google handles them gracefully.

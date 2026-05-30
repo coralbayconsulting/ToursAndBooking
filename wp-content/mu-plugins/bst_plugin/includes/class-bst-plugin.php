@@ -33,6 +33,7 @@ class BST_Plugin {
         require_once BST_PLUGIN_DIR . 'includes/dashboard-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/tour-type-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/tour-structured-data.php';
+        require_once BST_PLUGIN_DIR . 'includes/blog-structured-data.php';
         require_once BST_PLUGIN_DIR . 'includes/tour-breadcrumbs.php';
         require_once BST_PLUGIN_DIR . 'includes/tour-date-helpers.php';
         require_once BST_PLUGIN_DIR . 'includes/share-helpers.php';

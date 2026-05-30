@@ -130,6 +130,20 @@ function bst_seo_head_output() {
 	$og_type = isset( $data['og_type'] ) ? $data['og_type'] : 'website';
 	echo '<meta property="og:type" content="' . esc_attr( $og_type ) . '">' . "\n";
 
+	if ( $og_type === 'article' && is_singular( 'post' ) ) {
+		$post_id = get_queried_object_id();
+		if ( $post_id ) {
+			echo '<meta property="article:published_time" content="' . esc_attr( get_the_date( 'c', $post_id ) ) . '">' . "\n";
+			echo '<meta property="article:modified_time" content="' . esc_attr( get_the_modified_date( 'c', $post_id ) ) . '">' . "\n";
+			if ( function_exists( 'bst_get_primary_category_for_post' ) ) {
+				$category = bst_get_primary_category_for_post( $post_id );
+				if ( $category instanceof WP_Term ) {
+					echo '<meta property="article:section" content="' . esc_attr( $category->name ) . '">' . "\n";
+				}
+			}
+		}
+	}
+
 	if ( ! empty( $data['image'] ) ) {
 		$og_image = $data['image'][0] === '/' ? home_url( $data['image'] ) : $data['image'];
 		echo '<meta property="og:image" content="' . esc_url( $og_image ) . '">' . "\n";
@@ -332,16 +346,10 @@ function bst_seo_data_for_tour_type_archive( $site_name, $sep ) {
 function bst_seo_data_for_blog_post( $post_id, $site_name, $sep ) {
 	$post_id    = (int) $post_id;
 	$post_title = get_the_title( $post_id );
-	$seo_title  = function_exists( 'get_field' ) ? bst_seo_clean_field( get_field( 'bst_seo_title', $post_id ) ) : '';
-	$seo_desc   = function_exists( 'get_field' ) ? bst_seo_clean_field( get_field( 'bst_seo_description', $post_id ) ) : '';
 
-	$title = $seo_title !== ''
-		? $seo_title
-		: $post_title . $sep . $site_name;
+	$title = $post_title . $sep . $site_name;
 
-	if ( $seo_desc !== '' ) {
-		$desc_raw = $seo_desc;
-	} elseif ( has_excerpt( $post_id ) ) {
+	if ( has_excerpt( $post_id ) ) {
 		$desc_raw = wp_strip_all_tags( get_the_excerpt( $post_id ) );
 	} else {
 		$desc_raw = wp_strip_all_tags(
