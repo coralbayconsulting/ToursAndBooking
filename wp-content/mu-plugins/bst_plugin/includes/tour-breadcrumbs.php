@@ -8,6 +8,21 @@ if (!defined('ABSPATH')) {
 }
 
 /**
+ * Decode entities for breadcrumb labels (avoids strtoupper breaking &amp; → &AMP;).
+ *
+ * @param string $text Raw label text.
+ * @param bool   $uppercase Whether to uppercase for display.
+ * @return string
+ */
+function bst_breadcrumb_plain_text( $text, $uppercase = false ) {
+    $text = html_entity_decode( (string) $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+    if ( ! $uppercase ) {
+        return $text;
+    }
+    return function_exists( 'mb_strtoupper' ) ? mb_strtoupper( $text, 'UTF-8' ) : strtoupper( $text );
+}
+
+/**
  * Render the breadcrumb list for tour archives/taxonomies.
  *
  * Structure:
@@ -34,7 +49,7 @@ function bst_render_tour_archive_breadcrumbs($current_label = '') {
         <?php if (!empty($current_label)) : ?>
             <li class="bst-breadcrumb-separator">/</li>
             <li class="bst-breadcrumb-item">
-                <span class="bst-breadcrumb-text"><?php echo strtoupper(esc_html($current_label)); ?></span>
+                <span class="bst-breadcrumb-text"><?php echo esc_html( bst_breadcrumb_plain_text( $current_label, true ) ); ?></span>
             </li>
         <?php endif; ?>
     </ol>
@@ -125,7 +140,7 @@ function bst_render_blog_post_breadcrumbs() {
         <li class="bst-breadcrumb-separator">/</li>
         <li class="bst-breadcrumb-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
             <a href="<?php echo esc_url( $blog_url ); ?>" class="bst-breadcrumb-link" itemprop="item">
-                <span itemprop="name"><?php echo esc_html( strtoupper( $blog_label ) ); ?></span>
+                <span itemprop="name"><?php echo esc_html( bst_breadcrumb_plain_text( $blog_label, true ) ); ?></span>
             </a>
             <meta itemprop="position" content="2" />
         </li>
@@ -133,19 +148,19 @@ function bst_render_blog_post_breadcrumbs() {
             <li class="bst-breadcrumb-separator">/</li>
             <li class="bst-breadcrumb-item bst-breadcrumb-item--category" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
                 <a href="<?php echo esc_url( get_category_link( $category->term_id ) ); ?>" class="bst-breadcrumb-link" itemprop="item">
-                    <span itemprop="name"><?php echo esc_html( strtoupper( $category->name ) ); ?></span>
+                    <span itemprop="name"><?php echo esc_html( bst_breadcrumb_plain_text( $category->name, true ) ); ?></span>
                 </a>
                 <meta itemprop="position" content="3" />
             </li>
             <li class="bst-breadcrumb-separator">/</li>
             <li class="bst-breadcrumb-item bst-breadcrumb-item--current" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-                <span class="bst-breadcrumb-text" itemprop="name" title="<?php echo esc_attr( $post_title ); ?>"><?php echo esc_html( strtoupper( $post_title ) ); ?></span>
+                <span class="bst-breadcrumb-text" itemprop="name" title="<?php echo esc_attr( bst_breadcrumb_plain_text( $post_title ) ); ?>"><?php echo esc_html( bst_breadcrumb_plain_text( $post_title, true ) ); ?></span>
                 <meta itemprop="position" content="4" />
             </li>
         <?php else : ?>
             <li class="bst-breadcrumb-separator">/</li>
             <li class="bst-breadcrumb-item bst-breadcrumb-item--current" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-                <span class="bst-breadcrumb-text" itemprop="name" title="<?php echo esc_attr( $post_title ); ?>"><?php echo esc_html( strtoupper( $post_title ) ); ?></span>
+                <span class="bst-breadcrumb-text" itemprop="name" title="<?php echo esc_attr( bst_breadcrumb_plain_text( $post_title ) ); ?>"><?php echo esc_html( bst_breadcrumb_plain_text( $post_title, true ) ); ?></span>
                 <meta itemprop="position" content="3" />
             </li>
         <?php endif; ?>
@@ -177,19 +192,19 @@ function bst_render_blog_archive_breadcrumbs( $current_label = '' ) {
         <li class="bst-breadcrumb-separator">/</li>
         <?php if ( $current_label === '' ) : ?>
             <li class="bst-breadcrumb-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-                <span class="bst-breadcrumb-text" itemprop="name"><?php echo esc_html( strtoupper( $blog_label ) ); ?></span>
+                <span class="bst-breadcrumb-text" itemprop="name"><?php echo esc_html( bst_breadcrumb_plain_text( $blog_label, true ) ); ?></span>
                 <meta itemprop="position" content="2" />
             </li>
         <?php else : ?>
             <li class="bst-breadcrumb-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
                 <a href="<?php echo esc_url( $blog_url ); ?>" class="bst-breadcrumb-link" itemprop="item">
-                    <span itemprop="name"><?php echo esc_html( strtoupper( $blog_label ) ); ?></span>
+                    <span itemprop="name"><?php echo esc_html( bst_breadcrumb_plain_text( $blog_label, true ) ); ?></span>
                 </a>
                 <meta itemprop="position" content="2" />
             </li>
             <li class="bst-breadcrumb-separator">/</li>
             <li class="bst-breadcrumb-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-                <span class="bst-breadcrumb-text" itemprop="name"><?php echo esc_html( strtoupper( $current_label ) ); ?></span>
+                <span class="bst-breadcrumb-text" itemprop="name"><?php echo esc_html( bst_breadcrumb_plain_text( $current_label, true ) ); ?></span>
                 <meta itemprop="position" content="3" />
             </li>
         <?php endif; ?>
