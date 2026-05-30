@@ -2,7 +2,7 @@
 /**
  * BST XML Sitemap.
  *
- * Registers /bst-sitemap.xml as an index pointing to four sub-sitemaps:
+ * Registers /bst-sitemap.xml as an index pointing to five sub-sitemaps:
  *   /bst-sitemap.xml?type=tours          — all published tour posts
  *   /bst-sitemap.xml?type=tour-types     — all published tour-type posts
  *   /bst-sitemap.xml?type=taxonomy       — all tour-type-code taxonomy terms
@@ -84,7 +84,7 @@ function bst_sitemap_output_sub( $type ) {
 			bst_sitemap_urls_for_taxonomy( 'tour-type-code' );
 			break;
 		case 'pages':
-			bst_sitemap_urls_for_post_type( 'page', 'monthly', '0.5', '' );
+			bst_sitemap_urls_for_post_type( 'page', 'monthly', '0.5', '', true );
 			break;
 		case 'blog':
 			bst_sitemap_urls_for_blog();
@@ -151,7 +151,7 @@ function bst_sitemap_urls_for_blog() {
 	bst_sitemap_urls_for_post_type( 'post', 'monthly', '0.7', '' );
 }
 
-function bst_sitemap_urls_for_post_type( $post_type, $changefreq, $priority, $image_field ) {
+function bst_sitemap_urls_for_post_type( $post_type, $changefreq, $priority, $image_field, $exclude_posts_page = false ) {
 	$posts = get_posts( array(
 		'post_type'      => $post_type,
 		'post_status'    => 'publish',
@@ -160,7 +160,13 @@ function bst_sitemap_urls_for_post_type( $post_type, $changefreq, $priority, $im
 		'order'          => 'DESC',
 	) );
 
+	$posts_page_id = $exclude_posts_page ? (int) get_option( 'page_for_posts' ) : 0;
+
 	foreach ( $posts as $post ) {
+		if ( $posts_page_id && (int) $post->ID === $posts_page_id ) {
+			continue;
+		}
+
 		// Skip private tours from the sitemap.
 		if ( $post_type === 'tour' && function_exists( 'get_field' ) ) {
 			if ( get_field( 'private', $post->ID ) ) {

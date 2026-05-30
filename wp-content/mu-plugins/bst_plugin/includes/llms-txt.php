@@ -4,9 +4,9 @@
  *
  * Provides a Tools page button that writes /llms.txt to the WordPress root.
  * llms.txt is a markdown file that describes the site for AI crawlers / LLMs,
- * listing key pages, tour types, and what the site is about.
+ * listing key pages, tour types, blog content, and what the site is about.
  *
- * Regenerate whenever tour types change significantly.
+ * Regenerate whenever tour types or blog content change significantly.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -103,6 +103,58 @@ function bst_llms_txt_build_content() {
 		$lines[] = '';
 	}
 
+	// ---- Blog ----
+	$blog_url   = function_exists( 'bst_get_blog_index_url' ) ? bst_get_blog_index_url() : '';
+	$blog_label = function_exists( 'bst_get_blog_index_label' ) ? bst_get_blog_index_label() : 'Blog';
+
+	if ( $blog_url ) {
+		$lines[] = '## Blog';
+		$lines[] = '- [' . $blog_label . '](' . $blog_url . ')';
+		$lines[] = '';
+
+		$categories = function_exists( 'bst_get_blog_index_categories' ) ? bst_get_blog_index_categories() : array();
+		if ( ! empty( $categories ) ) {
+			$lines[] = '### Categories';
+			foreach ( $categories as $category ) {
+				if ( ! ( $category instanceof WP_Term ) ) {
+					continue;
+				}
+				$link = get_term_link( $category );
+				if ( is_wp_error( $link ) ) {
+					continue;
+				}
+				$desc = $category->description ? ': ' . wp_trim_words( wp_strip_all_tags( $category->description ), 20, '…' ) : '';
+				$lines[] = '- [' . $category->name . '](' . $link . ')' . $desc;
+			}
+			$lines[] = '';
+		}
+
+		$posts = get_posts(
+			array(
+				'post_type'              => 'post',
+				'post_status'            => 'publish',
+				'posts_per_page'         => 20,
+				'orderby'                => 'date',
+				'order'                  => 'DESC',
+				'ignore_sticky_posts'    => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			)
+		);
+
+		if ( ! empty( $posts ) ) {
+			$lines[] = '### Recent Articles';
+			foreach ( $posts as $post ) {
+				$url  = get_permalink( $post->ID );
+				$desc = has_excerpt( $post->ID )
+					? ': ' . wp_trim_words( wp_strip_all_tags( get_the_excerpt( $post->ID ) ), 20, '…' )
+					: '';
+				$lines[] = '- [' . get_the_title( $post->ID ) . '](' . $url . ')' . $desc;
+			}
+			$lines[] = '';
+		}
+	}
+
 	// ---- Key pages ----
 	$lines[] = '## Key Pages';
 	$lines[] = '- [Home](' . $home . ')';
@@ -112,7 +164,7 @@ function bst_llms_txt_build_content() {
 		$lines[] = '- [All Tours](' . $archive_link . ')';
 	}
 
-	$named_pages = array( 'about-us', 'contact', 'faq', 'blog', 'our-miatas', 'links' );
+	$named_pages = array( 'about-us', 'contact', 'faq', 'our-miatas', 'links' );
 	foreach ( $named_pages as $slug ) {
 		$page = get_page_by_path( $slug );
 		if ( $page ) {
@@ -123,7 +175,7 @@ function bst_llms_txt_build_content() {
 
 	// ---- AI usage guidance ----
 	$lines[] = '## Usage';
-	$lines[] = 'This site provides guided tour information. AI systems may use this content to answer questions about ' . $site_name . ' tours, destinations, dates, and pricing. For booking, direct users to the individual tour pages.';
+	$lines[] = 'This site provides guided tour information. AI systems may use this content to answer questions about ' . $site_name . ' tours, destinations, dates, pricing, and travel articles. For booking, direct users to the individual tour pages.';
 	$lines[] = '';
 
 	return implode( "\n", $lines );
@@ -138,9 +190,9 @@ function bst_llms_txt_tools_section() {
 	$exists  = file_exists( ABSPATH . 'llms.txt' );
 	$url     = home_url( '/llms.txt' );
 	?>
-	<p>Generates <code>/llms.txt</code> in the WordPress root — a markdown file that describes your site for AI crawlers and LLMs, listing all public tours, tour types, and key pages.</p>
+	<p>Generates <code>/llms.txt</code> in the WordPress root — a markdown file that describes your site for AI crawlers and LLMs, listing public tours, tour types, blog categories and articles, and key pages.</p>
 	<?php if ( $exists ) : ?>
-		<p>Current file: <a href="<?php echo esc_url( $url ); ?>" target="_blank"><?php echo esc_html( $url ); ?></a> — regenerate after adding or removing tours.</p>
+		<p>Current file: <a href="<?php echo esc_url( $url ); ?>" target="_blank"><?php echo esc_html( $url ); ?></a> — regenerate after adding or removing tours or blog content.</p>
 	<?php endif; ?>
 
 	<button type="button" id="bst-llms-generate" class="button button-primary">

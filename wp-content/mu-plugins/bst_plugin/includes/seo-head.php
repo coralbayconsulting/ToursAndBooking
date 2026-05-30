@@ -77,8 +77,7 @@ function bst_robots_txt_rules( $output ) {
 		. "Disallow: /bookinginvoice/\n"
 		. "Disallow: /wp-json/\n"
 		. "Disallow: /*?post_type=\n"
-		. "Disallow: /*?s=\n"
-		. "\nSitemap: " . home_url( '/sitemap.xml' ) . "\n";
+		. "Disallow: /*?s=\n";
 
 	return $output . $rules;
 }
