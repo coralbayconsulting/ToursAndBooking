@@ -14,6 +14,8 @@ use PHPUnit\Framework\TestCase;
  * @covers bst_commission_uninvoiced_inflow_amounts
  * @covers bst_commission_booking_net_basis_original_currency
  * @covers bst_commission_refund_reduces_basis
+ * @covers bst_commission_invoiced_inflow_total
+ * @covers bst_commission_refund_reversal_amount
  */
 class BookingPaymentStatusTest extends TestCase {
 
@@ -95,7 +97,56 @@ class BookingPaymentStatusTest extends TestCase {
 			'refund_payment_status'                => BST_PAYMENT_STATUS_PAID,
 			'refund_payment_amount'                => 200,
 		);
-		// Uninvoiced inflows: balance 500 only; refund_reduces_basis true → basis 500 - 200.
+		// Uninvoiced inflows: balance 500 only; reversal capped at invoiced deposit → basis 500 - 200.
 		$this->assertSame( 300.0, bst_commission_booking_net_basis_original_currency( $b ) );
+		$this->assertSame( 200.0, bst_commission_refund_reversal_amount( $b ) );
+	}
+
+	public function test_refund_reversal_includes_invoiced_additional_payment() {
+		$b = (object) array(
+			'deposit_commission_invoice'            => 'CBC-1',
+			'balance_commission_invoice'            => '',
+			'additional_payment_commission_invoice' => 'CBC-2',
+			'deposit_payment_status'                => BST_PAYMENT_STATUS_PAID,
+			'balance_payment_status'                => BST_PAYMENT_STATUS_PAID,
+			'additional_payment_status'             => BST_PAYMENT_STATUS_PAID,
+			'deposit_payment_amount'                => 500,
+			'balance_payment_amount'                => 1500,
+			'additional_payment_amount'             => 200,
+			'refund_commission_invoice'             => '',
+			'refund_payment_status'                 => BST_PAYMENT_STATUS_PAID,
+			'refund_payment_amount'                 => 2200,
+		);
+		$this->assertSame( 700.0, bst_commission_invoiced_inflow_total( $b ) );
+		$this->assertSame( 700.0, bst_commission_refund_reversal_amount( $b ) );
+		$nets = bst_commission_uninvoiced_inflow_amounts( $b );
+		$this->assertSame( 0.0, $nets['deposit'] );
+		$this->assertSame( 0.0, $nets['balance'] );
+		$this->assertSame( 0.0, $nets['additional'] );
+		$this->assertSame( -700.0, bst_commission_booking_net_basis_original_currency( $b ) );
+	}
+
+	public function test_refund_remainder_nets_uninvoiced_balance_after_invoiced_deposit_and_additional() {
+		$b = (object) array(
+			'deposit_commission_invoice'            => 'CBC-1',
+			'balance_commission_invoice'            => '',
+			'additional_payment_commission_invoice' => 'CBC-2',
+			'deposit_payment_status'                => BST_PAYMENT_STATUS_PAID,
+			'balance_payment_status'                => BST_PAYMENT_STATUS_PAID,
+			'additional_payment_status'             => BST_PAYMENT_STATUS_PAID,
+			'deposit_payment_amount'                => 500,
+			'balance_payment_amount'                => 1000,
+			'additional_payment_amount'             => 200,
+			'refund_commission_invoice'             => '',
+			'refund_payment_status'                 => BST_PAYMENT_STATUS_PAID,
+			'refund_payment_amount'                 => 900,
+		);
+		// Invoiced 700; reversal 700; remainder 200 nets balance 1000 → 800; basis 800 - 700 = 100.
+		$this->assertSame( 700.0, bst_commission_refund_reversal_amount( $b ) );
+		$nets = bst_commission_uninvoiced_inflow_amounts( $b );
+		$this->assertSame( 0.0, $nets['deposit'] );
+		$this->assertSame( 800.0, $nets['balance'] );
+		$this->assertSame( 0.0, $nets['additional'] );
+		$this->assertSame( 100.0, bst_commission_booking_net_basis_original_currency( $b ) );
 	}
 }

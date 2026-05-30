@@ -85,8 +85,9 @@ function bst_payment_status_commission_eligible( $status, $amount ) {
  * Refund:
  * - If no deposit/balance/additional commission was invoiced yet: uninvoiced refunds net against uninvoiced inflows
  *   (deposit → balance → additional). If they cancel, net basis is 0 (typical cancelled booking).
- * - If some inflow commission was already invoiced later refund is a reversal: subtract full refund from basis
- *   (separate from netting above).
+ * - If some inflow commission was already invoiced: reverse commission only on min(refund, invoiced inflow total)
+ *   (deposit + balance + additional lines with a commission invoice). Any refund remainder nets against
+ *   uninvoiced inflows in the same order.
  */
 
 /**
@@ -121,8 +122,77 @@ function bst_commission_refund_needs_invoice( $booking ) {
 }
 
 /**
+ * Sum of deposit / balance / additional amounts that already have a CBC commission invoice.
+ *
+ * @param object $booking Booking row.
+ * @return float
+ */
+function bst_commission_invoiced_inflow_total( $booking ) {
+	$total = 0.0;
+	$lines = array(
+		array( 'deposit_commission_invoice', 'deposit_payment_amount' ),
+		array( 'balance_commission_invoice', 'balance_payment_amount' ),
+		array( 'additional_payment_commission_invoice', 'additional_payment_amount' ),
+	);
+	foreach ( $lines as $line ) {
+		$inv_field = $line[0];
+		$amt_field = $line[1];
+		if ( ! empty( $booking->{$inv_field} ) ) {
+			$total += floatval( $booking->{$amt_field} ?? 0 );
+		}
+	}
+	return $total;
+}
+
+/**
+ * Refund commission reversal basis: only the portion of the refund that unwinds invoiced inflows.
+ *
+ * @param object $booking Booking row.
+ * @return float Non-negative amount in booking currency (0 when no reversal applies).
+ */
+function bst_commission_refund_reversal_amount( $booking ) {
+	if ( floatval( $booking->refund_payment_amount ?? 0 ) <= 0 ) {
+		return 0.0;
+	}
+	if ( ! bst_payment_status_commission_eligible( $booking->refund_payment_status ?? '', $booking->refund_payment_amount ?? 0 ) ) {
+		return 0.0;
+	}
+	$invoiced = bst_commission_invoiced_inflow_total( $booking );
+	if ( $invoiced <= 0 ) {
+		return 0.0;
+	}
+	return min( floatval( $booking->refund_payment_amount ?? 0 ), $invoiced );
+}
+
+/**
+ * Reduce uninvoiced inflow lines by a refund (deposit → balance → additional).
+ *
+ * @param array{deposit:float,balance:float,additional:float} $amounts           Gross uninvoiced per line.
+ * @param float                                                 $refund_remaining  Refund amount left to net.
+ * @return array{deposit:float,balance:float,additional:float}
+ */
+function bst_commission_apply_refund_netting_to_inflows( array $amounts, $refund_remaining ) {
+	$out               = $amounts;
+	$refund_remaining  = max( 0.0, floatval( $refund_remaining ) );
+	foreach ( array( 'deposit', 'balance', 'additional' ) as $key ) {
+		if ( $refund_remaining <= 0 ) {
+			break;
+		}
+		$line = floatval( $out[ $key ] ?? 0 );
+		if ( $line <= 0 ) {
+			continue;
+		}
+		$consumed       = min( $line, $refund_remaining );
+		$out[ $key ]    = $line - $consumed;
+		$refund_remaining -= $consumed;
+	}
+	return $out;
+}
+
+/**
  * Per-line amounts (deposit, balance, additional) still needing a CBC commission invoice.
- * Applies refund netting for the “wash” case (see file comment); reversal bookings skip netting here.
+ * Applies refund netting for the “wash” case (see file comment). When some inflows were already
+ * commissioned, any refund remainder after the capped reversal nets against uninvoiced lines.
  *
  * @param object $booking Booking row.
  * @return array{deposit:float,balance:float,additional:float}
@@ -144,40 +214,25 @@ function bst_commission_uninvoiced_inflow_amounts( $booking ) {
 	$add = bst_commission_line_needs_invoice( $booking->additional_payment_commission_invoice ?? '', $booking->additional_payment_status ?? '', $booking->additional_payment_amount ?? 0 )
 		? floatval( $booking->additional_payment_amount ?? 0 ) : 0.0;
 
-	// Reversal case: prior inflow commissions were invoiced — refund is a separate line; do not net against uninvoiced inflows here.
-	if ( function_exists( 'bst_commission_refund_reduces_basis' ) && bst_commission_refund_reduces_basis( $booking ) ) {
-		$out['deposit']    = $dep;
-		$out['balance']    = $bal;
-		$out['additional'] = $add;
-		return $out;
-	}
-
-	// No uninvoiced refund to apply — gross uninvoiced inflows stand.
-	if ( ! function_exists( 'bst_commission_refund_needs_invoice' ) || ! bst_commission_refund_needs_invoice( $booking ) ) {
-		$out['deposit']    = $dep;
-		$out['balance']    = $bal;
-		$out['additional'] = $add;
-		return $out;
-	}
-
-	$r_remain = floatval( $booking->refund_payment_amount ?? 0 );
-	$keys       = array( 'deposit', 'balance', 'additional' );
-	$gross      = array(
+	$gross = array(
 		'deposit'    => $dep,
 		'balance'    => $bal,
 		'additional' => $add,
 	);
-	foreach ( $keys as $prefix ) {
-		$line = $gross[ $prefix ];
-		if ( $line <= 0 ) {
-			continue;
-		}
-		$consumed        = min( $line, $r_remain );
-		$out[ $prefix ] = $line - $consumed;
-		$r_remain       -= $consumed;
+
+	// Mixed case: some inflows commissioned — cap reversal at invoiced total; net any remainder against uninvoiced lines.
+	if ( function_exists( 'bst_commission_refund_reduces_basis' ) && bst_commission_refund_reduces_basis( $booking ) ) {
+		$reversal  = bst_commission_refund_reversal_amount( $booking );
+		$remainder = floatval( $booking->refund_payment_amount ?? 0 ) - $reversal;
+		return bst_commission_apply_refund_netting_to_inflows( $gross, $remainder );
 	}
 
-	return $out;
+	// No uninvoiced refund to apply — gross uninvoiced inflows stand.
+	if ( ! function_exists( 'bst_commission_refund_needs_invoice' ) || ! bst_commission_refund_needs_invoice( $booking ) ) {
+		return $gross;
+	}
+
+	return bst_commission_apply_refund_netting_to_inflows( $gross, floatval( $booking->refund_payment_amount ?? 0 ) );
 }
 
 /**
@@ -214,7 +269,7 @@ function bst_commission_booking_net_basis_original_currency( $booking ) {
 	$nets  = bst_commission_uninvoiced_inflow_amounts( $booking );
 	$basis = floatval( $nets['deposit'] ?? 0 ) + floatval( $nets['balance'] ?? 0 ) + floatval( $nets['additional'] ?? 0 );
 	if ( bst_commission_refund_reduces_basis( $booking ) ) {
-		$basis -= floatval( $booking->refund_payment_amount ?? 0 );
+		$basis -= bst_commission_refund_reversal_amount( $booking );
 	}
 	return $basis;
 }

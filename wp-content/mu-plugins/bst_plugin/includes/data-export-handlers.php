@@ -1060,6 +1060,12 @@ function bst_export_invoiced_amounts_handler() {
             if (empty($inv_num) || floatval($raw_amount ?? 0) == 0) continue;
 
             $amount = floatval($raw_amount);
+            if ($type === 'Refund' && function_exists('bst_commission_refund_reversal_amount')) {
+                $amount = bst_commission_refund_reversal_amount($b);
+                if ($amount <= 0) {
+                    continue;
+                }
+            }
             $sign   = ($type === 'Refund') ? -1 : 1;
             $basis  = $sign * $amount;
             $commission = round($basis * $pct, 2);
@@ -2387,7 +2393,14 @@ function bst_allocate_commission_by_month($booking, &$commission_data, $year, $t
         }
     }
 
-    $ref_amt = floatval( $booking->refund_payment_amount ?? 0 ) * $fx;
+    $ref_amt = 0.0;
+    if ( function_exists( 'bst_commission_refund_reversal_amount' ) ) {
+        $ref_amt = bst_commission_refund_reversal_amount( $booking ) * $fx;
+    } elseif ( floatval( $booking->refund_payment_amount ?? 0 ) > 0
+        && function_exists( 'bst_commission_refund_reduces_basis' )
+        && bst_commission_refund_reduces_basis( $booking ) ) {
+        $ref_amt = floatval( $booking->refund_payment_amount ?? 0 ) * $fx;
+    }
     if ( $ref_amt > 0 ) {
         $ref_comm    = round( $ref_amt * $commission_percent, 2 );
         $refund_date = ! empty( $booking->refund_payment_date ) ? $booking->refund_payment_date : date( 'Y-m-d', strtotime( '+7 days' ) );
