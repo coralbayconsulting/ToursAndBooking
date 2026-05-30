@@ -131,21 +131,21 @@ function bst_render_blog_post_breadcrumbs() {
         </li>
         <?php if ( $category ) : ?>
             <li class="bst-breadcrumb-separator">/</li>
-            <li class="bst-breadcrumb-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+            <li class="bst-breadcrumb-item bst-breadcrumb-item--category" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
                 <a href="<?php echo esc_url( get_category_link( $category->term_id ) ); ?>" class="bst-breadcrumb-link" itemprop="item">
                     <span itemprop="name"><?php echo esc_html( strtoupper( $category->name ) ); ?></span>
                 </a>
                 <meta itemprop="position" content="3" />
             </li>
             <li class="bst-breadcrumb-separator">/</li>
-            <li class="bst-breadcrumb-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-                <span class="bst-breadcrumb-text" itemprop="name"><?php echo esc_html( strtoupper( $post_title ) ); ?></span>
+            <li class="bst-breadcrumb-item bst-breadcrumb-item--current" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="bst-breadcrumb-text" itemprop="name" title="<?php echo esc_attr( $post_title ); ?>"><?php echo esc_html( strtoupper( $post_title ) ); ?></span>
                 <meta itemprop="position" content="4" />
             </li>
         <?php else : ?>
             <li class="bst-breadcrumb-separator">/</li>
-            <li class="bst-breadcrumb-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
-                <span class="bst-breadcrumb-text" itemprop="name"><?php echo esc_html( strtoupper( $post_title ) ); ?></span>
+            <li class="bst-breadcrumb-item bst-breadcrumb-item--current" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="bst-breadcrumb-text" itemprop="name" title="<?php echo esc_attr( $post_title ); ?>"><?php echo esc_html( strtoupper( $post_title ) ); ?></span>
                 <meta itemprop="position" content="3" />
             </li>
         <?php endif; ?>

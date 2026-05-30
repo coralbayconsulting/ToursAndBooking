@@ -126,6 +126,19 @@ body.single-post .top-banner-container {
     z-index: 2 !important;
 }
 
+/* Blog post banner — allow long titles to wrap (short tour titles stay one line) */
+body.single-post h1.banner-text {
+    white-space: normal !important;
+    width: auto !important;
+    max-width: 92vw !important;
+    line-height: 1.15 !important;
+    font-size: 2.75rem !important;
+    overflow-wrap: break-word !important;
+    hyphens: none !important;
+    padding: 0 16px !important;
+    box-sizing: border-box !important;
+}
+
 /* Tours Boxes and Information */
 
 .tour-box {
@@ -846,7 +859,8 @@ body.single-post .top-banner-container {
     /* Banner text - better size and wrapping on mobile */
     .banner-text,
     h1.banner-text,
-    body.single-tour h1.banner-text {
+    body.single-tour h1.banner-text,
+    body.single-post h1.banner-text {
         font-size: 2.2rem !important;
         max-width: 98vw !important;
         white-space: normal !important;
@@ -1274,6 +1288,35 @@ body.category .bst-breadcrumb-section {
 .translucent-overlay .bst-breadcrumb-section {
     position: relative;
     z-index: 2;
+}
+
+/* Blog post breadcrumbs — keep category on one line; ellipsis long post titles */
+body.single-post .bst-breadcrumb-container.has-share-buttons .bst-breadcrumb-list {
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+
+body.single-post .bst-breadcrumb-item--category,
+body.single-post .bst-breadcrumb-item:not(.bst-breadcrumb-item--current) {
+    flex-shrink: 0;
+}
+
+body.single-post .bst-breadcrumb-separator {
+    flex-shrink: 0;
+}
+
+body.single-post .bst-breadcrumb-item--current {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    max-width: min(36em, 52vw);
+}
+
+body.single-post .bst-breadcrumb-item--current .bst-breadcrumb-text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .translucent-overlay .bst-blog-archive-wrap {
