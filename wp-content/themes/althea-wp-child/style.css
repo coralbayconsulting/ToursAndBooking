@@ -121,7 +121,8 @@ body.archive .banner-text {
 body.post-type-archive-tour-type .top-banner-container,
 body.archive .top-banner-container,
 body.category .top-banner-container,
-body.home .top-banner-container {
+body.home .top-banner-container,
+body.single-post .top-banner-container {
     z-index: 2 !important;
 }
 

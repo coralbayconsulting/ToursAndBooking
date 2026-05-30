@@ -272,6 +272,34 @@ function bst_get_queried_category_banner_data() {
 }
 
 /**
+ * Banner heading + image for a single blog post (featured image, then site blog banner default).
+ *
+ * @param int|null $post_id Post ID.
+ * @return array{heading: string, image: string}
+ */
+function bst_get_single_post_banner_data( $post_id = null ) {
+    $post_id = $post_id ? (int) $post_id : get_the_ID();
+    $heading = $post_id ? get_the_title( $post_id ) : '';
+    $image   = '';
+
+    if ( $post_id && has_post_thumbnail( $post_id ) ) {
+        $thumb = get_the_post_thumbnail_url( $post_id, 'full' );
+        if ( $thumb ) {
+            $image = $thumb;
+        }
+    }
+
+    if ( $image === '' ) {
+        $image = bst_get_blog_banner_image_url();
+    }
+
+    return array(
+        'heading' => $heading,
+        'image'   => $image,
+    );
+}
+
+/**
  * Categories to show on the main blog index.
  *
  * @return WP_Term[]
