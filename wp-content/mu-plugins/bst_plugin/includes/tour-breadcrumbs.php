@@ -282,13 +282,58 @@ function bst_get_blog_index_categories() {
     $categories = get_categories(
         array(
             'taxonomy'   => 'category',
-            'hide_empty' => true,
+            'hide_empty' => false,
             'exclude'    => $exclude,
             'orderby'    => 'name',
             'order'      => 'ASC',
         )
     );
 
-    return is_array( $categories ) ? $categories : array();
+    if ( ! is_array( $categories ) ) {
+        return array();
+    }
+
+    $categories = array_filter(
+        $categories,
+        static function ( $category ) {
+            return function_exists( 'bst_get_category_published_post_count' )
+                ? bst_get_category_published_post_count( $category ) > 0
+                : (int) $category->count > 0;
+        }
+    );
+
+    return array_values( $categories );
+}
+
+/**
+ * Published post count for a category, matching the category archive query (includes child categories).
+ *
+ * @param WP_Term|int $term Category term or term ID.
+ * @return int
+ */
+function bst_get_category_published_post_count( $term ) {
+    $term_id = $term instanceof WP_Term ? (int) $term->term_id : (int) $term;
+    if ( $term_id <= 0 ) {
+        return 0;
+    }
+
+    $query = new WP_Query(
+        array(
+            'cat'                    => $term_id,
+            'post_type'              => 'post',
+            'post_status'            => 'publish',
+            'posts_per_page'         => 1,
+            'fields'                 => 'ids',
+            'no_found_rows'          => false,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
+            'ignore_sticky_posts'    => true,
+        )
+    );
+
+    $count = (int) $query->found_posts;
+    wp_reset_postdata();
+
+    return $count;
 }
 

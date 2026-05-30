@@ -42,7 +42,9 @@ $image       = function_exists( 'bst_get_category_banner_image_url' )
     <?php endif; ?>
     <p><?php echo wp_kses_post( $description ); ?></p>
     <?php
-    $post_count = (int) $category->count;
+    $post_count = function_exists( 'bst_get_category_published_post_count' )
+        ? bst_get_category_published_post_count( $category )
+        : (int) $category->count;
     ?>
     <p class="tour-pricing-info" style="margin: -8px 0 10px; font-size: 14px; font-weight: 600; color: #2c5aa0; text-align: center;">
         <?php
