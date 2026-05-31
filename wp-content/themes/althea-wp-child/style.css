@@ -59,9 +59,9 @@ body.bst-ios-bg.custom-background {
     pointer-events: none;
 }
 
-/* Site-wide tint replaces section ::before on iOS (pseudo-elements fail on fixed bg layers) */
-body.bst-ios-bg .translucent-overlay::before,
-body.bst-ios-bg .bst-breadcrumb-section::before {
+/* Site-wide tint on inner pages replaces section ::before on iOS */
+body.bst-ios-bg-tinted .translucent-overlay::before,
+body.bst-ios-bg-tinted .bst-breadcrumb-section::before {
     content: none;
 }
 

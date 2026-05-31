@@ -45,15 +45,23 @@ function bst_is_ios_request() {
 
 /**
  * Whether to use the iOS <img> background layer on this view.
- *
- * The homepage uses a Colibri hero section with its own background — not the
- * site-wide Customizer body background.
  */
 function bst_should_use_ios_background_layer() {
 	if ( is_admin() || ! bst_is_ios_request() || ! get_background_image() ) {
 		return false;
 	}
-	return ! is_front_page();
+	return true;
+}
+
+/**
+ * Whether the iOS background layer includes the white translucence tint.
+ *
+ * The homepage shows the Customizer background without an overlay on desktop;
+ * inner pages use .translucent-overlay. On iOS the tint is a real element on
+ * the fixed bg layer (inner pages only).
+ */
+function bst_should_use_ios_background_tint() {
+	return bst_should_use_ios_background_layer() && ! is_front_page();
 }
 
 /**
@@ -63,6 +71,9 @@ function bst_should_use_ios_background_layer() {
 function bst_ios_body_class( $classes ) {
 	if ( bst_should_use_ios_background_layer() ) {
 		$classes[] = 'bst-ios-bg';
+	}
+	if ( bst_should_use_ios_background_tint() ) {
+		$classes[] = 'bst-ios-bg-tinted';
 	}
 	return $classes;
 }
@@ -79,11 +90,15 @@ function bst_render_ios_background_image() {
 	$pos_x     = get_theme_mod( 'background_position_x', 'center' );
 	$pos_y     = get_theme_mod( 'background_position_y', 'bottom' );
 	$position  = trim( $pos_x . ' ' . $pos_y );
+	$tint      = bst_should_use_ios_background_tint()
+		? '<span class="bst-ios-bg-tint" aria-hidden="true"></span>'
+		: '';
 
 	printf(
-		'<div class="bst-ios-bg-layer" aria-hidden="true"><img src="%s" alt="" decoding="async" fetchpriority="low" style="object-position:%s"><span class="bst-ios-bg-tint" aria-hidden="true"></span></div>',
+		'<div class="bst-ios-bg-layer" aria-hidden="true"><img src="%s" alt="" decoding="async" fetchpriority="low" style="object-position:%s">%s</div>',
 		esc_url( $image ),
-		esc_attr( $position )
+		esc_attr( $position ),
+		$tint
 	);
 }
 add_action( 'wp_body_open', 'bst_render_ios_background_image', 0 );
