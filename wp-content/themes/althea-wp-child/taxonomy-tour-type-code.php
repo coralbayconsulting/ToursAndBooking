@@ -136,6 +136,7 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
 <div class="page-content">
     <div id="content" class="content">
         <!-- Altered Content Start -->
+        <?php /* BST iOS bg: single .translucent-overlay for banner + listings — see IOS-BACKGROUND-FIX-ROLLBACK.md to split again */ ?>
         <div class="translucent-overlay">
             <?php
                 $bst_banner   = bst_get_queried_tour_type_code_banner_data();

@@ -27,8 +27,9 @@ Updated: 2025-01-05 22:40:54
 }
 
 /*
- * iOS site background — see bst_render_ios_background_image() in functions.php.
- * Uses <img object-fit> instead of body CSS background (WebKit zoom/crop bug).
+ * BST iOS site background fix — see IOS-BACKGROUND-FIX-ROLLBACK.md and
+ * functions.php (bst_render_ios_background_image). Roll back CSS block below
+ * through body.bst-ios-bg-tinted rules if removing the fix.
  */
 body.bst-ios-bg.custom-background {
     background-image: none !important;

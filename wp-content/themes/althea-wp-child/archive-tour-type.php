@@ -54,6 +54,7 @@ $bst_show_filter = $bst_show_years; // no rating filter on this archive
     <div id="content" class="content">
 
         <!-- Altered Content Start -->
+        <?php /* BST iOS bg: single .translucent-overlay for banner + listings — see IOS-BACKGROUND-FIX-ROLLBACK.md to split again */ ?>
         <div class="translucent-overlay">
 
             <!-- TOP BANNER -->

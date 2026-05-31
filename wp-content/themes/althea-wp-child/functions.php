@@ -29,6 +29,18 @@ if ( !function_exists( 'child_theme_configurator_css' ) ):
 endif;
 add_action( 'wp_enqueue_scripts', 'child_theme_configurator_css', 10 );
 
+/*
+ * ==========================================================================
+ * BST iOS site background fix (May 2026)
+ * ==========================================================================
+ * iOS WebKit breaks Customizer body background (fixed attachment zoom/crop).
+ * Fix: fixed <img> layer + optional tint; see IOS-BACKGROUND-FIX-ROLLBACK.md
+ * in this theme folder for full rollback steps if Colibri/theme updates break it.
+ *
+ * Quick disable: make bst_should_use_ios_background_layer() return false.
+ * ==========================================================================
+ */
+
 /**
  * Whether the current request is from an iPhone, iPad, or iPod.
  *
