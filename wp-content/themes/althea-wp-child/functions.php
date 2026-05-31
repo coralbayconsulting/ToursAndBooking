@@ -29,6 +29,38 @@ if ( !function_exists( 'child_theme_configurator_css' ) ):
 endif;
 add_action( 'wp_enqueue_scripts', 'child_theme_configurator_css', 10 );
 
+/**
+ * iOS Safari and iOS Chrome mishandle background-attachment: fixed on body —
+ * the image appears zoomed in on the shadow area. Desktop keeps fixed attachment.
+ *
+ * Only overrides attachment on coarse-pointer touch devices; never removes the
+ * Customizer background image (unlike prior pseudo-element / overlay attempts).
+ */
+function bst_touch_device_custom_background_fix() {
+	if ( is_admin() || ! get_background_image() ) {
+		return;
+	}
+
+	$pos_x = get_theme_mod( 'background_position_x', 'center' );
+	$pos_y = get_theme_mod( 'background_position_y', 'bottom' );
+
+	$css = sprintf(
+		'@media (hover: none) and (pointer: coarse) {
+			body.custom-background {
+				background-attachment: scroll !important;
+				background-position: %1$s %2$s !important;
+				background-size: cover !important;
+				background-repeat: no-repeat !important;
+			}
+		}',
+		esc_attr( $pos_x ),
+		esc_attr( $pos_y )
+	);
+
+	wp_add_inline_style( 'chld_thm_cfg_child', $css );
+}
+add_action( 'wp_enqueue_scripts', 'bst_touch_device_custom_background_fix', 20 );
+
 // END ENQUEUE PARENT ACTION
 
 function enqueue_font_awesome() {
