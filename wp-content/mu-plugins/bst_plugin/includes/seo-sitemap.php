@@ -92,6 +92,24 @@ function bst_sitemap_output_sub( $type ) {
 	echo '</urlset>';
 }
 
+/**
+ * Image sitemap entries require absolute URLs; ACF and some WP configs store paths.
+ */
+function bst_sitemap_absolute_image_url( $url ) {
+	$url = trim( (string) $url );
+	if ( $url === '' ) {
+		return '';
+	}
+	if ( preg_match( '#^https?://#i', $url ) ) {
+		return $url;
+	}
+	if ( str_starts_with( $url, '//' ) ) {
+		return 'https:' . $url;
+	}
+
+	return home_url( $url );
+}
+
 function bst_sitemap_emit_url( $url, $changefreq, $priority, $image = '', $image_title = '', $lastmod = '' ) {
 	if ( ! $url ) {
 		return;
@@ -104,6 +122,7 @@ function bst_sitemap_emit_url( $url, $changefreq, $priority, $image = '', $image
 	}
 	echo "\t\t<changefreq>" . esc_html( $changefreq ) . "</changefreq>\n";
 	echo "\t\t<priority>" . esc_html( $priority ) . "</priority>\n";
+	$image = bst_sitemap_absolute_image_url( $image );
 	if ( $image ) {
 		echo "\t\t<image:image>\n";
 		echo "\t\t\t<image:loc>" . esc_url( $image ) . "</image:loc>\n";
@@ -187,6 +206,7 @@ function bst_sitemap_urls_for_post_type( $post_type, $changefreq, $priority, $im
 			$src   = wp_get_attachment_image_src( get_post_thumbnail_id( $post->ID ), 'large' );
 			$image = $src ? $src[0] : '';
 		}
+		$image = bst_sitemap_absolute_image_url( $image );
 
 		echo "\t<url>\n";
 		echo "\t\t<loc>" . esc_url( $url ) . "</loc>\n";
@@ -224,6 +244,7 @@ function bst_sitemap_urls_for_taxonomy( $taxonomy ) {
 		if ( function_exists( 'get_field' ) ) {
 			$image = (string) get_field( 'bst_seo_social_image', $term );
 		}
+		$image = bst_sitemap_absolute_image_url( $image );
 
 		echo "\t<url>\n";
 		echo "\t\t<loc>" . esc_url( $link ) . "</loc>\n";
