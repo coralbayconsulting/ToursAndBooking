@@ -1349,6 +1349,20 @@ body.single-post .bst-breadcrumb-item--current .bst-breadcrumb-text {
     width: 32%;
 }
 
+@media (max-width: 768px) {
+    .tour-box.bst-blog-box {
+        width: 44%;
+        margin: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .tour-box.bst-blog-box {
+        width: 98%;
+        margin: 10px 0;
+    }
+}
+
 .bst-single-post-wrap .bst-single-post {
     background-color: var(--white);
     padding: 1.5rem;
