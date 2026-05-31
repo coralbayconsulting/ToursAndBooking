@@ -44,11 +44,24 @@ function bst_is_ios_request() {
 }
 
 /**
+ * Whether to use the iOS <img> background layer on this view.
+ *
+ * The homepage uses a Colibri hero section with its own background — not the
+ * site-wide Customizer body background.
+ */
+function bst_should_use_ios_background_layer() {
+	if ( is_admin() || ! bst_is_ios_request() || ! get_background_image() ) {
+		return false;
+	}
+	return ! is_front_page();
+}
+
+/**
  * iOS WebKit breaks CSS body backgrounds (fixed attachment zoom/crop; pseudo-elements
  * often invisible). A real <img> with object-fit is the reliable workaround.
  */
 function bst_ios_body_class( $classes ) {
-	if ( bst_is_ios_request() && get_background_image() ) {
+	if ( bst_should_use_ios_background_layer() ) {
 		$classes[] = 'bst-ios-bg';
 	}
 	return $classes;
@@ -57,16 +70,12 @@ add_filter( 'body_class', 'bst_ios_body_class' );
 
 function bst_render_ios_background_image() {
 	static $rendered = false;
-	if ( $rendered || is_admin() || ! bst_is_ios_request() ) {
-		return;
-	}
-
-	$image = get_background_image();
-	if ( ! $image ) {
+	if ( $rendered || ! bst_should_use_ios_background_layer() ) {
 		return;
 	}
 
 	$rendered  = true;
+	$image     = get_background_image();
 	$pos_x     = get_theme_mod( 'background_position_x', 'center' );
 	$pos_y     = get_theme_mod( 'background_position_y', 'bottom' );
 	$position  = trim( $pos_x . ' ' . $pos_y );
