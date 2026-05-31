@@ -30,14 +30,62 @@ endif;
 add_action( 'wp_enqueue_scripts', 'child_theme_configurator_css', 10 );
 
 /**
- * iOS Safari and iOS Chrome mishandle background-attachment: fixed on body —
- * the image appears zoomed in on the shadow area. Desktop keeps fixed attachment.
+ * Whether the current request is from an iPhone, iPad, or iPod.
  *
- * Only overrides attachment on coarse-pointer touch devices; never removes the
- * Customizer background image (unlike prior pseudo-element / overlay attempts).
+ * Server-side detection is required — Chrome DevTools mobile emulation keeps a
+ * desktop user agent and pointer/hover media features, so CSS-only touch
+ * queries do not run there even when the viewport is narrow.
  */
-function bst_touch_device_custom_background_fix() {
-	if ( is_admin() || ! get_background_image() ) {
+function bst_is_ios_request() {
+	if ( empty( $_SERVER['HTTP_USER_AGENT'] ) ) {
+		return false;
+	}
+	return (bool) preg_match( '/iPhone|iPod|iPad/', wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) );
+}
+
+/**
+ * iOS WebKit breaks CSS body backgrounds (fixed attachment zoom/crop; pseudo-elements
+ * often invisible). A real <img> with object-fit is the reliable workaround.
+ */
+function bst_ios_body_class( $classes ) {
+	if ( bst_is_ios_request() && get_background_image() ) {
+		$classes[] = 'bst-ios-bg';
+	}
+	return $classes;
+}
+add_filter( 'body_class', 'bst_ios_body_class' );
+
+function bst_render_ios_background_image() {
+	static $rendered = false;
+	if ( $rendered || is_admin() || ! bst_is_ios_request() ) {
+		return;
+	}
+
+	$image = get_background_image();
+	if ( ! $image ) {
+		return;
+	}
+
+	$rendered  = true;
+	$pos_x     = get_theme_mod( 'background_position_x', 'center' );
+	$pos_y     = get_theme_mod( 'background_position_y', 'bottom' );
+	$position  = trim( $pos_x . ' ' . $pos_y );
+
+	printf(
+		'<div class="bst-ios-bg-layer" aria-hidden="true"><img src="%s" alt="" decoding="async" fetchpriority="low" style="object-position:%s"></div>',
+		esc_url( $image ),
+		esc_attr( $position )
+	);
+}
+add_action( 'wp_body_open', 'bst_render_ios_background_image', 0 );
+add_action( 'wp_footer', 'bst_render_ios_background_image', 0 );
+
+/**
+ * Android and other non-iOS touch devices: switch fixed → scroll only.
+ * Does not remove the Customizer background image.
+ */
+function bst_non_ios_touch_background_fix() {
+	if ( is_admin() || ! get_background_image() || bst_is_ios_request() ) {
 		return;
 	}
 
@@ -59,7 +107,7 @@ function bst_touch_device_custom_background_fix() {
 
 	wp_add_inline_style( 'chld_thm_cfg_child', $css );
 }
-add_action( 'wp_enqueue_scripts', 'bst_touch_device_custom_background_fix', 20 );
+add_action( 'wp_enqueue_scripts', 'bst_non_ios_touch_background_fix', 20 );
 
 // END ENQUEUE PARENT ACTION
 

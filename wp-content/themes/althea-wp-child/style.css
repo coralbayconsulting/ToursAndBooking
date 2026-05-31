@@ -26,6 +26,37 @@ Updated: 2025-01-05 22:40:54
     --darkblue: #0056b3; /* Hover Button */
 }
 
+/*
+ * iOS site background — see bst_render_ios_background_image() in functions.php.
+ * Uses <img object-fit> instead of body CSS background (WebKit zoom/crop bug).
+ */
+body.bst-ios-bg.custom-background {
+    background-image: none !important;
+}
+
+.bst-ios-bg-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+}
+
+.bst-ios-bg-layer img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center bottom;
+}
+
+body.bst-ios-bg #colibri {
+    position: relative;
+    z-index: 1;
+}
+
 /* Create the translucent overlay effect */
 .translucent-overlay {
     position: relative;
