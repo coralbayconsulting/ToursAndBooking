@@ -165,6 +165,11 @@ function bst_sitemap_urls_for_post_type( $post_type, $changefreq, $priority, $im
 			continue;
 		}
 
+		// Skip booking / checkout pages — transactional, not for search.
+		if ( $post_type === 'page' && function_exists( 'bst_seo_is_non_indexable_page' ) && bst_seo_is_non_indexable_page( $post->ID ) ) {
+			continue;
+		}
+
 		// Skip private tours from the sitemap.
 		if ( $post_type === 'tour' && function_exists( 'get_field' ) ) {
 			if ( get_field( 'private', $post->ID ) ) {

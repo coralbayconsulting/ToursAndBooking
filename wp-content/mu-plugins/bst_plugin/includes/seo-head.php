@@ -33,9 +33,50 @@ add_filter( 'wp_robots', 'bst_seo_robots_directives' );
 // Append BST-specific disallow rules to the dynamically generated robots.txt.
 add_filter( 'robots_txt', 'bst_robots_txt_rules' );
 
+/**
+ * WordPress page slugs for the booking / checkout flow — not for search indexing.
+ *
+ * @return string[]
+ */
+function bst_seo_get_non_indexable_page_slugs() {
+	$slugs = array(
+		'tour-booking',
+		'booking',
+		'bookingconfirmation',
+		'bookingdetails',
+		'bookinginvoice',
+		'booking-finalization',
+		'booking-finalization-form',
+		'bookingstatus',
+	);
+
+	return apply_filters( 'bst_seo_non_indexable_page_slugs', $slugs );
+}
+
+/**
+ * Whether a page is part of the booking flow and should be excluded from indexing.
+ *
+ * @param int|null $post_id Page ID (defaults to current queried object).
+ */
+function bst_seo_is_non_indexable_page( $post_id = null ) {
+	$post_id = $post_id ? (int) $post_id : get_queried_object_id();
+	if ( ! $post_id || get_post_type( $post_id ) !== 'page' ) {
+		return false;
+	}
+
+	$slug = get_post_field( 'post_name', $post_id );
+
+	return is_string( $slug ) && in_array( $slug, bst_seo_get_non_indexable_page_slugs(), true );
+}
+
 function bst_seo_robots_directives( $robots ) {
 	// Internal CPTs — never index these.
 	if ( is_singular( array( 'tour-date', 'vehicle', 'source-code', 'email-template' ) ) ) {
+		return array( 'noindex' => true, 'follow' => false );
+	}
+
+	// Booking / checkout pages (linked from emails and forms, not for SEO).
+	if ( is_singular( 'page' ) && bst_seo_is_non_indexable_page() ) {
 		return array( 'noindex' => true, 'follow' => false );
 	}
 
@@ -67,8 +108,14 @@ function bst_robots_txt_rules( $output ) {
 		. "Disallow: /source-code/\n"
 		. "Disallow: /email-template/\n"
 		. "Disallow: /element_category/\n"
+		. "Disallow: /tour-booking/\n"
 		. "Disallow: /booking/\n"
+		. "Disallow: /bookingconfirmation/\n"
+		. "Disallow: /bookingdetails/\n"
 		. "Disallow: /bookinginvoice/\n"
+		. "Disallow: /booking-finalization/\n"
+		. "Disallow: /booking-finalization-form/\n"
+		. "Disallow: /bookingstatus/\n"
 		. "Disallow: /wp-json/\n"
 		. "Disallow: /*?post_type=\n"
 		. "Disallow: /*?s=\n";
