@@ -1292,37 +1292,6 @@ add_action(
     }
 );
 
-// Suppress Yoast SEO and Readability filters for tour, tour-date, tour-type, and source-code post types
-add_action('restrict_manage_posts', function() {
-    global $typenow;
-    if ($typenow === 'tour' || $typenow === 'tour-date' || $typenow === 'tour-type' || $typenow === 'source-code') {
-        // Remove Yoast SEO filters by targeting their specific elements
-        echo '<script>
-            jQuery(document).ready(function($) {
-                // Hide Yoast SEO Score filter
-                $("select[name=\"seo_filter\"]").closest("label").hide();
-                $("select[name=\"seo_filter\"]").hide();
-                
-                // Hide Yoast Readability filter  
-                $("select[name=\"readability_filter\"]").closest("label").hide();
-                $("select[name=\"readability_filter\"]").hide();
-                
-                // Alternative selectors in case Yoast uses different names
-                $("select[id*=\"seo\"], select[id*=\"readability\"]").hide();
-                $("select[name*=\"seo\"], select[name*=\"readability\"]").hide();
-                
-                // Hide any dropdown containing "SEO" or "Readability" in options
-                $("select option").each(function() {
-                    var text = $(this).text().toLowerCase();
-                    if (text.includes("seo") || text.includes("readability")) {
-                        $(this).closest("select").hide();
-                    }
-                });
-            });
-        </script>';
-    }
-}, 100); // High priority to run after Yoast adds its filters
-
 // Add tour filter dropdown for tour-date post type
 add_action('restrict_manage_posts', function() {
     global $typenow, $wpdb;
@@ -1373,7 +1342,7 @@ add_action('restrict_manage_posts', function() {
         }
         echo '</select>';
     }
-}, 99); // Run before Yoast suppression
+}, 99);
 
 // Filter the tour-dates by the selected Tour
 add_filter('pre_get_posts', function($query) {

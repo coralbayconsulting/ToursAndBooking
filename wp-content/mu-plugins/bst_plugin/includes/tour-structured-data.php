@@ -5,9 +5,6 @@
  * Schema injected via wp_head on tour pages (Product, Event ×N, BreadcrumbList).
  * Organization schema injected on homepage.
  * Blog schema is in blog-structured-data.php.
- *
- * Both are output unconditionally — Yoast may or may not be generating these;
- * duplicate blocks are harmless and Google handles them gracefully.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -288,7 +285,6 @@ function bst_wp_head_tour_schema() {
 /**
  * Output Organization JSON-LD on the homepage.
  *
- * Output unconditionally — Yoast may or may not be generating this correctly.
  * To add social profile URLs: add_filter( 'bst_organization_same_as', function( $urls ) { ... } );
  */
 function bst_wp_head_organization_schema() {

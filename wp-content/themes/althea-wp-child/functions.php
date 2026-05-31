@@ -331,34 +331,7 @@ function bst_is_managed_title_context() {
 }
 
 /**
- * Whether Yoast has a custom SEO title for this URL (post or term SEO fields only; not CPT archives).
- */
-function bst_yoast_has_custom_seo_title_for_current_page() {
-    if (!defined('WPSEO_VERSION')) {
-        return false;
-    }
-    if (is_singular('tour')) {
-        $v = get_post_meta(get_queried_object_id(), '_yoast_wpseo_title', true);
-        return is_string($v) && trim($v) !== '';
-    }
-    if (bst_is_queried_tour_type_code_term_archive()) {
-        $term = get_queried_object();
-        if (!($term instanceof WP_Term)) {
-            return false;
-        }
-        foreach (array('wpseo_title', '_wpseo_title') as $key) {
-            $v = get_term_meta($term->term_id, $key, true);
-            if (is_string($v) && trim($v) !== '') {
-                return true;
-            }
-        }
-        return false;
-    }
-    return false;
-}
-
-/**
- * Short programmatic tab/SERP title when Yoast has no custom SEO title for this page.
+ * Short programmatic tab/SERP title for tour pages (fallback when BST SEO head is unavailable).
  *
  * @return string
  */
@@ -379,64 +352,21 @@ function bst_get_programmatic_document_title_for_current_page() {
 }
 
 /**
- * WordPress core title tag when Yoast is not active (or unmanaged pages).
+ * WordPress core title tag fallback for tour pages when BST SEO head is unavailable.
  *
  * @param string $title Previous value.
  *
  * @return string
  */
 function bst_apply_pre_get_document_title_programmatic($title) {
+    if (function_exists('bst_seo_head_output')) {
+        return $title;
+    }
     if (!bst_is_managed_title_context()) {
-        return $title;
-    }
-    if (defined('WPSEO_VERSION')) {
-        return $title;
-    }
-    if (bst_yoast_has_custom_seo_title_for_current_page()) {
         return $title;
     }
 
     return bst_get_programmatic_document_title_for_current_page();
-}
-
-/**
- * Yoast: use editor SEO title when set; otherwise keep short programmatic titles.
- *
- * @param string $title Assembled by Yoast (variables resolved).
- *
- * @return string
- */
-function bst_apply_wpseo_title_hybrid($title) {
-    if (!bst_is_managed_title_context()) {
-        return $title;
-    }
-    // CPT archive: no reliable Yoast "per URL" SEO title; always use BST heading (+ site name). Optional heading in BST Settings.
-    if (bst_is_tour_type_post_type_archive()) {
-        return bst_get_programmatic_document_title_for_current_page();
-    }
-    if (bst_yoast_has_custom_seo_title_for_current_page()) {
-        return $title;
-    }
-
-    return bst_get_programmatic_document_title_for_current_page();
-}
-
-/**
- * Yoast: optional meta description for /tour-types/ from BST Settings (Yoast has no archive metabox for this URL).
- *
- * @param string $desc Yoast-assembled description.
- *
- * @return string
- */
-function bst_apply_wpseo_metadesc_tour_type_archive($desc) {
-    if (!bst_is_tour_type_post_type_archive()) {
-        return $desc;
-    }
-    $custom = trim((string) get_option('bst_ptarchive_tour_type_meta_description', ''));
-    if ($custom !== '') {
-        return $custom;
-    }
-    return $desc;
 }
 
 /**
@@ -491,314 +421,29 @@ function bst_get_queried_tour_type_code_heading() {
 }
 
 /**
- * Final document_title filter when Yoast is off (pre_get may already have short-circuited).
+ * Final document_title filter fallback when BST SEO head is unavailable.
  *
  * @param string $title Full title from core.
  *
  * @return string
  */
 function bst_apply_document_title_programmatic($title) {
-    if (defined('WPSEO_VERSION')) {
+    if (function_exists('bst_seo_head_output')) {
         return $title;
     }
     if (!bst_is_managed_title_context()) {
-        return $title;
-    }
-    if (bst_yoast_has_custom_seo_title_for_current_page()) {
         return $title;
     }
 
     return bst_get_programmatic_document_title_for_current_page();
 }
 
-// Without Yoast: core <title> only. With Yoast: use bst_apply_wpseo_title_hybrid so custom SEO titles in Yoast win.
 add_filter('pre_get_document_title', 'bst_apply_pre_get_document_title_programmatic', 100001);
 add_filter('document_title', 'bst_apply_document_title_programmatic', 100001);
 
-add_filter('wpseo_title', 'bst_apply_wpseo_title_hybrid', 999);
-add_filter('wpseo_opengraph_title', 'bst_apply_wpseo_title_hybrid', 999);
-add_filter('wpseo_twitter_title', 'bst_apply_wpseo_title_hybrid', 999);
-add_filter('wpseo_metadesc', 'bst_apply_wpseo_metadesc_tour_type_archive', 999);
-
-/**
- * Ensure Organization schema logo URLs are absolute (Yoast sometimes emits root-relative paths).
- *
- * @param array $piece Organization graph piece.
- * @param mixed $context Yoast meta context (unused).
- * @return array
- */
-function bst_yoast_schema_organization_absolutize_logo_urls($piece, $context = null) {
-    unset($context);
-    if (!is_array($piece) || empty($piece['logo']) || !is_array($piece['logo'])) {
-        return $piece;
-    }
-    foreach (array('url', 'contentUrl') as $key) {
-        if (empty($piece['logo'][$key]) || !is_string($piece['logo'][$key])) {
-            continue;
-        }
-        $url = $piece['logo'][$key];
-        if ($url !== '' && $url[0] === '/') {
-            $piece['logo'][$key] = home_url($url);
-        }
-    }
-    return $piece;
-}
-add_filter('wpseo_schema_organization', 'bst_yoast_schema_organization_absolutize_logo_urls', 11, 2);
-
-/**
- * Normalize ACF / mixed values to plain text for Yoast content analysis (single tour).
- *
- * @param mixed $value Raw field value.
- *
- * @return string
- */
-function bst_yoast_analysis_flatten_text($value) {
-    if ($value === null || $value === false || $value === '') {
-        return '';
-    }
-    if ($value instanceof WP_Term) {
-        $parts = array_filter(array($value->name, isset($value->description) ? $value->description : ''));
-        $value   = implode(' ', $parts);
-    } elseif (is_object($value)) {
-        if (isset($value->post_title)) {
-            $value = (string) $value->post_title;
-        } elseif (isset($value->name)) {
-            $value = (string) $value->name;
-        } else {
-            return '';
-        }
-    } elseif (is_array($value)) {
-        $pieces = array();
-        foreach ($value as $item) {
-            $t = bst_yoast_analysis_flatten_text($item);
-            if ($t !== '') {
-                $pieces[] = $t;
-            }
-        }
-        return implode(' ', $pieces);
-    }
-    $text = wp_strip_all_tags((string) $value, true);
-    $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $text = preg_replace('/\s+/u', ' ', $text);
-
-    return trim($text);
-}
-
-/**
- * Yoast may embed analysis text inside HTML &lt;script&gt; tags. Literal "&lt;/script&gt;" in ACF/WYSIWYG
- * (even as plain text) terminates the tag early → "Unexpected end of input" and a broken SEO metabox.
- *
- * @param string $text Analysis-bound string.
- *
- * @return string
- */
-function bst_yoast_sanitize_analysis_payload($text) {
-    $text = is_string($text) ? $text : '';
-    $text = preg_replace('/<\/script\b[^>]*>/iu', ' ', $text);
-    $text = preg_replace('/<script\b[^>]*>/iu', ' ', $text);
-    $text = wp_check_invalid_utf8($text, true);
-    if (strlen($text) > 500000) {
-        $text = substr($text, 0, 500000) . ' …';
-    }
-    return $text;
-}
-
-/**
- * Merge Yoast analysis base content with extra plain text.
- *
- * @param string $content Original post_content passed to Yoast.
- * @param string $extra     Additional text (ACF-derived).
- *
- * @return string
- */
-function bst_wpseo_merge_pre_analysis_content($content, $extra) {
-    $extra = is_string($extra) ? trim($extra) : '';
-    if ($extra === '') {
-        return bst_yoast_sanitize_analysis_payload(is_string($content) ? $content : '');
-    }
-    $base = is_string($content) ? trim(wp_strip_all_tags($content)) : '';
-    if ($base === '') {
-        return bst_yoast_sanitize_analysis_payload($extra);
-    }
-
-    return bst_yoast_sanitize_analysis_payload($content . "\n\n" . $extra);
-}
-
-/**
- * Text for Yoast when editing a tour-type CPT row (archive-tour-type.php cards: title, listing blurb, linked tours/dates).
- *
- * @param int $post_id tour-type post ID.
- *
- * @return string
- */
-function bst_build_yoast_pre_analysis_tour_type_cpt_content($post_id) {
-    $post_id = (int) $post_id;
-    if ($post_id <= 0 || !function_exists('get_field')) {
-        return '';
-    }
-
-    $sections = array();
-    $title     = get_the_title($post_id);
-    if ($title !== '') {
-        $sections[] = $title;
-    }
-
-    $listing = bst_yoast_analysis_flatten_text(get_field('listing_description', $post_id));
-    if ($listing !== '') {
-        $sections[] = $listing;
-    }
-
-    $type_code = get_field('type_code', $post_id);
-    $term_id   = 0;
-    if ($type_code instanceof WP_Term) {
-        $term_id = (int) $type_code->term_id;
-        $td      = bst_yoast_analysis_flatten_text($type_code->name . ' ' . (isset($type_code->description) ? $type_code->description : ''));
-        if ($td !== '') {
-            $sections[] = $td;
-        }
-    }
-
-    if ($term_id && function_exists('bst_get_tours_by_year_for_tour_type')) {
-        $by_year = bst_get_tours_by_year_for_tour_type($term_id);
-        if (!empty($by_year)) {
-            ksort($by_year, SORT_NATURAL);
-            $lines = array();
-            $cap   = 0;
-            foreach ($by_year as $year => $tours) {
-                foreach ($tours as $t) {
-                    if ($cap++ >= 100) {
-                        break 2;
-                    }
-                    $piece = trim(
-                        (string) $year . ' '
-                        . (isset($t['date_text']) ? $t['date_text'] : '') . ' '
-                        . (isset($t['title']) ? $t['title'] : '')
-                    );
-                    if ($piece !== '') {
-                        $lines[] = $piece;
-                    }
-                }
-            }
-            if (!empty($lines)) {
-                $sections[] = 'Tour dates ' . implode('. ', $lines);
-            }
-        }
-    }
-
-    $blob = implode("\n\n", array_filter($sections));
-    $blob = apply_filters('bst_yoast_pre_analysis_tour_type_cpt_text', $blob, $post_id);
-
-    return is_string($blob) ? trim($blob) : '';
-}
-
-/**
- * Text sent to Yoast for tour posts: mirrors main copy blocks from single-tour.php (ACF).
- * Tour dates list is dynamic/JS-heavy; add via filter bst_yoast_pre_analysis_tour_append if needed.
- *
- * @param int $post_id Tour post ID.
- *
- * @return string
- */
-function bst_build_yoast_pre_analysis_tour_content($post_id) {
-    $post_id = (int) $post_id;
-    if ($post_id <= 0 || !function_exists('get_field')) {
-        return '';
-    }
-
-    $sections = array();
-
-    $title = get_the_title($post_id);
-    if ($title !== '') {
-        $sections[] = $title;
-    }
-
-    $what = bst_yoast_analysis_flatten_text(get_field('short_description', $post_id));
-    if ($what !== '') {
-        $sections[] = 'What ' . $what;
-    }
-
-    $starting = bst_yoast_analysis_flatten_text(get_field('starting_from', $post_id));
-    $airport    = bst_yoast_analysis_flatten_text(get_field('airport', $post_id));
-    if ($starting !== '' || $airport !== '') {
-        $sections[] = 'Starting From ' . trim($starting . ' ' . $airport);
-    }
-
-    $ending = bst_yoast_analysis_flatten_text(get_field('ending_at', $post_id));
-    if ($ending !== '') {
-        $airport2 = bst_yoast_analysis_flatten_text(get_field('airport_2', $post_id));
-        $sections[] = 'Ending At ' . trim($ending . ' ' . $airport2);
-    }
-
-    $blocks = array(
-        'Hospitality'      => 'hospitality',
-        'Roads'            => 'roads',
-        'About the Tour'   => 'about',
-        'Schedule'         => 'schedule',
-        'What is Included' => 'included',
-        'What You Provide' => 'not_included',
-    );
-    foreach ($blocks as $label => $field_key) {
-        $txt = bst_yoast_analysis_flatten_text(get_field($field_key, $post_id));
-        if ($txt !== '') {
-            $sections[] = $label . ' ' . $txt;
-        }
-    }
-
-    $ext = bst_yoast_analysis_flatten_text(get_field('extension_title', $post_id));
-    if ($ext !== '') {
-        $sections[] = 'Extension ' . $ext;
-    }
-
-    if (get_option('bst_enable_tour_rating', false)) {
-        $rating = get_field('tour_rating', $post_id);
-        $rtext  = bst_yoast_analysis_flatten_text($rating);
-        if ($rtext !== '') {
-            $sections[] = 'Tour Class ' . $rtext;
-        }
-    }
-
-    $blob = implode("\n\n", array_filter($sections));
-    $blob = apply_filters('bst_yoast_pre_analysis_tour_text', $blob, $post_id);
-
-    return is_string($blob) ? trim($blob) : '';
-}
-
-/**
- * Yoast SEO: feed ACF-driven copy into the analyzer when post_content is empty (tour + tour-type CPT).
- * Yoast Premium’s block editor UI does not use this for the sidebar scores in all versions; avoid legacy
- * YoastSEO.app.registerModification scripts here—they can blank the React metabox.
- *
- * @param string       $content       Existing post_content.
- * @param WP_Post|null $post          Post being analyzed.
- * @param mixed        $unused_fields Optional third arg from Yoast (legacy custom fields list).
- *
- * @return string
- */
-function bst_wpseo_pre_analysis_post_content_bst($content, $post, $unused_fields = null) {
-    unset($unused_fields);
-    if (!defined('WPSEO_VERSION') || !$post instanceof WP_Post) {
-        return $content;
-    }
-
-    if ($post->post_type === 'tour') {
-        $extra = bst_build_yoast_pre_analysis_tour_content((int) $post->ID);
-        return bst_wpseo_merge_pre_analysis_content($content, $extra);
-    }
-
-    if ($post->post_type === 'tour-type') {
-        $extra = bst_build_yoast_pre_analysis_tour_type_cpt_content((int) $post->ID);
-        return bst_wpseo_merge_pre_analysis_content($content, $extra);
-    }
-
-    return $content;
-}
-
-add_filter('wpseo_pre_analysis_post_content', 'bst_wpseo_pre_analysis_post_content_bst', 10, 3);
-
 // Add SEO meta descriptions for tour pages
 function add_tour_seo_meta() {
-    // seo-head.php (BST plugin) handles this when Yoast is not active.
-    if (defined('WPSEO_VERSION') || function_exists('bst_seo_head_output')) {
+    if (function_exists('bst_seo_head_output')) {
         return;
     }
     if (is_singular('tour')) {
@@ -985,16 +630,3 @@ function enqueue_custom_tooltip_script() {
     }
 }
 add_action('wp_enqueue_scripts', 'enqueue_custom_tooltip_script');
-
-/**
- * Override Yoast og:type from 'article' to 'product' on single tour pages.
- */
-function bst_yoast_opengraph_type_for_tours( $type, $presentation = null ) {
-    unset( $presentation );
-    if ( is_singular( 'tour' ) ) {
-        return 'product';
-    }
-    return $type;
-}
-add_filter( 'wpseo_opengraph_type', 'bst_yoast_opengraph_type_for_tours', 10, 2 );
-

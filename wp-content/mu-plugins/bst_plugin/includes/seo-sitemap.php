@@ -9,10 +9,8 @@
  *   /bst-sitemap.xml?type=pages          — all published pages
  *   /bst-sitemap.xml?type=blog           — blog index, categories, and posts
  *
- * When Yoast is active its own sitemap takes precedence; this sitemap is still
- * accessible at /bst-sitemap.xml but Yoast's /sitemap_index.xml is what search
- * engines follow. After uninstalling Yoast, submit /bst-sitemap.xml to Search
- * Console and add it to robots.txt.
+ * Submit /bst-sitemap.xml to Search Console. The sitemap URL is added to robots.txt
+ * when the site is public.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -237,14 +235,11 @@ function bst_sitemap_urls_for_taxonomy( $taxonomy ) {
 }
 
 /**
- * Add sitemap URL to robots.txt when Yoast is not active.
+ * Add BST sitemap URL to robots.txt for public sites.
  */
 add_filter( 'robots_txt', 'bst_sitemap_robots_txt', 10, 2 );
 
 function bst_sitemap_robots_txt( $output, $public ) {
-	if ( defined( 'WPSEO_VERSION' ) ) {
-		return $output;
-	}
 	if ( $public === '1' || $public === 1 ) {
 		$output .= "\nSitemap: " . esc_url( home_url( '/bst-sitemap.xml' ) ) . "\n";
 	}

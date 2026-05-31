@@ -86,7 +86,7 @@ function bst_get_blog_index_label() {
 }
 
 /**
- * Primary category for a blog post (Yoast primary when available).
+ * Primary category for a blog post (first assigned category).
  *
  * @param int|null $post_id Post ID.
  * @return WP_Term|null
@@ -95,17 +95,6 @@ function bst_get_primary_category_for_post( $post_id = null ) {
     $post_id = $post_id ? (int) $post_id : get_the_ID();
     if ( ! $post_id ) {
         return null;
-    }
-
-    if ( class_exists( 'WPSEO_Primary_Term' ) ) {
-        $primary = new WPSEO_Primary_Term( 'category', $post_id );
-        $term_id = $primary->get_primary_term();
-        if ( $term_id && ! is_wp_error( $term_id ) ) {
-            $term = get_term( (int) $term_id, 'category' );
-            if ( $term && ! is_wp_error( $term ) ) {
-                return $term;
-            }
-        }
     }
 
     $categories = get_the_category( $post_id );

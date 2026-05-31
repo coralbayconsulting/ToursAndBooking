@@ -1,10 +1,8 @@
 <?php
 /**
- * BST SEO head output — replaces Yoast for all tour-related page types.
+ * BST SEO head output for tour, blog, and related page types.
  *
  * Outputs <title>, meta description, canonical, Open Graph, and Twitter Card.
- * Silently deactivates when Yoast SEO is active so there is no double output
- * during the transition period. Once Yoast is uninstalled this takes over.
  *
  * Reading priority for every field:
  *   BST SEO override field (bst_seo_*) → content field default → WP core fallback
@@ -36,10 +34,6 @@ add_filter( 'wp_robots', 'bst_seo_robots_directives' );
 add_filter( 'robots_txt', 'bst_robots_txt_rules' );
 
 function bst_seo_robots_directives( $robots ) {
-	if ( defined( 'WPSEO_VERSION' ) ) {
-		return $robots;
-	}
-
 	// Internal CPTs — never index these.
 	if ( is_singular( array( 'tour-date', 'vehicle', 'source-code', 'email-template' ) ) ) {
 		return array( 'noindex' => true, 'follow' => false );
@@ -83,10 +77,6 @@ function bst_robots_txt_rules( $output ) {
 }
 
 function bst_seo_head_output() {
-	if ( defined( 'WPSEO_VERSION' ) ) {
-		return;
-	}
-
 	$data = bst_seo_resolve_head_data();
 	if ( empty( $data ) ) {
 		return;
@@ -514,7 +504,7 @@ function bst_seo_data_fallback( $site_name, $sep ) {
 // ---- Helpers ----
 
 /**
- * Resolve BST and Yoast template variables in an SEO field value.
+ * Resolve BST template variables and legacy %% syntax in an SEO field value.
  *
  * Supported variables:
  *   {site_name}      or  %%sitename%%  → site name
@@ -550,7 +540,7 @@ function bst_seo_resolve_template_vars( $value, $context = array() ) {
 		);
 	}
 
-	// Yoast-style variables (case-insensitive, %% syntax) — known subset only.
+	// Legacy %% syntax (case-insensitive) — known subset only.
 	$value = str_ireplace(
 		array( '%%sitename%%', '%%sep%%', '%%page%%', '%%pagenumber%%', '%%pagetotal%%' ),
 		array( $site_name,     $sep,      '',          '',                ''              ),
@@ -590,10 +580,10 @@ function bst_seo_trim_description( $text, $max = 155 ) {
 	return $text;
 }
 
-// ---- SEO field cleanup (converts Yoast %% vars to BST {vars} in the DB) ----
+// ---- SEO field cleanup (converts legacy %% vars to BST {vars} in the DB) ----
 
 /**
- * Convert Yoast template variables to BST equivalents for storage.
+ * Convert legacy %% template variables to BST equivalents for storage.
  * Known vars become {site_name} / {sep}; unknown %%var%% tokens are stripped.
  */
 function bst_seo_normalize_field_for_storage( $value ) {
@@ -602,7 +592,7 @@ function bst_seo_normalize_field_for_storage( $value ) {
 		return '';
 	}
 
-	// Convert known Yoast vars to BST equivalents.
+	// Convert known legacy vars to BST equivalents.
 	$value = str_ireplace(
 		array( '%%sitename%%', '%%sep%%' ),
 		array( '{site_name}',  '{sep}'   ),
