@@ -44,6 +44,15 @@ body.bst-ios-bg.custom-background {
     transform: translateZ(0);
 }
 
+/* One tint layer on the iOS bg image (matches desktop translucence site-wide) */
+.bst-ios-bg-layer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-color: var(--translucence);
+    pointer-events: none;
+}
+
 .bst-ios-bg-layer img {
     display: block;
     width: 100%;
@@ -55,6 +64,12 @@ body.bst-ios-bg.custom-background {
 body.bst-ios-bg #colibri {
     position: relative;
     z-index: 1;
+}
+
+/* iOS bg layer already carries the tint; avoid stacking a second ::before layer */
+body.bst-ios-bg .translucent-overlay::before,
+body.bst-ios-bg .bst-breadcrumb-section::before {
+    content: none;
 }
 
 /* Create the translucent overlay effect */

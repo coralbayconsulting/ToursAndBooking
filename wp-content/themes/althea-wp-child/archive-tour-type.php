@@ -62,7 +62,6 @@ $bst_show_filter = $bst_show_years; // no rating filter on this archive
                 <img class="top-banner" src="<?php echo esc_url(get_option('bst_banner_image')); ?>" alt="<?php echo esc_attr($bst_archive_title); ?> - Banner Image" fetchpriority="high">
                 <h1 class="banner-text"><?php echo esc_html($bst_archive_title); ?></h1>
             </div>
-        </div>
         
         <!-- Breadcrumbs Section -->
         <div class="bst-breadcrumb-section">
@@ -145,8 +144,6 @@ $bst_show_filter = $bst_show_years; // no rating filter on this archive
         </div>
         <?php endif; ?>
 
-        <div class="translucent-overlay">
-            
             <!-- TOUR LISTINGS -->
 
             <div class="h-section-grid-container h-section-boxed-container"> <!--original div-->

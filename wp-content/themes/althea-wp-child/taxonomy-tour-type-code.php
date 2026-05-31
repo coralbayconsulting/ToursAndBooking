@@ -148,7 +148,6 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
                 <img class="top-banner" src="<?php echo esc_url($banner_image); ?>" alt="<?php echo esc_attr($banner_text); ?> - Tour Category Banner" fetchpriority="high">
                 <h1 class="banner-text"><?php echo esc_html($banner_text); ?></h1>
             </div>
-        </div>
         
         <!-- Breadcrumbs Section -->
         <div class="bst-breadcrumb-section">
@@ -482,10 +481,7 @@ if ( $bst_selected_year && ! in_array( $bst_selected_year, $bst_available_years,
             }
         });
         </script>
-        </div>
 
-        <div class="translucent-overlay">
-            
             <!-- TOUR LISTINGS -->
             <div class="h-section-grid-container h-section-boxed-container">
                 <div data-colibri-id="4640-c7" class="h-row-container gutters-row-lg-1 gutters-row-md-1 gutters-row-0 gutters-row-v-lg-1 gutters-row-v-md-1 gutters-row-v-1 style-1802 style-local-4640-c7 position-relative">
