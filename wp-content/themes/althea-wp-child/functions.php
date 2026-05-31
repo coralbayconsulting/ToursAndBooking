@@ -72,7 +72,7 @@ function bst_render_ios_background_image() {
 	$position  = trim( $pos_x . ' ' . $pos_y );
 
 	printf(
-		'<div class="bst-ios-bg-layer" aria-hidden="true"><img src="%s" alt="" decoding="async" fetchpriority="low" style="object-position:%s"></div>',
+		'<div class="bst-ios-bg-layer" aria-hidden="true"><img src="%s" alt="" decoding="async" fetchpriority="low" style="object-position:%s"><span class="bst-ios-bg-tint" aria-hidden="true"></span></div>',
 		esc_url( $image ),
 		esc_attr( $position )
 	);

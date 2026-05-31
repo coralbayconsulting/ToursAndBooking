@@ -32,25 +32,15 @@ Updated: 2025-01-05 22:40:54
  */
 body.bst-ios-bg.custom-background {
     background-image: none !important;
+    background-color: transparent !important;
 }
 
 .bst-ios-bg-layer {
     position: fixed;
     inset: 0;
-    z-index: 0;
+    z-index: -1;
     pointer-events: none;
     overflow: hidden;
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-}
-
-/* One tint layer on the iOS bg image (matches desktop translucence site-wide) */
-.bst-ios-bg-layer::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-color: var(--translucence);
-    pointer-events: none;
 }
 
 .bst-ios-bg-layer img {
@@ -61,12 +51,15 @@ body.bst-ios-bg.custom-background {
     object-position: center bottom;
 }
 
-body.bst-ios-bg #colibri {
-    position: relative;
-    z-index: 1;
+/* Tint on the bg image (real element — iOS WebKit ignores ::after on fixed layers) */
+.bst-ios-bg-tint {
+    position: absolute;
+    inset: 0;
+    background-color: var(--translucence);
+    pointer-events: none;
 }
 
-/* iOS bg layer already carries the tint; avoid stacking a second ::before layer */
+/* Site-wide tint replaces section ::before on iOS (pseudo-elements fail on fixed bg layers) */
 body.bst-ios-bg .translucent-overlay::before,
 body.bst-ios-bg .bst-breadcrumb-section::before {
     content: none;
