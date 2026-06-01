@@ -475,3 +475,352 @@ function enqueue_custom_tooltip_script() {
     }
 }
 add_action('wp_enqueue_scripts', 'enqueue_custom_tooltip_script');
+
+/**
+ * Mailchimp signup checkbox on blog comment forms (MC4WP wp-comment-form integration).
+ * Uses the same audience as the homepage MC4WP form (form ID 9746 on production).
+ */
+function bst_get_mc4wp_reference_form_id() {
+	return (int) apply_filters( 'bst_mc4wp_reference_form_id', 9746 );
+}
+
+function bst_get_mc4wp_reference_form_list_ids() {
+	static $list_ids  = null;
+	static $resolved = false;
+
+	if ( $resolved ) {
+		return $list_ids;
+	}
+
+	$list_ids = array();
+
+	if ( function_exists( 'mc4wp_get_form' ) ) {
+		try {
+			$form = mc4wp_get_form( bst_get_mc4wp_reference_form_id() );
+			if ( $form && method_exists( $form, 'get_lists' ) ) {
+				$list_ids = array_values( array_filter( (array) $form->get_lists() ) );
+			}
+		} catch ( Exception $e ) {
+			// Reference form missing on this environment.
+		}
+	}
+
+	if ( empty( $list_ids ) ) {
+		$integration_options = get_option( 'mc4wp_integrations', array() );
+		if ( ! empty( $integration_options['wp-comment-form']['lists'] ) ) {
+			$list_ids = array_values( array_filter( (array) $integration_options['wp-comment-form']['lists'] ) );
+		}
+	}
+
+	$list_ids = (array) apply_filters( 'bst_mc4wp_comment_form_list_ids', $list_ids );
+
+	$resolved = true;
+
+	return $list_ids;
+}
+
+function bst_mc4wp_enable_comment_form_integration( $options ) {
+	if ( ! is_array( $options ) ) {
+		$options = array();
+	}
+
+	if ( ! isset( $options['wp-comment-form'] ) || ! is_array( $options['wp-comment-form'] ) ) {
+		$options['wp-comment-form'] = array();
+	}
+
+	$options['wp-comment-form']['enabled'] = 0;
+	$options['wp-comment-form']['label']   = __( 'Subscribe to our Mailing List', 'althea-wp-child' );
+
+	if ( empty( $options['wp-comment-form']['lists'] ) ) {
+		$list_ids = bst_get_mc4wp_reference_form_list_ids();
+		if ( ! empty( $list_ids ) ) {
+			$options['wp-comment-form']['lists'] = $list_ids;
+		}
+	}
+
+	return $options;
+}
+add_filter( 'mc4wp_integration_options', 'bst_mc4wp_enable_comment_form_integration' );
+
+function bst_mc4wp_comment_form_show_checkbox( $show_checkbox, $integration_slug ) {
+	// Theme renders the checkbox directly; keep MC4WP from duplicating it.
+	if ( $integration_slug === 'wp-comment-form' ) {
+		return false;
+	}
+
+	return $show_checkbox;
+}
+add_filter( 'mc4wp_integration_show_checkbox', 'bst_mc4wp_comment_form_show_checkbox', 10, 2 );
+
+/**
+ * Default Mailchimp interest merge field for comment signups (matches homepage form).
+ */
+function bst_mc4wp_default_interest_value() {
+	return apply_filters( 'bst_mc4wp_default_interest', 'All Tours' );
+}
+
+function bst_mc4wp_comment_form_subscriber_data( $data, $comment_id ) {
+	if ( empty( $data['MMERGE8'] ) ) {
+		$data['MMERGE8'] = bst_mc4wp_default_interest_value();
+	}
+
+	return $data;
+}
+add_filter( 'mc4wp_integration_wp-comment-form_data', 'bst_mc4wp_comment_form_subscriber_data', 10, 2 );
+
+/**
+ * Build Mailchimp subscriber data from a posted comment.
+ *
+ * @param int $comment_id Comment ID.
+ * @return array
+ */
+function bst_build_comment_mailchimp_subscriber_data( $comment_id ) {
+	$comment = get_comment( $comment_id );
+	if ( ! $comment || ! is_email( $comment->comment_author_email ) ) {
+		return array();
+	}
+
+	$data = array(
+		'EMAIL'    => $comment->comment_author_email,
+		'NAME'     => $comment->comment_author,
+		'MMERGE8'  => bst_mc4wp_default_interest_value(),
+		'OPTIN_IP' => $comment->comment_author_IP,
+	);
+
+	if ( function_exists( 'mc4wp_add_name_data' ) ) {
+		$data = mc4wp_add_name_data( $data );
+	}
+
+	// Homepage list requires LNAME; comment form only collects a single name field.
+	if ( empty( $data['LNAME'] ) && ! empty( $data['FNAME'] ) ) {
+		$data['LNAME'] = '.';
+	}
+
+	return apply_filters( 'mc4wp_integration_wp-comment-form_data', $data, $comment_id );
+}
+
+/**
+ * Log comment Mailchimp issues to the PHP error log.
+ *
+ * @param string $message Log message.
+ */
+function bst_log_comment_mailchimp( $message ) {
+	$should_log = ( defined( 'WP_DEBUG' ) && WP_DEBUG )
+		|| ( function_exists( 'wp_get_environment_type' ) && in_array( wp_get_environment_type(), array( 'local', 'development' ), true ) );
+
+	if ( ! $should_log ) {
+		return;
+	}
+
+	error_log( 'BST Mailchimp comment: ' . $message );
+}
+
+/**
+ * Whether the comment Mailchimp checkbox should appear on the current view.
+ *
+ * @return bool
+ */
+function bst_should_show_comment_mailchimp_checkbox() {
+	return is_singular( 'post' ) && function_exists( 'mc4wp_get_api_v3' );
+}
+
+/**
+ * Whether the visitor opted in on the comment form.
+ *
+ * @return bool
+ */
+function bst_comment_mailchimp_opted_in() {
+	return ! empty( $_POST['_mc4wp_subscribe_wp-comment-form'] )
+		&& (int) wp_unslash( $_POST['_mc4wp_subscribe_wp-comment-form'] ) === 1;
+}
+
+/**
+ * Render the optional Mailchimp signup checkbox above the comment submit button.
+ *
+ * @param string $submit_button Submit button HTML.
+ * @return string
+ */
+function bst_comment_form_add_mailchimp_checkbox( $submit_button ) {
+	if ( ! bst_should_show_comment_mailchimp_checkbox() ) {
+		return $submit_button;
+	}
+
+	$label = __( 'Subscribe to our Mailing List', 'althea-wp-child' );
+
+	$checkbox = sprintf(
+		'<p class="comment-form-mailchimp-consent">'
+		. '<input id="wp-comment-mailchimp-consent" name="_mc4wp_subscribe_wp-comment-form" type="checkbox" value="1" />'
+		. '<label for="wp-comment-mailchimp-consent">%s</label>'
+		. '</p>',
+		esc_html( $label )
+	);
+
+	return $checkbox . $submit_button;
+}
+add_filter( 'comment_form_submit_field', 'bst_comment_form_add_mailchimp_checkbox', 89 );
+
+/**
+ * Subscribe a commenter to the site's Mailchimp audience.
+ *
+ * @param int $comment_id Comment ID.
+ * @return bool
+ */
+function bst_subscribe_comment_to_mailchimp( $comment_id ) {
+	$list_ids = bst_get_mc4wp_reference_form_list_ids();
+	if ( empty( $list_ids ) ) {
+		bst_log_comment_mailchimp( 'No Mailchimp list IDs found for comment signups.' );
+		return false;
+	}
+
+	$data = bst_build_comment_mailchimp_subscriber_data( $comment_id );
+	if ( empty( $data['EMAIL'] ) ) {
+		bst_log_comment_mailchimp( 'Missing email for comment ' . $comment_id . '.' );
+		return false;
+	}
+
+	if ( ! function_exists( 'mc4wp_get_api_v3' ) || ! class_exists( 'MC4WP_List_Data_Mapper' ) ) {
+		bst_log_comment_mailchimp( 'MC4WP Mailchimp API is not available.' );
+		return false;
+	}
+
+	$email          = $data['EMAIL'];
+	$api            = mc4wp_get_api_v3();
+	$double_optin   = true;
+	$stored_options = get_option( 'mc4wp_integrations', array() );
+
+	if ( isset( $stored_options['wp-comment-form']['double_optin'] ) ) {
+		$double_optin = (bool) $stored_options['wp-comment-form']['double_optin'];
+	}
+
+	$target_status = $double_optin ? 'pending' : 'subscribed';
+
+	foreach ( $list_ids as $list_id ) {
+		$existing = null;
+
+		try {
+			$existing = $api->get_list_member( $list_id, $email );
+		} catch ( MC4WP_API_Resource_Not_Found_Exception $e ) {
+			$existing = null;
+		} catch ( MC4WP_API_Exception $e ) {
+			bst_log_comment_mailchimp( 'Mailchimp lookup failed for ' . $email . ': ' . $e->getMessage() );
+			return false;
+		}
+
+		if ( $existing && 'subscribed' === $existing->status ) {
+			return true;
+		}
+
+		if ( $existing ) {
+			// Record already exists as pending/unsubscribed/etc. Do not PATCH merge fields:
+			// this audience has a required ADDRESS field and partial updates fail validation.
+			try {
+				if ( 'pending' === $existing->status && 'pending' === $target_status ) {
+					$api->update_list_member(
+						$list_id,
+						$email,
+						array(
+							'status' => 'unsubscribed',
+						)
+					);
+				}
+
+				$update_args = array(
+					'status'        => $target_status,
+					'email_address' => $email,
+					'email_type'    => mc4wp_get_email_type(),
+				);
+
+				if ( ! empty( $data['OPTIN_IP'] ) ) {
+					$update_args['ip_signup'] = $data['OPTIN_IP'];
+				}
+
+				$api->update_list_member( $list_id, $email, $update_args );
+				bst_log_comment_mailchimp(
+					sprintf(
+						'Re-subscribed existing Mailchimp contact %1$s as %2$s.',
+						$email,
+						$target_status
+					)
+				);
+
+				return true;
+			} catch ( MC4WP_API_Exception $e ) {
+				bst_log_comment_mailchimp( 'Mailchimp re-subscribe failed for ' . $email . ': ' . $e->getMessage() );
+				return false;
+			}
+		}
+
+		$mapper     = new MC4WP_List_Data_Mapper( $data, array( $list_id ) );
+		$map        = $mapper->map();
+		$subscriber = $map[ $list_id ] ?? null;
+
+		if ( ! $subscriber instanceof MC4WP_MailChimp_Subscriber ) {
+			continue;
+		}
+
+		$subscriber->status     = $target_status;
+		$subscriber->email_type = mc4wp_get_email_type();
+
+		if ( ! empty( $data['OPTIN_IP'] ) ) {
+			$subscriber->ip_signup = $data['OPTIN_IP'];
+		}
+
+		$subscriber = apply_filters( 'mc4wp_subscriber_data', $subscriber );
+		$subscriber = apply_filters( 'mc4wp_integration_subscriber_data', $subscriber );
+		$subscriber = apply_filters( 'mc4wp_integration_wp-comment-form_subscriber_data', $subscriber, $comment_id );
+
+		if ( ! $subscriber instanceof MC4WP_MailChimp_Subscriber ) {
+			continue;
+		}
+
+		try {
+			$api->add_new_list_member( $list_id, $subscriber->to_array() );
+			bst_log_comment_mailchimp(
+				sprintf(
+					'Added new Mailchimp contact %1$s as %2$s.',
+					$email,
+					$target_status
+				)
+			);
+
+			return true;
+		} catch ( MC4WP_API_Exception $e ) {
+			bst_log_comment_mailchimp( 'Mailchimp add failed for ' . $email . ': ' . $e->getMessage() );
+			return false;
+		}
+	}
+
+	bst_log_comment_mailchimp( 'Mailchimp subscribe produced no list mappings for comment ' . $comment_id . '.' );
+
+	return false;
+}
+
+/**
+ * Subscribe commenters to Mailchimp when they opt in on blog posts.
+ *
+ * @param int    $comment_id       Comment ID.
+ * @param string $comment_approved Comment approval status.
+ */
+function bst_comment_post_mailchimp_subscribe( $comment_id, $comment_approved ) {
+	if ( ! bst_comment_mailchimp_opted_in() || 'spam' === $comment_approved ) {
+		return;
+	}
+
+	$comment = get_comment( $comment_id );
+	if ( ! $comment ) {
+		return;
+	}
+
+	$post = get_post( (int) $comment->comment_post_ID );
+	if ( ! $post || 'post' !== $post->post_type ) {
+		return;
+	}
+
+	if ( ! function_exists( 'mc4wp_get_api_key' ) || ! mc4wp_get_api_key() ) {
+		bst_log_comment_mailchimp( 'Mailchimp API key is missing. Add it under MC4WP → Mailchimp in wp-admin.' );
+		return;
+	}
+
+	bst_subscribe_comment_to_mailchimp( $comment_id );
+}
+add_action( 'comment_post', 'bst_comment_post_mailchimp_subscribe', 40, 2 );

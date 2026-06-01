@@ -1526,17 +1526,29 @@ body.single-post .bst-breadcrumb-item--current .bst-breadcrumb-text {
     background-color: var(--orange) !important;
 }
 
-.bst-single-post-wrap .bst-blog-comments .comment-form-cookies-consent {
+.bst-single-post-wrap .bst-blog-comments #commentform .comment-form-cookies-consent,
+.bst-single-post-wrap .bst-blog-comments #commentform .comment-form-mailchimp-consent {
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
     margin-bottom: 1rem;
     font-size: 0.9rem;
     color: var(--lightgray);
+    line-height: 1.4;
 }
 
-.bst-single-post-wrap .bst-blog-comments .comment-form-cookies-consent input {
-    margin-top: 0.2rem;
+.bst-single-post-wrap .bst-blog-comments #commentform .comment-form-cookies-consent input,
+.bst-single-post-wrap .bst-blog-comments #commentform .comment-form-mailchimp-consent input {
+    margin: 0.2rem 0 0;
+    flex: 0 0 auto;
+}
+
+.bst-single-post-wrap .bst-blog-comments #commentform .comment-form-cookies-consent label,
+.bst-single-post-wrap .bst-blog-comments #commentform .comment-form-mailchimp-consent label {
+    display: block;
+    margin: 0;
+    font-weight: normal;
+    color: inherit;
 }
 
 /* Blog archive (home + category) */
