@@ -1,6 +1,37 @@
 <?php
 
 /**
+ * Sanitize one or more comma- or semicolon-separated email addresses.
+ *
+ * WordPress sanitize_email() strips commas, which breaks the "Both Guests" recipient
+ * option (e.g. "a@x.com,b@y.com" becomes "a@x.comb@y.com").
+ *
+ * @param string $raw Raw recipient list.
+ * @return string Comma-separated valid emails, or empty string if none are valid.
+ */
+function bst_sanitize_email_recipients($raw) {
+    if (!is_string($raw) || $raw === '') {
+        return '';
+    }
+
+    $parts = preg_split('/[,;]+/', $raw);
+    $valid = array();
+
+    foreach ($parts as $part) {
+        $email = sanitize_email(trim($part));
+        if ($email && is_email($email)) {
+            $lower = strtolower($email);
+            $seen = array_map('strtolower', $valid);
+            if (!in_array($lower, $seen, true)) {
+                $valid[] = $email;
+            }
+        }
+    }
+
+    return implode(', ', $valid);
+}
+
+/**
  * BST Email Log Viewer
  * 
  * Interface for viewing and managing email logs for bookings
@@ -1224,8 +1255,8 @@ class BST_Email_Log_Viewer {
         }
         
         $booking_id = intval($_POST['booking_id']);
-        $email_to = sanitize_email($_POST['email_to']);
-        $email_cc = sanitize_email($_POST['email_cc']);
+        $email_to = bst_sanitize_email_recipients(wp_unslash($_POST['email_to'] ?? ''));
+        $email_cc = bst_sanitize_email_recipients(wp_unslash($_POST['email_cc'] ?? ''));
         $subject = wp_unslash(sanitize_text_field($_POST['subject']));
         $message = wp_kses_post(wp_unslash($_POST['message']));
         $email_type = sanitize_text_field($_POST['email_type'] ?? 'Ad Hoc');
