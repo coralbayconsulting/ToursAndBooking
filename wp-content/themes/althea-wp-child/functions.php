@@ -824,3 +824,9 @@ function bst_comment_post_mailchimp_subscribe( $comment_id, $comment_approved ) 
 	bst_subscribe_comment_to_mailchimp( $comment_id );
 }
 add_action( 'comment_post', 'bst_comment_post_mailchimp_subscribe', 40, 2 );
+
+/**
+ * Hide Colibri's admin bar menu (Get Started, Demo Sites, etc.).
+ * Customize and Edit Page remain available via WordPress core.
+ */
+add_filter( 'colibri_page_builder/show_top_bar_info_button', '__return_false' );
