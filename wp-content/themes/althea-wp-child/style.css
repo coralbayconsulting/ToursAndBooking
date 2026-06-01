@@ -1426,6 +1426,119 @@ body.single-post .bst-breadcrumb-item--current .bst-breadcrumb-text {
     margin: 0 0 4px;
 }
 
+/* Blog post comments — Colibri uses .post-comments + .comments-form, not #comments */
+.bst-single-post-wrap .bst-blog-comments {
+    margin-top: 24px;
+    background-color: var(--white);
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+    border-radius: 1px;
+}
+
+.bst-single-post-wrap .bst-blog-comments .post-comments {
+    margin-bottom: 1rem;
+}
+
+.bst-single-post-wrap .bst-blog-comments .comments-title,
+.bst-single-post-wrap .bst-blog-comments .comment-reply-title {
+    margin: 0 0 1rem;
+    color: var(--darkgray);
+    font-size: 1.35rem;
+}
+
+.bst-single-post-wrap .bst-blog-comments .comment-notes,
+.bst-single-post-wrap .bst-blog-comments .logged-in-as {
+    color: var(--lightgray);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.bst-single-post-wrap .bst-blog-comments .comment-list {
+    list-style: none;
+    margin: 0 0 1.5rem;
+    padding: 0;
+}
+
+.bst-single-post-wrap .bst-blog-comments .comment-list .comment {
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 1rem 0;
+}
+
+.bst-single-post-wrap .bst-blog-comments .comment-list .comment:first-child {
+    border-top: none;
+    padding-top: 0;
+}
+
+.bst-single-post-wrap .bst-blog-comments .comment-meta {
+    color: var(--lightgray);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.bst-single-post-wrap .bst-blog-comments #commentform label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: var(--darkgray);
+    font-weight: 600;
+}
+
+.bst-single-post-wrap .bst-blog-comments #commentform textarea,
+.bst-single-post-wrap .bst-blog-comments #commentform input[type="text"],
+.bst-single-post-wrap .bst-blog-comments #commentform input[type="email"],
+.bst-single-post-wrap .bst-blog-comments #commentform input[type="url"] {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 1rem;
+    border: 1px solid #ccc !important;
+    border-radius: 4px;
+    background-color: #fff !important;
+    color: var(--darkgray);
+    font: inherit;
+}
+
+.bst-single-post-wrap .bst-blog-comments #commentform textarea#comment {
+    min-height: 140px;
+    resize: vertical;
+}
+
+.bst-single-post-wrap .bst-blog-comments #commentform .form-submit {
+    margin-top: 0.5rem;
+    margin-bottom: 0;
+}
+
+.bst-single-post-wrap .bst-blog-comments #commentform input#submit.button {
+    display: inline-block;
+    border: 1.5px var(--red) solid !important;
+    padding: 8px 18px;
+    background-color: var(--yellow) !important;
+    color: var(--white) !important;
+    border-radius: 5px;
+    font-weight: bold;
+    font-size: 1rem;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.36);
+    transition: background-color 0.3s ease;
+}
+
+.bst-single-post-wrap .bst-blog-comments #commentform input#submit.button:hover {
+    background-color: var(--orange) !important;
+}
+
+.bst-single-post-wrap .bst-blog-comments .comment-form-cookies-consent {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: var(--lightgray);
+}
+
+.bst-single-post-wrap .bst-blog-comments .comment-form-cookies-consent input {
+    margin-top: 0.2rem;
+}
+
 /* Blog archive (home + category) */
 .bst-blog-archive-intro {
     position: relative;

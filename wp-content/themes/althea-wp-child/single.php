@@ -59,7 +59,9 @@ get_header();
 
                     <?php
                     if ( comments_open() || get_comments_number() ) {
+                        echo '<div class="bst-blog-comments">';
                         comments_template();
+                        echo '</div>';
                     }
                     ?>
                 </div>
