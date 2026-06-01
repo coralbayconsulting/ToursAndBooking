@@ -149,4 +149,28 @@ class BookingPaymentStatusTest extends TestCase {
 		$this->assertSame( 0.0, $nets['additional'] );
 		$this->assertSame( 100.0, bst_commission_booking_net_basis_original_currency( $b ) );
 	}
+
+	public function test_invoiced_refund_still_nets_uninvoiced_balance_when_deposit_was_commissioned() {
+		$b = (object) array(
+			'deposit_commission_invoice'            => 'CBC1035',
+			'balance_commission_invoice'            => '',
+			'additional_payment_commission_invoice' => '',
+			'deposit_payment_status'                => BST_PAYMENT_STATUS_PAID,
+			'balance_payment_status'                => BST_PAYMENT_STATUS_PAID,
+			'additional_payment_status'             => '',
+			'deposit_payment_amount'                => 1410,
+			'balance_payment_amount'                => 5640,
+			'additional_payment_amount'             => 0,
+			'refund_commission_invoice'             => 'CBC1037',
+			'refund_payment_status'                 => BST_PAYMENT_STATUS_PAID,
+			'refund_payment_amount'                 => 7050,
+		);
+		// Deposit commissioned; full refund invoiced; uninvoiced balance must not reappear as payable.
+		$this->assertSame( 1410.0, bst_commission_refund_reversal_amount( $b ) );
+		$nets = bst_commission_uninvoiced_inflow_amounts( $b );
+		$this->assertSame( 0.0, $nets['deposit'] );
+		$this->assertSame( 0.0, $nets['balance'] );
+		$this->assertSame( 0.0, $nets['additional'] );
+		$this->assertSame( 0.0, bst_commission_booking_net_basis_original_currency( $b ) );
+	}
 }

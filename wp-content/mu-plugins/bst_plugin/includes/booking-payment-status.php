@@ -220,19 +220,21 @@ function bst_commission_uninvoiced_inflow_amounts( $booking ) {
 		'additional' => $add,
 	);
 
-	// Mixed case: some inflows commissioned — cap reversal at invoiced total; net any remainder against uninvoiced lines.
-	if ( function_exists( 'bst_commission_refund_reduces_basis' ) && bst_commission_refund_reduces_basis( $booking ) ) {
-		$reversal  = bst_commission_refund_reversal_amount( $booking );
-		$remainder = floatval( $booking->refund_payment_amount ?? 0 ) - $reversal;
-		return bst_commission_apply_refund_netting_to_inflows( $gross, $remainder );
-	}
-
-	// No uninvoiced refund to apply — gross uninvoiced inflows stand.
-	if ( ! function_exists( 'bst_commission_refund_needs_invoice' ) || ! bst_commission_refund_needs_invoice( $booking ) ) {
+	$refund_amt = floatval( $booking->refund_payment_amount ?? 0 );
+	if ( $refund_amt <= 0 || ! bst_payment_status_commission_eligible( $booking->refund_payment_status ?? '', $refund_amt ) ) {
 		return $gross;
 	}
 
-	return bst_commission_apply_refund_netting_to_inflows( $gross, floatval( $booking->refund_payment_amount ?? 0 ) );
+	// Some inflows already commissioned: net uninvoiced lines with refund remainder after reversal.
+	// Applies whether or not the refund reversal itself has been invoiced yet.
+	if ( bst_commission_invoiced_inflow_total( $booking ) > 0 ) {
+		$reversal  = bst_commission_refund_reversal_amount( $booking );
+		$remainder = $refund_amt - $reversal;
+		return bst_commission_apply_refund_netting_to_inflows( $gross, $remainder );
+	}
+
+	// No inflow commission invoiced yet — full refund nets against uninvoiced inflows (typical cancellation).
+	return bst_commission_apply_refund_netting_to_inflows( $gross, $refund_amt );
 }
 
 /**
