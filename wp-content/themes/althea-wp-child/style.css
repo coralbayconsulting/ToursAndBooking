@@ -1430,9 +1430,13 @@ body.single-post .bst-breadcrumb-item--current .bst-breadcrumb-text {
 }
 
 .bst-single-post-meta-divider {
-    margin: 0 0 1.25rem;
+    display: block;
+    width: calc(100% + 3rem);
+    max-width: none;
+    margin: 0 -1.5rem 1.25rem;
     border: 0;
     border-top: 1px solid rgba(0, 0, 0, 0.12);
+    height: 0;
 }
 
 /* Blog post comments — Colibri uses .post-comments + .comments-form, not #comments */
