@@ -1422,8 +1422,17 @@ body.single-post .bst-breadcrumb-item--current .bst-breadcrumb-text {
 
 .bst-single-post-date {
     color: var(--lightgray);
-    font-size: 0.95rem;
-    margin: 0 0 4px;
+    font-size: 0.85rem;
+    font-family: 'Open Sans', sans-serif;
+    letter-spacing: 0.02em;
+    margin: 0 0 0.5rem;
+    text-align: right;
+}
+
+.bst-single-post-meta-divider {
+    margin: 0 0 1.25rem;
+    border: 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
 }
 
 /* Blog post comments — Colibri uses .post-comments + .comments-form, not #comments */

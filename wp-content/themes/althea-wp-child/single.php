@@ -47,9 +47,18 @@ get_header();
                         <?php if ( get_the_date() ) : ?>
                             <p class="bst-single-post-date">
                                 <time datetime="<?php echo esc_attr( get_the_date( DATE_W3C ) ); ?>">
-                                    <?php echo esc_html( get_the_date() ); ?>
+                                    <?php
+                                    echo esc_html(
+                                        sprintf(
+                                            /* translators: %s: formatted publish date */
+                                            __( 'Published %s', 'althea-wp-child' ),
+                                            get_the_date( 'F j, Y' )
+                                        )
+                                    );
+                                    ?>
                                 </time>
                             </p>
+                            <hr class="bst-single-post-meta-divider">
                         <?php endif; ?>
 
                         <div class="bst-single-post-content entry-content">
