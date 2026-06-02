@@ -2109,6 +2109,7 @@ jQuery(document).ready(function($) {
         var firstName = booking[prefix + 'first_name'] || '';
         var lastName = booking[prefix + 'last_name'] || '';
         var nickname = booking[prefix + 'nickname'] || '';
+        var age = booking[prefix + 'age'] || '';
         var email = booking[prefix + 'email'] || '';
         var phone = booking[prefix + 'phone'] || '';
         var addressLine1 = booking[prefix + 'address_line1'] || '';
@@ -2152,6 +2153,10 @@ jQuery(document).ready(function($) {
                     <div class="edit-form-field">
                         <label for="${prefix}phone">Phone</label>
                         <input type="tel" id="${prefix}phone" name="${prefix}phone" value="${phone}" />
+                    </div>
+                    <div class="edit-form-field">
+                        <label for="${prefix}age">Age</label>
+                        <input type="number" id="${prefix}age" name="${prefix}age" min="1" max="120" value="${age}" />
                     </div>
                 </div>
             </div>

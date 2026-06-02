@@ -1874,7 +1874,9 @@ function bst_gf10_prepopulate_finalization_form($form) {
                 'email2'         => 'guest2_email',
                 'guest1_shirtsize' => 'guest1_shirt_size',
                 'guest2_shirtsize' => 'guest2_shirt_size',
-                'booking_id'     => 'booking_entry_id',  
+                'guest1_age'       => 'guest1_age',
+                'guest2_age'       => 'guest2_age',
+                'booking_id'     => 'booking_entry_id',
                 'tour'           => 'tour_text',
                 'tour_dates'     => 'tour_date_text',
                 'package'        => 'tour_package_text',
@@ -2179,6 +2181,7 @@ function bst_gf10_process_finalization_logic($entry, $form) {
     $guest1_first_name = rgar($entry, '31.3'); // Guest 1 Name (Nome)
     $guest1_last_name = rgar($entry, '31.6'); // Guest 1 Name (Cognome)
     $guest1_nickname = rgar($entry, '163'); // Guest 1 Nickname
+    $guest1_age = bst_normalize_guest_age( rgar( $entry, '295' ) ); // Guest 1 Age
     $guest1_phone = rgar($entry, '34'); // Guest 1 Phone
     $guest1_email = rgar($entry, '33'); // Guest 1 Email
     $guest1_address_line1 = rgar($entry, '139.1'); // Guest 1 Address Line 1
@@ -2232,6 +2235,7 @@ function bst_gf10_process_finalization_logic($entry, $form) {
     $guest2_first_name = null;
     $guest2_last_name = null;
     $guest2_nickname = null;
+    $guest2_age = null;
     $guest2_phone = null;
     $guest2_email = null;
     $guest2_address_line1 = null;
@@ -2254,6 +2258,7 @@ function bst_gf10_process_finalization_logic($entry, $form) {
         $guest2_last_name = rgar($entry, '135.6'); // Guest 2 Name (Cognome)
         
         $guest2_nickname = rgar($entry, '165'); // Guest 2 Nickname
+        $guest2_age = bst_normalize_guest_age( rgar( $entry, '297' ) ); // Guest 2 Age
         $guest2_phone = rgar($entry, '136'); // Guest 2 Phone
         $guest2_email = rgar($entry, '178'); // Guest 2 Email
         $guest2_address_line1 = rgar($entry, '180.1'); // Guest 2 Address Line 1
@@ -2465,6 +2470,7 @@ function bst_gf10_process_finalization_logic($entry, $form) {
         'guest1_first_name' => $sanitized_fields['guest1_first_name'],
         'guest1_last_name' => $sanitized_fields['guest1_last_name'],
         'guest1_nickname' => $sanitized_fields['guest1_nickname'],
+        'guest1_age' => $guest1_age,
         'guest1_phone' => $sanitized_fields['guest1_phone'],
         'guest1_email' => $sanitized_fields['guest1_email'],
         'guest1_address_line1' => $sanitized_fields['guest1_address_line1'],
@@ -2484,6 +2490,7 @@ function bst_gf10_process_finalization_logic($entry, $form) {
         'guest2_first_name' => $sanitized_fields['guest2_first_name'],
         'guest2_last_name' => $sanitized_fields['guest2_last_name'],
         'guest2_nickname' => $sanitized_fields['guest2_nickname'],
+        'guest2_age' => $guest2_age,
         'guest2_phone' => $sanitized_fields['guest2_phone'],
         'guest2_email' => $sanitized_fields['guest2_email'],
         'guest2_address_line1' => $sanitized_fields['guest2_address_line1'],
@@ -2755,6 +2762,25 @@ function send_balance_payment_email($user_email, $tour_booking_id) {
 }
 
 // --- Utility Functions ---
+
+/**
+ * Normalize a guest age value from GF10 or admin input.
+ *
+ * @param mixed $value Raw age value.
+ * @return int|null Age 1-120, or null when empty/invalid.
+ */
+function bst_normalize_guest_age( $value ) {
+    if ( $value === null || $value === '' ) {
+        return null;
+    }
+
+    $age = absint( $value );
+    if ( $age < 1 || $age > 120 ) {
+        return null;
+    }
+
+    return $age;
+}
 
 /**
  * Truncate a string field to specified length if it's a string

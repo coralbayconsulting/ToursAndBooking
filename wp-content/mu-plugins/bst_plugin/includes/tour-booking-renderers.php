@@ -333,6 +333,10 @@ function bst_render_guest_tile_content($booking, $guest_number) {
         $booking->{$prefix . 'nickname'} ?? ''
     );
     $html .= bst_render_view_item('Name', $name);
+    $age_display = isset( $booking->{$prefix . 'age'} ) && $booking->{$prefix . 'age'} !== '' && $booking->{$prefix . 'age'} !== null
+        ? (string) $booking->{$prefix . 'age'}
+        : '—';
+    $html .= bst_render_view_item( 'Age', $age_display );
     $html .= bst_render_view_item_conditional('Email', $booking->{$prefix . 'email'} ?? '');
     $html .= bst_render_view_item_conditional('Phone', bst_format_phone_international($booking->{$prefix . 'phone'} ?? ''));
     

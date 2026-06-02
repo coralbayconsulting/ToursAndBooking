@@ -124,6 +124,61 @@ function bst_ensure_tour_booking_vehicle_id_columns() {
 	return true;
 }
 
+/**
+ * Add guest1_age / guest2_age if missing (after guest nickname columns).
+ *
+ * @return bool True if table exists and both columns are present afterward.
+ */
+function bst_ensure_guest_age_columns() {
+	global $wpdb;
+
+	if ( (int) get_option( 'bst_booking_guest_age_columns_ok', 0 ) === 1 ) {
+		return true;
+	}
+
+	$table = $wpdb->prefix . 'bst_tour_booking';
+	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+	if ( ! $found ) {
+		return false;
+	}
+
+	$cols = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
+	if ( ! is_array( $cols ) ) {
+		return false;
+	}
+
+	$has1 = in_array( 'guest1_age', $cols, true );
+	$has2 = in_array( 'guest2_age', $cols, true );
+	if ( $has1 && $has2 ) {
+		update_option( 'bst_booking_guest_age_columns_ok', 1, false );
+		return true;
+	}
+
+	if ( ! $has1 ) {
+		$sql = in_array( 'guest1_nickname', $cols, true )
+			? "ALTER TABLE `{$table}` ADD COLUMN `guest1_age` TINYINT UNSIGNED NULL DEFAULT NULL AFTER `guest1_nickname`"
+			: "ALTER TABLE `{$table}` ADD COLUMN `guest1_age` TINYINT UNSIGNED NULL DEFAULT NULL";
+		if ( false === $wpdb->query( $sql ) ) {
+			error_log( 'BST Plugin: bst_ensure_guest_age_columns failed adding guest1_age: ' . $wpdb->last_error );
+			return false;
+		}
+	}
+
+	if ( ! $has2 ) {
+		$cols = $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`", 0 );
+		$sql = is_array( $cols ) && in_array( 'guest2_nickname', $cols, true )
+			? "ALTER TABLE `{$table}` ADD COLUMN `guest2_age` TINYINT UNSIGNED NULL DEFAULT NULL AFTER `guest2_nickname`"
+			: "ALTER TABLE `{$table}` ADD COLUMN `guest2_age` TINYINT UNSIGNED NULL DEFAULT NULL";
+		if ( false === $wpdb->query( $sql ) ) {
+			error_log( 'BST Plugin: bst_ensure_guest_age_columns failed adding guest2_age: ' . $wpdb->last_error );
+			return false;
+		}
+	}
+
+	update_option( 'bst_booking_guest_age_columns_ok', 1, false );
+	return true;
+}
+
 function create_tour_booking_tables() {
     global $wpdb;
 
@@ -172,7 +227,8 @@ function create_tour_booking_tables() {
             customer_id BIGINT(20) UNSIGNED,
             guest1_first_name VARCHAR(100),
             guest1_last_name VARCHAR(100),
-            guest1_nickname VARCHAR(100), 
+            guest1_nickname VARCHAR(100),
+            guest1_age TINYINT UNSIGNED,
             guest1_phone VARCHAR(20),
             guest1_email VARCHAR(100),
             guest1_address_line1 VARCHAR(100), 
@@ -191,7 +247,8 @@ function create_tour_booking_tables() {
             guest1_emergency_contact_email VARCHAR(100),
             guest2_first_name VARCHAR(100),
             guest2_last_name VARCHAR(100),
-            guest2_nickname VARCHAR(100), 
+            guest2_nickname VARCHAR(100),
+            guest2_age TINYINT UNSIGNED,
             guest2_phone VARCHAR(20),
             guest2_email VARCHAR(100),
             guest2_address_line1 VARCHAR(100), 
@@ -278,6 +335,7 @@ function create_tour_booking_tables() {
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
     dbDelta($sql);
     bst_ensure_tour_booking_vehicle_id_columns();
+    bst_ensure_guest_age_columns();
 
     // Add foreign key constraint separately (dbDelta doesn't handle constraints well)
     // Check if the constraint already exists before trying to create it
@@ -403,6 +461,9 @@ add_action(
 	static function () {
 		if ( function_exists( 'bst_ensure_tour_booking_vehicle_id_columns' ) ) {
 			bst_ensure_tour_booking_vehicle_id_columns();
+		}
+		if ( function_exists( 'bst_ensure_guest_age_columns' ) ) {
+			bst_ensure_guest_age_columns();
 		}
 		if ( function_exists( 'bst_drop_deprecated_booking_snapshot_columns_maybe' ) ) {
 			bst_drop_deprecated_booking_snapshot_columns_maybe();
