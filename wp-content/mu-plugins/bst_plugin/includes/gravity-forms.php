@@ -2066,6 +2066,98 @@ function bst_format_travel_details($travel_method_to, $travel_method_from, $arri
     return implode("\n", $details);
 }
 
+/**
+ * Extract formatted travel details from a GF10 entry (same strings saved to the booking DB).
+ *
+ * @param array $entry GF entry.
+ * @return array{guest1:string,guest2:?string} guest2 is null for single-guest packages.
+ */
+function bst_gf10_entry_travel_details( $entry ) {
+    $guest1_travel_details = bst_format_travel_details(
+        rgar( $entry, '237' ),
+        rgar( $entry, '262' ),
+        rgar( $entry, '231' ),
+        rgar( $entry, '232' ),
+        rgar( $entry, '233' ),
+        rgar( $entry, '235' ),
+        rgar( $entry, '245' ),
+        rgar( $entry, '246' ),
+        rgar( $entry, '247' ),
+        rgar( $entry, '248' ),
+        rgar( $entry, '250' ),
+        rgar( $entry, '263' )
+    );
+
+    $guest2_travel_details = null;
+    if ( rgar( $entry, '196' ) == 2 ) {
+        if ( rgar( $entry, '249.1' ) == '1' ) {
+            $guest2_travel_details = 'Same Travel Details as Guest 1';
+        } else {
+            $guest2_travel_details = bst_format_travel_details(
+                rgar( $entry, '240' ),
+                rgar( $entry, '264' ),
+                rgar( $entry, '241' ),
+                rgar( $entry, '242' ),
+                rgar( $entry, '243' ),
+                rgar( $entry, '244' ),
+                rgar( $entry, '251' ),
+                rgar( $entry, '252' ),
+                rgar( $entry, '253' ),
+                rgar( $entry, '254' ),
+                rgar( $entry, '256' ),
+                rgar( $entry, '265' )
+            );
+        }
+    }
+
+    return array(
+        'guest1' => $guest1_travel_details,
+        'guest2' => $guest2_travel_details,
+    );
+}
+
+/**
+ * Whether a GF10 entry includes travel-to-tour (arrival) details for at least one guest.
+ * Matches saved strings beginning with "TO TOUR" — any method including Other/Unknown.
+ *
+ * @param array $entry GF entry.
+ * @return bool
+ */
+function bst_gf10_entry_has_arrival_info( $entry ) {
+    if ( bst_gf10_guest_has_arrival_info( $entry, 1 ) ) {
+        return true;
+    }
+    if ( rgar( $entry, '196' ) != 2 || rgar( $entry, '249.1' ) == '1' ) {
+        return false;
+    }
+    return bst_gf10_guest_has_arrival_info( $entry, 2 );
+}
+
+/**
+ * @param array $entry GF entry.
+ * @param int   $guest 1 or 2.
+ * @return bool
+ */
+function bst_gf10_guest_has_arrival_info( $entry, $guest ) {
+    if ( 1 === (int) $guest ) {
+        $travel_method_to = trim( (string) rgar( $entry, '237' ) );
+        $travel_other_to  = trim( (string) rgar( $entry, '250' ) );
+    } else {
+        $travel_method_to = trim( (string) rgar( $entry, '240' ) );
+        $travel_other_to  = trim( (string) rgar( $entry, '256' ) );
+    }
+
+    if ( $travel_method_to === '' ) {
+        return false;
+    }
+
+    if ( stripos( $travel_method_to, 'other' ) !== false || stripos( $travel_method_to, 'unknown' ) !== false ) {
+        return $travel_other_to !== '';
+    }
+
+    return true;
+}
+
 // --- New logic for Gravity Forms ID 10 booking finalization ---
 // Use gform_after_submission for Bank Wire (no payment processing needed)
 add_action('gform_after_submission_10', 'bst_gf10_handle_submission', 10, 2);
@@ -2193,34 +2285,8 @@ function bst_gf10_process_finalization_logic($entry, $form) {
     $guest1_driving_status = rgar($entry, '258'); // Guest 1 Drive/Passenger Status
     $guest1_shirt_size = rgar($entry, '150'); // Guest 1 Shirt Size
     
-    // Build guest 1 travel details
-    $guest1_travel_method_to = rgar($entry, '237'); // Travel method TO tour
-    $guest1_travel_method_from = rgar($entry, '262'); // Travel method FROM tour
-    $guest1_arrival_location = rgar($entry, '231');
-    $guest1_arrival_flight = rgar($entry, '232');
-    $guest1_arrival_date = rgar($entry, '233');
-    $guest1_arrival_time = rgar($entry, '235');
-    $guest1_departure_location = rgar($entry, '245');
-    $guest1_departure_flight = rgar($entry, '246');
-    $guest1_departure_date = rgar($entry, '247');
-    $guest1_departure_time = rgar($entry, '248');
-    $guest1_travel_other_to = rgar($entry, '250'); // Travel TO tour - Other/Unknown
-    $guest1_travel_other_from = rgar($entry, '263'); // Travel FROM tour - Other/Unknown
-    
-    $guest1_travel_details = bst_format_travel_details(
-        $guest1_travel_method_to,
-        $guest1_travel_method_from,
-        $guest1_arrival_location,
-        $guest1_arrival_flight,
-        $guest1_arrival_date,
-        $guest1_arrival_time,
-        $guest1_departure_location,
-        $guest1_departure_flight,
-        $guest1_departure_date,
-        $guest1_departure_time,
-        $guest1_travel_other_to,
-        $guest1_travel_other_from
-    );
+    $gf10_travel_details = bst_gf10_entry_travel_details( $entry );
+    $guest1_travel_details = $gf10_travel_details['guest1'];
     
     $guest1_dietary_restrictions = rgar($entry, '211'); // Guest 1 Food preferences
     $guest1_medical_insurance = rgar($entry, '226'); // Guest 1 Medical/Insurance Information
@@ -2270,40 +2336,7 @@ function bst_gf10_process_finalization_logic($entry, $form) {
         $guest2_driving_status = rgar($entry, '159'); // Guest 2 Drive/Passenger Status
         $guest2_shirt_size = rgar($entry, '151'); // Guest 2 Shirt Size
         
-        // Check if guest 2 travel details are same as guest 1
-        $travel_details_same = rgar($entry, '249.1'); // "same as mine" checkbox
-        if ($travel_details_same == '1') {
-            $guest2_travel_details = "Same Travel Details as Guest 1"; // Use descriptive text instead of copying
-        } else {
-            // Build guest 2 travel details
-            $guest2_travel_method_to = rgar($entry, '240'); // Travel method TO tour
-            $guest2_travel_method_from = rgar($entry, '264'); // Travel method FROM tour
-            $guest2_arrival_location = rgar($entry, '241');
-            $guest2_arrival_flight = rgar($entry, '242');
-            $guest2_arrival_date = rgar($entry, '243');
-            $guest2_arrival_time = rgar($entry, '244');
-            $guest2_departure_location = rgar($entry, '251');
-            $guest2_departure_flight = rgar($entry, '252');
-            $guest2_departure_date = rgar($entry, '253');
-            $guest2_departure_time = rgar($entry, '254');
-            $guest2_travel_other_to = rgar($entry, '256'); // Travel TO tour - Other/Unknown
-            $guest2_travel_other_from = rgar($entry, '265'); // Travel FROM tour - Other/Unknown
-            
-            $guest2_travel_details = bst_format_travel_details(
-                $guest2_travel_method_to,
-                $guest2_travel_method_from,
-                $guest2_arrival_location,
-                $guest2_arrival_flight,
-                $guest2_arrival_date,
-                $guest2_arrival_time,
-                $guest2_departure_location,
-                $guest2_departure_flight,
-                $guest2_departure_date,
-                $guest2_departure_time,
-                $guest2_travel_other_to,
-                $guest2_travel_other_from
-            );
-        }
+        $guest2_travel_details = $gf10_travel_details['guest2'];
         
         $guest2_dietary_restrictions = rgar($entry, '212'); // Guest 2 Food preferences
         $guest2_medical_insurance = rgar($entry, '227'); // Guest 2 Medical/Insurance Information

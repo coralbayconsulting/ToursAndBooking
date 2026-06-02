@@ -333,10 +333,6 @@ function bst_render_guest_tile_content($booking, $guest_number) {
         $booking->{$prefix . 'nickname'} ?? ''
     );
     $html .= bst_render_view_item('Name', $name);
-    $age_display = isset( $booking->{$prefix . 'age'} ) && $booking->{$prefix . 'age'} !== '' && $booking->{$prefix . 'age'} !== null
-        ? (string) $booking->{$prefix . 'age'}
-        : '—';
-    $html .= bst_render_view_item( 'Age', $age_display );
     $html .= bst_render_view_item_conditional('Email', $booking->{$prefix . 'email'} ?? '');
     $html .= bst_render_view_item_conditional('Phone', bst_format_phone_international($booking->{$prefix . 'phone'} ?? ''));
     
@@ -355,6 +351,12 @@ function bst_render_guest_tile_content($booking, $guest_number) {
     
     // Additional Details section - only show header if there are details to display
     $additional_details_html = '';
+    $age = function_exists( 'bst_normalize_guest_age' )
+        ? bst_normalize_guest_age( $booking->{$prefix . 'age'} ?? null )
+        : null;
+    if ( $age !== null ) {
+        $additional_details_html .= bst_render_view_item( 'Age', (string) $age );
+    }
     
     // Collect all additional details
     $additional_details_html .= bst_render_view_item_conditional('Shirt Size', bst_get_shirt_size_display($booking->{$prefix . 'shirt_size'} ?? ''));

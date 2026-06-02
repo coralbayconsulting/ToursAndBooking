@@ -2154,10 +2154,6 @@ jQuery(document).ready(function($) {
                         <label for="${prefix}phone">Phone</label>
                         <input type="tel" id="${prefix}phone" name="${prefix}phone" value="${phone}" />
                     </div>
-                    <div class="edit-form-field">
-                        <label for="${prefix}age">Age</label>
-                        <input type="number" id="${prefix}age" name="${prefix}age" min="1" max="120" value="${age}" />
-                    </div>
                 </div>
             </div>
             
@@ -2200,6 +2196,10 @@ jQuery(document).ready(function($) {
             <div class="edit-form-section">
                 <h4>Additional Details</h4>
                 <div class="edit-form-row">
+                    <div class="edit-form-field">
+                        <label for="${prefix}age">Age</label>
+                        <input type="number" id="${prefix}age" name="${prefix}age" min="1" max="120" value="${age}" />
+                    </div>
                     <div class="edit-form-field">
                         <label for="${prefix}shirt_size">Shirt Size</label>
                         <select id="${prefix}shirt_size" name="${prefix}shirt_size">

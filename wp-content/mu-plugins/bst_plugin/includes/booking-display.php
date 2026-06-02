@@ -435,6 +435,40 @@ function bst_get_card_type($entry, $form_id = null) {
     return $card_type;
 }
 
+/**
+ * Whether saved booking travel details include travel-to-tour (TO TOUR) info.
+ *
+ * @param object $booking Booking row.
+ * @return bool
+ */
+function bst_booking_has_arrival_travel_details( $booking ) {
+    $guest1 = (string) ( $booking->guest1_travel_details ?? '' );
+    if ( stripos( $guest1, 'TO TOUR' ) !== false ) {
+        return true;
+    }
+    $guest2 = (string) ( $booking->guest2_travel_details ?? '' );
+    if ( $guest2 === 'Same Travel Details as Guest 1' ) {
+        return stripos( $guest1, 'TO TOUR' ) !== false;
+    }
+    return stripos( $guest2, 'TO TOUR' ) !== false;
+}
+
+/**
+ * Render the amber travel-details review notice, or nothing.
+ *
+ * @param bool $show_arrival_warning Show travel-to-tour / airport-transfer warning.
+ * @return string HTML
+ */
+function bst_render_finalization_review_notice_html( $show_arrival_warning ) {
+    if ( ! $show_arrival_warning ) {
+        return '';
+    }
+
+    return '<div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #856404; margin-bottom: 15px;">'
+        . '<p style="margin: 0; color: #333; font-size: 0.95em;"><strong>Important:</strong> Please verify your travel details below. If your tour includes an airport transfer and these details are wrong, your driver will not be able to meet you and you will miss your limo. Please contact us if anything needs to be corrected or has changed.</p>'
+        . '</div>';
+}
+
 // Shared function to generate booking details table (used by both confirmation page and email merge tags)
 function bst_get_booking_details_data($booking, $entry) {
     // Build the guest name using helper
@@ -823,6 +857,20 @@ function bst_generate_booking_summary_html($entry_id, $return_booking = false, $
     if ($booking && !empty($booking->bed_preference)) {
         $html .= '<tr><td>Bed Preference:</td>';
         $html .= '<td>' . esc_html($booking->bed_preference) . '</td></tr>';
+    }
+    
+    // GF10 finalization: travel details from entry (same format as DB), above pricing
+    if ( intval( rgar( $entry, 'form_id' ) ) === 10 && function_exists( 'bst_gf10_entry_travel_details' ) ) {
+        $gf10_travel = bst_gf10_entry_travel_details( $entry );
+        if ( ! empty( $gf10_travel['guest1'] ) ) {
+            $travel_label = ! empty( $guest2_first ) ? 'Travel Details (Guest 1):' : 'Travel Details:';
+            $html .= '<tr><td>' . esc_html( $travel_label ) . '</td>';
+            $html .= '<td>' . nl2br( esc_html( $gf10_travel['guest1'] ) ) . '</td></tr>';
+        }
+        if ( ! empty( $gf10_travel['guest2'] ) ) {
+            $html .= '<tr><td>Travel Details (Guest 2):</td>';
+            $html .= '<td>' . nl2br( esc_html( $gf10_travel['guest2'] ) ) . '</td></tr>';
+        }
     }
     
     // Pricing section - show Tour Price and Coupon if there's a coupon
@@ -1477,6 +1525,16 @@ function bst_booking_confirmation_shortcode($atts) {
         <h2><?php echo $page_header; ?></h2>
         <p class="confirmation-message">Thank you for your booking, <?php echo esc_html($guest_name); ?>!</p>
         
+        <?php
+        if ( (int) $form_id === 10 ) {
+            $show_arrival_warning = function_exists( 'bst_gf10_entry_has_arrival_info' ) && bst_gf10_entry_has_arrival_info( $entry );
+            if ( ! $show_arrival_warning && $booking && function_exists( 'bst_booking_has_arrival_travel_details' ) ) {
+                $show_arrival_warning = bst_booking_has_arrival_travel_details( $booking );
+            }
+            echo bst_render_finalization_review_notice_html( $show_arrival_warning );
+        }
+        ?>
+        
         <div class="booking-details-section">
             <?php echo $booking_html; ?>
         </div>
@@ -1836,6 +1894,21 @@ function bst_booking_details_shortcode($atts) {
         .finalization-button:hover { background: #1f4320; }
     </style>
     <div class="booking-details-container">
+        <?php if ($display_type === 'customer' && !empty($booking->finalization_entry_id)): ?>
+        <?php
+        $show_arrival_warning = false;
+        if ( function_exists( 'bst_gf10_entry_has_arrival_info' ) ) {
+            $finalization_entry = GFAPI::get_entry( intval( $booking->finalization_entry_id ) );
+            if ( $finalization_entry && ! is_wp_error( $finalization_entry ) ) {
+                $show_arrival_warning = bst_gf10_entry_has_arrival_info( $finalization_entry );
+            }
+        }
+        if ( ! $show_arrival_warning && function_exists( 'bst_booking_has_arrival_travel_details' ) ) {
+            $show_arrival_warning = bst_booking_has_arrival_travel_details( $booking );
+        }
+        echo bst_render_finalization_review_notice_html( $show_arrival_warning );
+        ?>
+        <?php endif; ?>
         <h2>Booking Details</h2>
         
         <?php if ($show_finalization_link && !empty($finalization_due_date) && !(isset($_GET['type']) && $_GET['type'] === 'bst')): ?>
@@ -1851,7 +1924,6 @@ function bst_booking_details_shortcode($atts) {
         </div>
         <?php endif; ?>
         
-        <br>
         <div class="booking-details-section">
             <h3>Booking Information</h3>
             <table class="booking-details-table">
@@ -1946,6 +2018,12 @@ function bst_booking_details_shortcode($atts) {
                         <td class="value-col"><?php echo nl2br(esc_html($booking->guest1_dietary_restrictions)); ?></td>
                     </tr>
                     <?php endif; ?>
+                    <?php if (!empty($booking->guest1_age)): ?>
+                    <tr>
+                        <td class="label-col">Age:</td>
+                        <td class="value-col"><?php echo esc_html($booking->guest1_age); ?></td>
+                    </tr>
+                    <?php endif; ?>
                     <?php if (!empty($booking->guest1_medical_insurance)): ?>
                     <tr>
                         <td class="label-col">Medical Insurance:</td>
@@ -2029,6 +2107,12 @@ function bst_booking_details_shortcode($atts) {
                         <td class="value-col"><?php echo nl2br(esc_html($booking->guest2_dietary_restrictions)); ?></td>
                     </tr>
                     <?php endif; ?>
+                    <?php if (!empty($booking->guest2_age)): ?>
+                    <tr>
+                        <td class="label-col">Age:</td>
+                        <td class="value-col"><?php echo esc_html($booking->guest2_age); ?></td>
+                    </tr>
+                    <?php endif; ?>
                     <?php if (!empty($booking->guest2_medical_insurance)): ?>
                     <tr>
                         <td class="label-col">Medical Insurance:</td>
@@ -2103,6 +2187,12 @@ function bst_booking_details_shortcode($atts) {
                 <tr>
                     <td class="label-col">Food Intolerances:</td>
                     <td class="value-col"><?php echo nl2br(esc_html($booking->guest1_dietary_restrictions)); ?></td>
+                </tr>
+                <?php endif; ?>
+                <?php if (!empty($booking->guest1_age)): ?>
+                <tr>
+                    <td class="label-col">Age:</td>
+                    <td class="value-col"><?php echo esc_html($booking->guest1_age); ?></td>
                 </tr>
                 <?php endif; ?>
                 <?php if (!empty($booking->guest1_medical_insurance)): ?>
