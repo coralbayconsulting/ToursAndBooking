@@ -1403,6 +1403,29 @@ body.single-post .bst-breadcrumb-item--current .bst-breadcrumb-text {
     }
 }
 
+/* Blog category index: uniform image area (matches tour-listing 600×338 crop) */
+.bst-blog-category-box .listing-image-container {
+    display: block;
+    width: 100%;
+    aspect-ratio: 600 / 338;
+    overflow: hidden;
+    margin-bottom: 15px;
+}
+
+.bst-blog-category-box .listing-image-container a {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.bst-blog-category-box .listing-image-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center;
+    margin-bottom: 0;
+}
+
 .bst-single-post-wrap .bst-single-post {
     background-color: var(--white);
     padding: 1.5rem;
