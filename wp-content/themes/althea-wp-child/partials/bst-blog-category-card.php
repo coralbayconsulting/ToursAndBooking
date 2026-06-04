@@ -45,21 +45,24 @@ $image       = function_exists( 'bst_get_category_banner_image_url' )
     $post_count = function_exists( 'bst_get_category_published_post_count' )
         ? bst_get_category_published_post_count( $category )
         : (int) $category->count;
+    $new_count  = function_exists( 'bst_get_category_new_post_count' )
+        ? bst_get_category_new_post_count( $category )
+        : 0;
+    $count_text = sprintf(
+        _n(
+            'There is %1$d post in this category',
+            'There are %1$d posts in this category',
+            $post_count,
+            'althea-wp-child'
+        ),
+        $post_count
+    );
+    if ( $new_count > 0 ) {
+        $count_text .= sprintf( ' (%d new)', $new_count );
+    }
     ?>
     <p class="tour-pricing-info" style="margin: -8px 0 10px; font-size: 14px; font-weight: 600; color: #2c5aa0; text-align: center;">
-        <?php
-        echo esc_html(
-            sprintf(
-                _n(
-                    'There is %d post in this category',
-                    'There are %d posts in this category',
-                    $post_count,
-                    'althea-wp-child'
-                ),
-                $post_count
-            )
-        );
-        ?>
+        <?php echo esc_html( $count_text ); ?>
     </p>
     <a href="<?php echo esc_url( $permalink ); ?>" class="info-button"><?php esc_html_e( 'View Posts', 'althea-wp-child' ); ?></a>
 </div>

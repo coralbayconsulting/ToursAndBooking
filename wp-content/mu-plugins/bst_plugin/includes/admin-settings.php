@@ -14,6 +14,7 @@ function bst_register_settings() {
     register_setting('bst_settings_group', 'bst_ptarchive_blog_page_title');
     register_setting('bst_settings_group', 'bst_ptarchive_blog_meta_description');
     register_setting('bst_settings_group', 'bst_ptarchive_blog_category_meta_description');
+    register_setting('bst_settings_group', 'bst_blog_category_new_post_days', array('default' => 30));
     register_setting('bst_settings_group', 'bst_enable_tour_rating', array('default' => false));
     register_setting('bst_settings_group', 'bst_low_availability_threshold'); // Low availability threshold setting
     register_setting('bst_settings_group', 'bst_auto_refresh_interval', array('default' => 15)); // Auto-refresh interval in minutes
@@ -272,6 +273,14 @@ function bst_register_settings() {
     );
 
     add_settings_field(
+        'bst_blog_category_new_post_days',
+        'Blog category "new" post window (days)',
+        'bst_blog_category_new_post_days_callback',
+        'bst_settings_page',
+        'bst_seo_section'
+    );
+
+    add_settings_field(
         'bst_low_availability_threshold',
         'Low Availability Threshold',
         'bst_low_availability_threshold_callback',
@@ -489,6 +498,15 @@ function bst_ptarchive_blog_category_meta_description_callback() {
     $val = get_option( 'bst_ptarchive_blog_category_meta_description', '' );
     echo '<textarea id="bst_ptarchive_blog_category_meta_description" name="bst_ptarchive_blog_category_meta_description" rows="3" style="width: 100%; max-width: 560px;" maxlength="320">' . esc_textarea( $val ) . '</textarea>';
     echo '<p class="description">Default meta description for category archives when the category has no description. Category name is used in the title automatically. Supports <code>{category_name}</code>, <code>{site_name}</code>, and <code>{sep}</code>. If empty, a generic description is used.</p>';
+}
+
+function bst_blog_category_new_post_days_callback() {
+    $val = (int) get_option( 'bst_blog_category_new_post_days', 30 );
+    if ( $val < 1 ) {
+        $val = 30;
+    }
+    echo '<input type="number" id="bst_blog_category_new_post_days" name="bst_blog_category_new_post_days" value="' . esc_attr( (string) $val ) . '" min="1" max="365" step="1" style="width: 80px;" />';
+    echo '<p class="description">On the main blog page, category tiles show how many posts were published in the last N days, e.g. “There are 9 posts in this category (2 new)”.</p>';
 }
 
 function bst_low_availability_threshold_callback() {

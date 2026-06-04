@@ -369,3 +369,63 @@ function bst_get_category_published_post_count( $term ) {
     return $count;
 }
 
+/**
+ * Days after publish during which a blog post counts as "new" on category index tiles.
+ *
+ * @return int Minimum 1.
+ */
+function bst_get_blog_category_new_post_days() {
+    $days = (int) get_option( 'bst_blog_category_new_post_days', 30 );
+
+    if ( $days < 1 ) {
+        $days = 30;
+    }
+
+    return (int) apply_filters( 'bst_blog_category_new_post_days', $days );
+}
+
+/**
+ * Published posts in a category published within the "new" window (includes child categories).
+ *
+ * @param WP_Term|int $term Category term or term ID.
+ * @param int|null    $days Override window length in days.
+ * @return int
+ */
+function bst_get_category_new_post_count( $term, $days = null ) {
+    $term_id = $term instanceof WP_Term ? (int) $term->term_id : (int) $term;
+    if ( $term_id <= 0 ) {
+        return 0;
+    }
+
+    if ( null === $days ) {
+        $days = bst_get_blog_category_new_post_days();
+    } else {
+        $days = max( 1, (int) $days );
+    }
+
+    $query = new WP_Query(
+        array(
+            'cat'                    => $term_id,
+            'post_type'              => 'post',
+            'post_status'            => 'publish',
+            'posts_per_page'         => 1,
+            'fields'                 => 'ids',
+            'no_found_rows'          => false,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
+            'ignore_sticky_posts'    => true,
+            'date_query'             => array(
+                array(
+                    'after'     => $days . ' days ago',
+                    'inclusive' => true,
+                ),
+            ),
+        )
+    );
+
+    $count = (int) $query->found_posts;
+    wp_reset_postdata();
+
+    return $count;
+}
+
