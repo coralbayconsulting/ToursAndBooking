@@ -254,7 +254,8 @@ function bst_wp_head_tour_schema() {
 			'validFrom'     => get_the_date( 'Y-m-d', $tour_id ),
 		);
 		if ( $price !== null ) {
-			$event_offer['price'] = $price;
+			$event_offer['price']           = $price;
+			$event_offer['priceValidUntil'] = $price_valid_until;
 		}
 
 		$event = array(
