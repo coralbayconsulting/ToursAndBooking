@@ -71,18 +71,19 @@ function bst_wp_head_tour_schema() {
 	$price           = null;
 	$package_pricing = get_field( 'package_pricing', $tour_id );
 	if ( is_array( $package_pricing ) ) {
-		$min_half = null;
+		$min_per_person = null;
 		for ( $pkg_i = 1; $pkg_i <= 5; $pkg_i++ ) {
 			$pkg_val = isset( $package_pricing[ 'package_' . $pkg_i ] ) ? floatval( $package_pricing[ 'package_' . $pkg_i ] ) : 0;
 			if ( $pkg_val > 0 ) {
-				$half = round( $pkg_val / 2 );
-				if ( $min_half === null || $half < $min_half ) {
-					$min_half = $half;
+				$pkg_people = max( 1, intval( get_option( "bst_package_{$pkg_i}_people", 1 ) ) );
+				$per_person = round( $pkg_val / $pkg_people );
+				if ( $min_per_person === null || $per_person < $min_per_person ) {
+					$min_per_person = $per_person;
 				}
 			}
 		}
-		if ( $min_half !== null ) {
-			$price = (string) $min_half;
+		if ( $min_per_person !== null ) {
+			$price = (string) $min_per_person;
 		}
 	}
 
@@ -141,9 +142,54 @@ function bst_wp_head_tour_schema() {
 		? 'https://schema.org/InStock'
 		: 'https://schema.org/PreOrder'; // tours run each year; PreOrder signals future availability
 
-	// ---- Build: Offer (base, shared by Product) ----
+	// ---- priceValidUntil: derive year from latest upcoming event end date ----
+	$last_event_end = '';
+	foreach ( $upcoming as $d ) {
+		$end = function_exists( 'bst_tour_date_acf_date_meta_to_ymd' )
+			? bst_tour_date_acf_date_meta_to_ymd( $d['end_date'] )
+			: '';
+		if ( $end > $last_event_end ) {
+			$last_event_end = $end;
+		}
+	}
+	$price_valid_until = ( $last_event_end ? substr( $last_event_end, 0, 4 ) : wp_date( 'Y' ) ) . '-12-31';
+
 	$location_name = $starting_from . ( $airport ? ' (' . $airport . ')' : '' );
 
+	// ---- Build: per-package offers (used by Product) ----
+	$package_offers = array();
+	if ( is_array( $package_pricing ) ) {
+		for ( $pkg_i = 1; $pkg_i <= 5; $pkg_i++ ) {
+			$pkg_val = isset( $package_pricing[ 'package_' . $pkg_i ] ) ? floatval( $package_pricing[ 'package_' . $pkg_i ] ) : 0;
+			if ( $pkg_val <= 0 ) {
+				continue;
+			}
+			$pkg_people = max( 1, intval( get_option( "bst_package_{$pkg_i}_people", 1 ) ) );
+			$pkg_name   = trim( (string) get_option( "bst_package_{$pkg_i}_name", "Package {$pkg_i}" ) );
+			$package_offers[] = array(
+				'@type'             => 'Offer',
+				'name'              => $pkg_name,
+				'url'               => $permalink,
+				'priceCurrency'     => $currency,
+				'price'             => (string) round( $pkg_val / $pkg_people ),
+				'eligibleQuantity'  => array(
+					'@type'    => 'QuantitativeValue',
+					'value'    => $pkg_people,
+					'unitText' => $pkg_people === 1 ? 'person' : 'people',
+				),
+				'availability'    => $product_availability,
+				'validFrom'       => get_the_date( 'Y-m-d', $tour_id ),
+				'priceValidUntil' => $price_valid_until,
+				'seller'          => array(
+					'@type' => 'Organization',
+					'@id'   => home_url( '/#organization' ),
+					'name'  => get_bloginfo( 'name' ),
+				),
+			);
+		}
+	}
+
+	// ---- Build: single minimum-price offer (used by Events) ----
 	$base_offer = array(
 		'@type'         => 'Offer',
 		'url'           => $permalink,
@@ -158,7 +204,7 @@ function bst_wp_head_tour_schema() {
 	);
 	if ( $price !== null ) {
 		$base_offer['price']           = $price;
-		$base_offer['priceValidUntil'] = wp_date( 'Y' ) . '-12-31';
+		$base_offer['priceValidUntil'] = $price_valid_until;
 	}
 
 	// ---- Build: Product ----
@@ -169,7 +215,7 @@ function bst_wp_head_tour_schema() {
 		'description' => $short_description,
 		'url'         => $permalink,
 		'brand'       => array( '@type' => 'Brand', 'name' => get_bloginfo( 'name' ) ),
-		'offers'      => $base_offer,
+		'offers'      => ! empty( $package_offers ) ? $package_offers : $base_offer,
 	);
 	if ( $banner_image ) {
 		$product['image'] = $banner_image;
