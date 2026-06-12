@@ -16,12 +16,14 @@ emulation look fine; real iPhones do not.
 | **iOS inner pages** | `<span class="bst-ios-bg-tint">` on the img layer (replaces `.translucent-overlay::before` on iOS; CSS pseudo-elements on fixed layers are unreliable). |
 | **iOS homepage** | Same `<img>` layer, **no tint** (matches desktop: background only, no overlay). |
 | **Android touch** | `background-attachment: scroll` only via `bst_non_ios_touch_background_fix()`. |
+| **Page cache** | `js/bst-ios-background.js` re-applies the iOS layer in the browser when cached HTML was built for a non-iOS user agent (logged-in users bypass cache and often look fine). |
 | **Tour listing templates** | Single `.translucent-overlay` wrapper (banner + breadcrumbs + listings) so iOS tint covers the full listing area without a bright gap. |
 
 ## Files touched
 
-1. `functions.php` — lines from `bst_is_ios_request()` through `bst_non_ios_touch_background_fix()` (before `// END ENQUEUE PARENT ACTION`)
+1. `functions.php` — lines from `bst_is_ios_request()` through `bst_enqueue_ios_background_client_fallback()` (before `// END ENQUEUE PARENT ACTION`)
 2. `style.css` — block from `body.bst-ios-bg.custom-background` through `body.bst-ios-bg-tinted … ::before` (just above `/* Create the translucent overlay effect */`)
+3. `js/bst-ios-background.js` — client fallback for cached pages
 3. `archive-tour-type.php` — one continuous `.translucent-overlay` (see comment `BST iOS bg:` in file)
 4. `taxonomy-tour-type-code.php` — same; removed an extra stray `</div>` before listings
 

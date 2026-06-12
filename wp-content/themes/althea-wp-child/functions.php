@@ -145,6 +145,46 @@ function bst_non_ios_touch_background_fix() {
 }
 add_action( 'wp_enqueue_scripts', 'bst_non_ios_touch_background_fix', 20 );
 
+/**
+ * Client-side iOS background fallback for full-page cache (W3TC, CDN, etc.).
+ *
+ * Logged-in users bypass cache and get server-side bst_is_ios_request() markup.
+ * Anonymous visitors may receive HTML cached from a desktop UA (no bst-ios-bg).
+ * This script re-applies the same fix in the browser on real iOS devices.
+ */
+function bst_enqueue_ios_background_client_fallback() {
+	if ( is_admin() || ! get_background_image() ) {
+		return;
+	}
+
+	$path = get_stylesheet_directory() . '/js/bst-ios-background.js';
+	if ( ! file_exists( $path ) ) {
+		return;
+	}
+
+	wp_enqueue_script(
+		'bst-ios-background',
+		get_stylesheet_directory_uri() . '/js/bst-ios-background.js',
+		array(),
+		filemtime( $path ),
+		true
+	);
+
+	wp_add_inline_script(
+		'bst-ios-background',
+		'window.bstIosBg=' . wp_json_encode(
+			array(
+				'url'  => get_background_image(),
+				'posX' => get_theme_mod( 'background_position_x', 'center' ),
+				'posY' => get_theme_mod( 'background_position_y', 'bottom' ),
+				'tint' => ! is_front_page(),
+			)
+		) . ';',
+		'before'
+	);
+}
+add_action( 'wp_enqueue_scripts', 'bst_enqueue_ios_background_client_fallback', 21 );
+
 // END ENQUEUE PARENT ACTION
 
 function enqueue_font_awesome() {
